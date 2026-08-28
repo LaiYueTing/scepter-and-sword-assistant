@@ -1,0 +1,187 @@
+/*
+ * ⚠ **跳過 preflight。** Tailwind 的 reset 會把 naive-ui 的元件樣式打壞（按鈕
+ *   的邊框、輸入框的高度都會被歸零）。只載 theme 與 utilities，base 那層留給
+ *   naive-ui 自己。這是 Tailwind 4 的作法：`@layer` 先宣告順序，再逐層 import，
+ *   不要 import 的那層就不寫。
+ */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@import './tokens.css';
+@import './surfaces.css';
+@import './icons.css';
+
+/*
+ * 把自訂變數映射成 Tailwind utility，這樣 `bg-surface` / `text-muted` /
+ * `border-line` 也跟著主題走——不必為了換色去改每一個 class。
+ */
+@theme inline {
+  --color-base: var(--bg-0);
+  --color-panel: var(--bg-1);
+  --color-surface: var(--bg-2);
+  --color-raised: var(--bg-3);
+  --color-line: var(--border);
+  --color-line-soft: var(--border-soft);
+  --color-ink: var(--text-0);
+  --color-dim: var(--text-1);
+  --color-muted: var(--text-2);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-ok: var(--green);
+  --color-warn: var(--amber);
+  --color-bad: var(--red);
+  --radius-card: var(--radius-card);
+}
+
+/*
+ * ⚠ **跳過 preflight 就要自己補這一條。** Tailwind 的 reset 裡唯一「版面會依賴」的
+ *   規則就是 border-box；不補的話 `height: 100%` 算的是**內容框**，再加上內距就整個
+ *   超出父層——實測儀表板 `h-full` 配 `p-3.5` 剛好高出 28px（＝上下內距），內容因此
+ *   壓到狀態列上。症狀看起來像「版面沒算好」，實際上是盒模型不同。
+ *
+ *   preflight 其餘的部分（按鈕邊框歸零、標題字級歸一）才是會打壞 naive-ui 的那些，
+ *   所以是「只補這一條」，不是「乾脆整包載回來」。
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+/*
+ * ⚠ **`NConfigProvider` 會多插一層 div。** 它不是抽象元件——`#app` 底下真正裝著
+ *   版面的是 `<div class="n-config-provider">`，而那層沒有高度。少了這條規則，
+ *   根版面的 `h-full` 就對著一個 auto 高度的父層去算，整個 flex 欄塌成內容高度：
+ *   畫面上半部正常、下半部是一大塊空白，看起來像「版面寫壞了」。
+ *   量法：`document.querySelector('#app').firstElementChild` 看是誰。
+ */
+#app > .n-config-provider {
+  height: 100%;
+}
+
+/*
+ * ⚠ **中文要比拉丁字大一級，而且標題要真的加粗。** 使用者連續三次回報「字看不
+ *   清楚」，前兩次我都當成對比不足去調顏色——量到 18.6:1 之後他還是看得出來。
+ *   真正的原因是**字級**：14px 的中文用微軟正黑體，筆畫只有 1px 寬，被反鋸齒
+ *   攤開之後灰灰的一片，和顏色沒有關係。
+ *
+ *   量過的前提：這台是 1920 螢幕、系統 DPI 96（100%，沒有縮放）、視窗
+ *   SYSTEM_AWARE——所以不是「被系統點陣放大而糊掉」那種問題，是字真的太小。
+ *
+ * ⚠ `font-weight: 500`（Tailwind 的 `font-medium`）對中文幾乎沒有效果：正黑體
+ *   只有 Light / Regular / Bold 三個字重，500 會落回 Regular，看起來和內文一樣。
+ *   標題要用 600 以上才會真的換到粗的那一支。
+ */
+body {
+  background: var(--app-bg);
+  color: var(--text-0);
+  font-family: 'Microsoft JhengHei UI', 'Microsoft JhengHei', 'Segoe UI',
+    system-ui, sans-serif;
+  font-size: 15px;
+  overflow: hidden; /* 捲動由各個面板自己負責，視窗本身不捲 */
+}
+
+/* 面板標題。用 class 而不是 Tailwind 的 font-medium，理由見上面那條。 */
+.panel-title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/*
+ * 哪裡選得起來。
+ *
+ * ⚠ **pywebview 預設會往 body 注入一條 `user-select: none`**（`text_select=False`）,
+ *   於是整個介面一個字都選不起來——日誌的「複製選取的內容」按了沒反應就是這樣來的。
+ *   外殼那邊已經改成 `text_select=True`，哪裡能選改由這裡決定。
+ *
+ * ⚠ **不要整份打開。** 拖選按鈕與標籤的文字會讓它看起來像網頁而不是應用程式，
+ *   而這個視窗是拿來盯狀態的。所以是**預設不給選、內容區明確開放**：日誌、
+ *   路徑、設定檔原文——那三個是真的會有人想複製的東西。
+ *
+ * ⚠ `input` / `textarea` 要單獨列出來。祖先設了 `user-select: none` 時，
+ *   文字控制項在某些版本的 Chromium 上會連拖選都做不到。
+ */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+input,
+textarea,
+.selectable,
+.selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+/* 自繪標題列：整條可以拖，互動元件要自己退出拖曳區 */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-2);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * ⚠ **用滑鼠點過的元件不要留焦點光暈。** naive-ui 的按鈕／核取方塊／選項鈕被點過
+ *   之後會留下一圈 `box-shadow`——那是給鍵盤操作看的焦點框，但滑鼠使用者看到的是
+ *   「按一下就多一團藍暈，而且不會消失」，很容易被當成錯誤狀態。
+ *   `:focus-visible` 正是為了分辨這兩種來源而存在：鍵盤 Tab 過去仍然看得到框。
+ *
+ * ⚠ 放在全站而不是某一個對話框裡：這是每一顆按鈕都會發生的事，逐個修必定漏掉。
+ */
+.n-button:focus:not(:focus-visible),
+.n-checkbox:focus:not(:focus-visible),
+.n-radio:focus:not(:focus-visible),
+.n-input:focus:not(:focus-visible) {
+  outline: none;
+}
+.n-checkbox:focus:not(:focus-visible) .n-checkbox-box,
+.n-radio:focus:not(:focus-visible) .n-radio__dot {
+  box-shadow: none !important;
+}
+/*
+ * ⚠ **按鈕和核取方塊用的是不同的機制**，一條規則蓋不住兩邊：核取方塊是
+ *   `box-shadow`，而按鈕是套在 `.n-button__state-border` 上的 **border**。
+ *   我第一次只寫了 box-shadow，按鈕上那圈紫色邊框完全沒消失——量出來才知道：
+ *
+ *       .n-button__state-border  border: 1px solid rgb(124, 92, 255)
+ *
+ *   驗法（renderer 的主控台或 SSA_EVAL）：
+ *       getComputedStyle(btn.querySelector('.n-button__state-border')).border
+ *
+ * ⚠ 要排除 `:hover` 與 `:active`——那個元素同時也負責這兩個狀態的邊框，
+ *   一起關掉的話滑過去會沒有回饋。
+ */
+.n-button:focus:not(:focus-visible):not(:hover):not(:active)
+  .n-button__state-border {
+  border-color: transparent !important;
+}

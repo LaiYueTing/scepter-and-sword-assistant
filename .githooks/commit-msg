@@ -1,0 +1,45 @@
+#!/bin/sh
+# commit 訊息的關卡，兩件事：
+#
+#   1. 拿掉 Claude 的共同作者標記。掛上去會讓 GitHub 把 Claude 算成專案的貢獻者，
+#      而那是推上去之後才看得到、事後又補救不乾淨的東西。這裡就地刪掉。
+#   2. 標題要合 Conventional Commits，發版說明才分得出哪幾條是修正、哪幾條是新增。
+#
+# ⚠ 要 `git config core.hooksPath .githooks` 才會生效（那是本機設定，不進版控）。
+
+msg_file="$1"
+
+# ⚠ **樣式一定要錨在行首。** 沒錨的話，訊息**內文**裡提到這個標記的那一行也會被
+#   當成標記刪掉——實測就這樣吃掉了一整段說明，而且不會有任何徵兆。
+PAT='^[[:space:]]*(co-authored-by:.*claude|.{0,8}generated with .*claude)'
+
+if grep -qiE "$PAT" "$msg_file"; then
+    echo "[commit-msg] 移除了 Claude 的共同作者標記（這個專案的貢獻者只有 LaiYueTing）：" >&2
+    grep -iE "$PAT" "$msg_file" | sed 's/^/    /' >&2
+    grep -viE "$PAT" "$msg_file" > "$msg_file.tmp"
+    mv "$msg_file.tmp" "$msg_file"
+fi
+
+# 註解行與空行都不算，第一行有內容的才是標題
+subject=$(grep -v '^#' "$msg_file" | grep -vE '^[[:space:]]*$' | head -1)
+
+case "$subject" in
+    Merge*|Revert*|fixup!*|squash!*) exit 0 ;;
+esac
+
+if ! printf '%s' "$subject" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\([a-z0-9_./-]+\))?!?: .+'; then
+    echo "" >&2
+    echo "[commit-msg] 標題不合 Conventional Commits，沒有提交：" >&2
+    echo "" >&2
+    echo "    $subject" >&2
+    echo "" >&2
+    echo "  格式：<type>(<scope>)!: <說明>" >&2
+    echo "  type：feat 新功能／fix 修正／docs 文件／refactor 重構／perf 效能／" >&2
+    echo "        test 測試／build 打包與發版／ci／style 排版／chore 雜項" >&2
+    echo "  scope：選填，用受影響的模組，例如 gui、engine、updater、raid" >&2
+    echo "  結尾加 ! 表示破壞相容（例如設定檔的鍵改名）" >&2
+    echo "" >&2
+    echo "  例：fix(gui): 按下開始執行跳 No module named 'gui.protocol'" >&2
+    echo "" >&2
+    exit 1
+fi

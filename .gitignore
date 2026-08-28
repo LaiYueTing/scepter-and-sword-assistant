@@ -1,0 +1,61 @@
+# ═══ 使用者自己的東西 ═══
+
+# 個人設定：內含模擬器 IP / 序號，發布時只給 config.example.yaml
+config.yaml
+# 內建編輯器寫回設定時的暫存（正常會自己刪掉，被強制結束才會留下）
+config.yaml.check
+
+# 跨執行保留的每日計數（今天打了幾場、捐了幾次）
+state.json
+
+# 介面偏好（主題、視窗大小、關閉時的選擇）。那是「這台機器上這個人的喜好」
+ui.json
+
+# ═══ 執行與建置的產物 ═══
+
+logs/
+
+# ⚠ 用 `dist*` / `build*` 而不是 `dist` / `build`：正在執行的 EXE 覆寫不得，所以
+#    重編時會用 `--distpath dist_v1 --workpath build_v1` 編到旁邊去。
+dist*/
+build*/
+
+# 介面的前端：相依與 `npm run build` 的產物都不進版控
+node_modules/
+gui/web/
+
+# 自動更新換檔時的暫存
+*.exe.old
+*.part
+
+# PyInstaller 用命令列參數跑的話會自己產生 .spec，那種不要進版控；
+# 唯獨這一份是手寫的，打包非它不可（--splash 產生的 text_pos=None 會關掉進度文字）
+*.spec
+!杖劍傳說助手.spec
+
+# ═══ 不隨原始碼發布 ═══
+
+# 回歸測試樣本：實機遊戲截圖，含角色名、公會名與其他玩家的 ID，而且有 85 MB
+# （見 README 的「目錄」）
+samples/
+
+# 開發筆記：整個專案的來龍去脈，寫給接手的人看的
+CLAUDE.md
+
+# 啟動畫面的底圖是遊戲自己的美術素材，不轉發。splash.png 由 tools/make_splash.py
+# 產生；沒有 loading.png 時它會改畫純色底，所以 clone 下來仍然編譯得出來。
+assets/loading.png
+assets/splash.png
+
+# Google 的 adb，體積大而且各平台不同，讓使用者自行下載（見 README 的「安裝」）
+platform-tools/
+
+# ═══ 工具產生的 ═══
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Claude Code 的工作階段檔案
+.claude/

@@ -1,0 +1,75 @@
+/*
+ * ⚠ **這個檔案是產生出來的，不要手改。**
+ *   來源：`src/data/palette.js` ＋ `tools/gen-tokens.mjs`（`node tools/gen-tokens.mjs`）
+ *
+ * 這裡放的是「JS 還沒跑之前」的預設配色，色相 221（Telegram-RMA 那套藏藍）。
+ * 選了背景主題之後，`applyAppearance()` 會用 inline 變數把整套蓋掉——面板、卡片、
+ * 框線、文字全部跟著那個主題的色相走，不是只換背景。
+ *
+ * ⚠ 每一個顏色都在深淺兩套各定義一次。只定義一邊、另一邊靠繼承的話，切過去會留著
+ *   上一套的殘留色，而且往往只在某個狀態下才看得出來。
+ *
+ * ⚠ 這些數字的可讀性由 `tools/check-contrast.mjs` 守著：175 組主題 × 深淺兩套，
+ *   每一組文字／表面的對比都要 ≥ 4.5。改階梯之後一定要重跑那支。
+ */
+
+:root,
+:root[data-theme='dark'] {
+  --bg-0: #0c121f;
+  --bg-1: #111a2e;
+  --bg-2: #16223c;
+  --bg-3: #1e2d4e;
+  --border: #28395d;
+  --border-soft: #202c46;
+  --text-0: #e5eaf6;
+  --text-1: #a0adca;
+  --text-2: #808ca3;
+  --accent: #5a85e2;
+  --accent-2: #6f5ae2;
+  --accent-dim: #2f5fc6;
+  --accent-soft: rgba(90, 133, 226, 0.150);
+  --accent-text: #89aaf0;
+  --accent-on: #151e32;
+  --green: #33c17f;
+  --amber: #e6b237;
+  --red: #f56a66;
+  --neon: #47e1c2;
+  --card-hi: linear-gradient(180deg, rgb(255 255 255 / 5%), transparent 42%);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 26%);
+  --shadow-pop: 0 12px 40px rgb(0 0 0 / 55%);
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --radius-card: 14px;
+  --radius-input: 9px;
+  --app-bg: var(--bg-0);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --bg-0: #e1e6ef;
+  --bg-1: #f3f5f9;
+  --bg-2: #fdfdfe;
+  --bg-3: #e9ecf4;
+  --border: #c6cddc;
+  --border-soft: #dadee7;
+  --text-0: #0d1321;
+  --text-1: #343f55;
+  --text-2: #596378;
+  --accent: #254ea7;
+  --accent-2: #3825a7;
+  --accent-dim: #173982;
+  --accent-soft: rgba(37, 78, 167, 0.150);
+  --accent-text: #1f4698;
+  --accent-on: #ffffff;
+  --green: #137648;
+  --amber: #845e06;
+  --red: #b02b27;
+  --neon: #14715e;
+  --card-hi: linear-gradient(180deg, rgb(255 255 255 / 80%), transparent 42%);
+  --shadow-card: 0 1px 2px rgba(54, 68, 99, 0.080), 0 8px 24px rgba(54, 68, 99, 0.100);
+  --shadow-pop: 0 12px 40px rgba(54, 68, 99, 0.200);
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --radius-card: 14px;
+  --radius-input: 9px;
+  --app-bg: var(--bg-0);
+  color-scheme: light;
+}

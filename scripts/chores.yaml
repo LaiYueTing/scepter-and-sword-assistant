@@ -1,0 +1,527 @@
+# 自動日常雜務
+#
+# 每天要做、但各自只有幾步的小事，合成一趟走完，省下各自導覽的開銷。
+#
+# 三段依序走：命運果實 → 羈絆冒險 → 公會捐獻，各由一條入口規則帶頭，各自掛一個
+# 開關（chores_fruit / chores_bond / chores_donate）。段與段之間不記步驟，靠入口
+# 規則的 max_fires: 1 換手——走過一次就用完，回到筆記頁自然輪到下一段。
+#
+# ⚠ 順序就寫在規則的排列裡，改動順序前先確認「上一段做完會退回哪一頁」：
+#   果實與羈絆都退回筆記頁，而筆記頁上同時看得到公會頁籤。
+#
+# 引擎的通則（順序即優先度、等待不必寫規則、從任何狀態啟動都能接上）、開機／
+# 公告／帳號衝突三條共用規則，以及兩條全域約束（tap_match 換頁要 cooldown、
+# 純攔截不能有 cooldown），說明都只在 dungeon.yaml 寫一份，這裡不重複。
+
+name: 自動日常雜務
+package: com.m88.idleXX
+
+# 正常一趟不到兩分鐘。設上限是因為這份腳本沒有戰鬥、不會有長時間的合理等待，
+# 超過就代表卡住了，該讓位給下一個排程（用法見 CLAUDE.md 的 max_minutes）。
+max_minutes: 8
+
+# 收尾：捐獻面板 → 公會頁 → 公會島 → 家園。
+# ⚠ 只能用 tap_template，不能寫死座標——這是無條件執行的清單，沒有 template
+#   守著畫面是什麼。
+on_finish:
+  - log: 本輪結束，返回家園待命
+  - wait: 2
+  - tap_template: [nav_home, btn_back_arrow]
+  - wait: 2.5
+  - tap_template: [nav_home, btn_back_arrow]
+  - wait: 2.5
+  - tap_template: nav_home
+  - wait: 2
+
+rules:
+  # ==================== 彈窗優先 ====================
+
+  - name: 獲得獎勵動畫 → 點掉繼續
+    # 捐獻完會跳「獲得獎勵」的橫幅動畫（公會幣、砂），點空白處關掉。
+    # 排最前面，免得動畫蓋住底下的按鈕造成誤判。與討伐共用同一個模板
+    # （實測捐獻的獎勵畫面 0.998）。
+    template: label_reward_got
+    do:
+      - tap: [360, 250]
+      - wait: 1.5
+
+  - name: 捐獻確認框 → 勾選不再提醒後確定
+    # 花晨星捐獻時會先問「要使用 N 晨星額外捐贈一次嗎？」。先勾「本次登入不再
+    # 提醒」再按確定，剩下三次就不會再跳框，可以一路連點。
+    #
+    # 模板取「額外捐贈一次嗎?」那半句：左半的金額會變（實測 20 → 50 → 200），
+    # 裁進去換一個價格就認不出來。實測確認框 1.000、其餘畫面 ≤0.421。
+    #
+    # ⚠ 勾選框用固定座標點，不用模板判斷「勾了沒」。勾與未勾的模板分數是
+    #   1.000 對 0.846，離門檻只有 0.004，那種判斷遲早會反過來把勾選點掉。
+    #   固定座標在這裡是安全的：有 template 守著畫面是什麼，而且**勾完這個框
+    #   就不會再出現**，規則不觸發也就不會把勾選點回去。
+    # ⚠ 也不要用 tap_match 從標題位移過去：金額變成三位數時整句會變長、右半往
+    #   右移約 11px，而勾選框是獨立置中的、不跟著動。
+    template: label_donate_confirm
+    cooldown: 3
+    do:
+      - tap: [272, 666]      # 「本次登入不再提醒」的勾選框
+      - wait: 0.6
+      - tap_template: btn_confirm
+      - wait: 2
+
+  # ==================== 命運果實 ====================
+  # 地圖探索頁的「命運果實」卡片會累積果實，滿了就在卡片左下角亮出「可領取」。
+  # 不必進到果實頁面——直接點那個小標就領走了（實測 1474 → 1475，小標隨即
+  # 換成 11:41:24 的倒數）。
+
+  - name: 命運果實可以領 → 點下去領走
+    # 模板取「可領取」那顆膠囊。領完會換成倒數計時，實測可領 1.000、
+    # 領完 0.530，其餘畫面 ≤0.540。
+    template: label_fruit_ready
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 筆記頁 → 進地圖探索看果實
+    # max_fires 讓這一趟只走一次：進去領完（或發現還不能領）之後退回筆記頁，
+    # 這條就用完了，自然輪到下一件事。引擎不記步驟，換手全靠這個。
+    #
+    # 果實領完後地圖探索頁上沒有規則成立，由兜底的「誤入次要頁面」按返回退出。
+    template: card_map_explore
+    when_option: chores_fruit
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  # ==================== 羈絆冒險 ====================
+  # 地圖上每個奇景節點右上角有 ❗ 就代表「可以處理」——上一輪委派結束等著領獎
+  # （紅 ❗）、或是空著等人派（藍 ❗）。點進去之後兩種情況都由底下的規則接手，
+  # 不必在地圖那一層分辨。全部派出去之後 ❗ 就沒了（節點換成 ⏳ 倒數），
+  # 這一段自然收斂。
+
+  - name: 委派結束 → 點掉領獎
+    # 委派回來會蓋一張全螢幕的「委派結束」，點任意處關掉就領到了。
+    #
+    # ⚠ 標題有**兩種樣式**，看的是這次的委派結果：一般成功是白字黑邊（寬 310px），
+    #   大成功是青字白邊、兩側多一對 ⬆（寬 402px）。兩張互相只有 0.179／0.239，
+    #   只掛一張的話另一種會整頁認不得，一路空轉到兜底按返回鍵退出去。
+    # ⚠ 模板都取停下來之後那一格（標題有縮放動畫）。
+    template: [label_dispatch_done, label_dispatch_done_b]
+    cooldown: 3
+    do:
+      - tap: [360, 180]
+      - wait: 2
+
+  - name: 委派開始 → 點掉確認頁
+    # 派出去之後會蓋一張全螢幕的「委派開始」（標題 ＋ 節點名 ＋ 出發的角色），
+    # 點任意處關掉才會回到地圖。
+    #
+    # ⚠ 少了這條會整頁認不得，一路空轉到兜底按返回鍵退出去——而委派其實已經
+    #   成功了，只是沒人知道要關掉這張頁。
+    # 模板取標題那四個字，其餘畫面 ≤0.279；和「委派結束」那兩張互不干擾
+    # （0.171／0.216），雖然都有「委派」兩個字。
+    template: label_dispatch_sent
+    cooldown: 3
+    do:
+      - tap: [360, 180]
+      - wait: 2
+
+  - name: 委派條件沒滿足 → 按確定繼續
+    # 「委派條件沒有全部滿足，是否繼續委派?」——成員的屬性沒湊齊時會問一次，
+    # 照樣派出去。實測確認框 1.000、其餘畫面 ≤0.352。
+    template: label_dispatch_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+
+  - name: 委派詳情頁還沒選人 → 按快速選擇
+    # 「委派成員」那幾格還是**淺灰人形圖示**就代表沒人。用它來分辨該按哪一顆，
+    # 比靠 cooldown 讓兩條規則輪流上場可靠——實測空著時找得到 2 格（1.000／
+    # 0.991），選好之後 0 格，其餘畫面 ≤0.561。
+    #
+    # ⚠ 空位就是空位，不要拿「黑色剪影」當依據。那是按下快速選擇之後、角色頭像
+    #   還沒載出來的**過場那一格**，而不是空的狀態——拿它當模板會讓兩條規則的
+    #   判斷完全反過來：空著時以為選好了，於是一直按沒有作用的「開始委派」，
+    #   一路空按到 max_minutes 收工。
+    #
+    # ⚠ btn_quick_select 的模板要從「沒有漣漪」的那一幀裁。按下去之後那圈黃色
+    #   漣漪會蓋住按鈕文字，點擊瞬間只剩 0.687；乾淨的畫面 1.000、漣漪擴散中
+    #   0.961，兩者都還在門檻上。
+    require: [btn_quick_select, slot_empty]
+    cooldown: 4
+    do:
+      - tap_template: btn_quick_select
+      - wait: 1.5
+
+  - name: 委派詳情頁人選好了 → 開始委派
+    # ⚠ region 只作用在 absent（引擎的 require 不吃 region），剛好框住成員欄那
+    #   一條，避免畫面別處的深色圓形被當成空位。
+    require: [btn_dispatch_start]
+    absent: [slot_empty]
+    region: [60, 600, 660, 120]
+    cooldown: 4
+    do:
+      - tap_template: btn_dispatch_start
+      - wait: 2.5
+
+  - name: 委派詳情頁 → 等畫面回應
+    # 純攔截。按下快速選擇的那一瞬間漣漪會蓋住按鈕（只剩 0.687），上面兩條都
+    # 落空；少了這條會在那一輪被判成「完全無法辨識」。
+    # 錨點用「開始委派」——它在詳情頁的任何狀態下都是 1.000。
+    template: btn_dispatch_start
+    do: []
+
+  - name: 羈絆地圖有可派的節點 → 點進去
+    # ❗ 壓在節點方塊的右上角，往左下位移才點得到方塊本身。
+    #
+    # 記號有兩色，意思相反：**紅 ❗ 是委派完成、獎勵可領**（節點顯示獎勵物品與
+    # ↑加成），**藍 ❗ 是空著、可以委派**（只有卡片圖）。委派進行中的節點顯示
+    # ⏳ 倒數而沒有記號，所以不會被撿到。兩色都要掛——只掛紅的話，領完獎的節點
+    # 變成藍 ❗ 就再也沒人認得，於是永遠不會被派出去。
+    #
+    # 兩張的順序有意義：引擎取「第一個比中的模板」，紅排前面等於「先領完再派」。
+    #
+    # ⚠ region 是必要的：同色記號在頁籤與標題上也有，不框住地圖那一帶會點到
+    #   頁籤上去。
+    # ⚠ 錨點不能省。實機的記號分數是 0.88～1.00（背景會透出來），而筆記頁上的
+    #   某個元素對紅 ❗ 有 0.8504、藍 ❗ 有 0.862——單靠門檻分不開這兩群。
+    #   綁上只有這一頁才有的「基礎委派獎勵：」（本頁 1.000、其餘樣本 ≤0.694）
+    #   之後，門檻才能放到 0.80 讓兩色都有餘裕。
+    #
+    # pick 用 highest（最上面那個）只是為了讓處理順序可預期，節點最後都會輪到。
+    require: [label_bond_map]
+    template: [mark_bond_node, mark_bond_ready]
+    region: [80, 260, 600, 500]
+    threshold: 0.80
+    pick: highest
+    cooldown: 4
+    do:
+      - tap_match: [-25, 40]
+      - wait: 2.5
+
+  - name: 筆記頁 → 進羈絆冒險
+    # 和地圖探索一樣用 max_fires 換手：這一趟走過一次就換下一件事。
+    template: card_bond_adventure
+    when_option: chores_bond
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  # ==================== 公會捐獻 ====================
+
+  - name: 不做捐獻卻停在捐獻面板 → 關掉退出
+    # 走向捐獻的每一步都掛了 chores_donate，唯獨「面板已經開著」擋不住：它是三層
+    # 深的頁面，沒有導覽規則帶得走，而底下兩條捐獻規則只看自己的開關。
+    #
+    # ⚠ 面板上沒有返回鍵（btn_back_arrow 0.622），要按系統返回鍵。
+    template: label_donate_panel
+    when_option: "!chores_donate"
+    cooldown: 3
+    do:
+      - back:
+      - wait: 1.5
+
+  - name: 捐獻次數已用盡 → 收工
+    # 五次捐完後按鈕變成灰色「今日的捐贈次數已達到上限」。
+    #
+    # 模板只取「今日的捐贈」那半句：右半疊著一圈黃色的光暈動畫，裁進去分數會
+    # 跳動。實測上限畫面 1.000／0.960、其餘 ≤0.467。
+    #
+    # ⚠ 面板上沒有返回鍵可用（btn_back_arrow 只有 0.622、nav_home 0.503），
+    #   所以要自己按系統返回鍵關掉，否則收尾會停在面板上找不到任何模板。
+    template: label_donate_maxed
+    do:
+      - back:
+      - wait: 1.5
+      - count:
+      - finish:
+
+  - name: 捐獻面板 → 免費捐贈
+    # 每日第一次是免費的，按鈕寫「免費捐贈」。
+    # 實測 0/5 的畫面 1.000、換成晨星版之後 ≤0.473。
+    template: btn_donate_free
+    when_option: guild_donate_free
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 捐獻面板 → 花晨星捐贈
+    # 免費那次用掉之後按鈕變成「捐贈 ✦N」，價格逐次遞增（實測 20 → 50 → 200）。
+    #
+    # 模板取「捐贈」兩字加上晨星圖示：只取「捐贈」的話會連「免費捐贈」一起中，
+    # 兩條規則就分不開了。價格變寬時整顆按鈕的文字會重新置中，所以最貴的那次
+    # 分數最低（實測 0.916，仍在門檻上）。
+    #
+    # ⚠ 這條會花掉晨星，而晨星也是競技場買券、副本買次數在用的。要停就把
+    #   guild_donate_stars 設成 false，免費那次仍然照捐。
+    #
+    # ⚠ 次數上限用 max_fires_daily 而不是 max_fires：後者每輪重置，補跑或手動再跑
+    #   一次就會重新計數而多花一輪晨星。捐了幾次畫面上讀不出來（只有 5/5 用盡時
+    #   按鈕才變灰），所以只能自己記——細節見 core/dailystate.py。
+    template: btn_donate_star
+    when_option: guild_donate_stars
+    cooldown: 3
+    max_fires_daily: "${guild_donate_star_times:4}"
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 今天捐夠了 → 關掉面板收工
+    # 上面那條的每日上限用完（或整個關掉晨星捐獻）之後才輪得到這裡。少了這條會
+    # 停在面板上一路空轉到 max_minutes——面板沒有導覽規則帶得走，而底下那條純攔截
+    # 只會讓它繼續等。
+    #
+    # ⚠ 用 sustain 不用 cooldown。按下捐贈之後會依序蓋上確認框與獎勵橫幅，那期間
+    #   按鈕不在畫面上、計時自然歸零，所以不會在兩次捐獻之間誤收工。
+    # ⚠ 面板上沒有返回鍵（btn_back_arrow 0.622），要按系統返回鍵。
+    template: btn_donate_star
+    sustain: 4
+    do:
+      - log: 已達今天設定的捐獻次數
+      - back:
+      - wait: 1.5
+      - count:
+      - finish:
+
+  - name: 捐獻面板開著 → 等畫面回應
+    # 純攔截。按下捐贈到畫面更新之間有一兩秒，這期間三條動作規則都不成立，
+    # 少了這條會讓兜底摸到公會頁的返回鍵而把面板關掉。
+    # 錨點用面板標題「公會捐贈」（面板在的畫面 1.000、其餘 ≤0.448）。
+    template: label_donate_panel
+    do: []
+
+  - name: 公會頁 → 開啟公會捐贈
+    # 公會大廳裡底部那排圓鈕的第一顆。模板取按鈕下方的文字，不裁圖示上的紅點
+    # （捐完就沒了）。實測公會頁 1.000／0.946、其餘畫面 ≤0.659。
+    template: btn_guild_donate
+    when_option: chores_donate
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  # ==================== 頁面導覽 ====================
+  # 公會島的部分與討伐那份完全相同（同一張地圖、同一個視角記憶問題），差別只在
+  # 最後點的是大廳而不是遠征之門。說明見 raid.yaml 的同名規則。
+  #
+  # 這一段排在三段任務**後面**：導覽是「上面都沒事做才要走的路」，排前面的話
+  # 會把正在做事的畫面帶去別的地方。段與段的先後就寫在這幾條的順序裡。
+  #
+  # ⚠ 走向捐獻的**每一步**都掛 chores_donate，不是只掛第一步。引擎的前提是
+  #   「從任何狀態啟動都能接上」——上一輪若停在公會島或公會頁，只擋住入口
+  #   仍然會一路走進捐獻面板，把使用者明確關掉的晨星花掉。
+  #   關掉之後這幾頁上沒有規則成立，由兜底的返回鍵逐層退回去。
+
+  - name: 公會島看到公會大廳 → 點進去
+    # 大廳與遠征之門在同一個視角裡，所以掃地圖的方式可以照抄討伐那份。
+    #
+    # 模板取建築下方的文字標籤，不裁建築本體：公會升級時本體會長出鷹架（白天的
+    # 樣本就有），而文字標籤是 UI 疊加層、日夜都一樣——實測白天 1.000、夜晚
+    # 0.975／0.954，看不到大廳的視角只有 0.554。這也省掉了門那種日夜兩套模板。
+    template: building_guild_hall
+    when_option: chores_donate
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 公會島找不到大廳 → 往右掃
+    # 拖曳的距離與速度不要改大，理由見 raid.yaml：快速滑動會被加上慣性，
+    # 一次就跨過「看得到目標」的整段視角，兩條方向相反的規則會互推。
+    require: [label_nav_guild_on]
+    absent: [building_guild_hall]
+    when_option: chores_donate
+    max_fires: 5
+    do:
+      - swipe: [480, 400, 240, 400, 800]
+      - wait: 1.5
+
+  - name: 公會島找不到大廳 → 往回掃
+    require: [label_nav_guild_on]
+    absent: [building_guild_hall]
+    when_option: chores_donate
+    max_fires: 20
+    do:
+      - swipe: [240, 400, 480, 400, 800]
+      - wait: 1.5
+
+  - name: 不在筆記頁 → 點筆記頁籤
+    # 果實與羈絆兩段的入口都在筆記頁上，這條負責開場走過去。
+    #
+    # ⚠ 位置被兩邊夾住：要排在公會島那幾條**後面**（島上也看得到筆記頁籤，
+    #   排前面會把人從島上帶回來），又要排在「點公會頁籤」**前面**（否則從
+    #   家園啟動會直接掉進捐獻，果實與羈絆整趟走不到）。
+    # ⚠ max_fires: 1 —— 只負責開場。兩段做完各自由兜底的返回鍵退回筆記頁。
+    template: nav_note
+    max_fires: 1
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 不在公會島 → 點公會頁籤
+    template: nav_guild
+    when_option: chores_donate
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 該做的都做完了 → 收工
+    # 不捐獻時，三段走完畫面會停在家園或筆記頁而沒有規則成立，少了這條要空轉
+    # 到 max_minutes 才收工。
+    #
+    # ⚠ 錨點 nav_guild 只在家園（0.929）與筆記頁（1.000）過門檻，其餘 ≤0.446，
+    #   所以走進任何一段時計時都會歸零。
+    # ⚠ 只在捐獻關掉時啟用，和上面那條入口規則互補——兩條同時活著的話，入口
+    #   規則進 cooldown 的 4 秒會被這條搶走。
+    template: nav_guild
+    when_option: "!chores_donate"
+    sustain: 5
+    do:
+      - count:
+      - finish:
+
+  # ==================== 轉場與開機 ====================
+
+  - name: 載入中 → 等畫面切換
+    template: [label_loading, label_loading_b, label_loading_c]
+    do: []
+
+  - name: 帳號在其他用戶端登入 → 按確定回到登入畫面
+    # 四份腳本共用的開機規則，說明見 dungeon.yaml。
+    template: label_login_conflict
+    cooldown: 5
+    do:
+      - tap_template: btn_confirm
+      - wait: 3
+
+  - name: 公告 → 勾選今日不再提醒後關閉
+    # ⚠ 必須排在「誤入次要頁面」前面，否則返回鍵會先被按掉而失去勾選的機會。
+    template: label_notice_dont_remind
+    cooldown: 5
+    do:
+      - tap_match: [-73, -1]
+      - wait: 0.8
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 標題畫面 → 點擊開始遊戲
+    template: [label_title_menu, label_tap_to_start]
+    cooldown: 5
+    do:
+      - tap: [360, 1050]
+      - wait: 3
+
+  - name: 遊戲啟動中 → 等開場動畫
+    template: label_boot_logo
+    do: []
+
+  - name: 遊戲啟動中 → 等載入完成
+    template: label_boot_network
+    do: []
+
+  # ==================== 兜底 ====================
+
+  - name: 觀戰確認框 → 確定退出
+    # 「要退出觀戰狀態嗎?」——按了系統返回鍵之後跳出來的。
+    #
+    # ⚠ 少了這條會死循環：兜底按返回鍵 → 叫出這個框 → 認不得 → 再按返回鍵 →
+    #   框關掉又開起來。實測有使用者卡在這裡 17 分鐘、空按 26 次返回鍵。
+    #   modal 對話框對系統返回鍵通常無效或反效果，一定要各自認得。
+    #
+    # 模板取訊息那行字（其餘樣本 ≤0.549），確定鍵用既有的 btn_confirm（1.000）。
+    template: label_leave_spectate
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+
+  - name: 點擊空白處關閉的頁面 → 點掉
+    # 遊戲有好幾張「返回鍵無效、只能點空白處」的結算頁（挑戰賽戰鬥結束、
+    # 公會討伐結算…）。它們共用底部那行「點擊空白處關閉」，用它一併接住，
+    # 不必為每一張各裁一個模板。
+    #
+    # ⚠ 排在兜底前面。少了這條會一路掉到「完全無法辨識」去空按返回鍵——而返回鍵
+    #   對這類頁面沒有作用，還可能叫出別的確認框。
+    template: label_tap_blank_close
+    cooldown: 3
+    do:
+      - tap: [360, 640]
+      - wait: 2
+
+  - name: 誤入次要頁面 → 點返回退出
+    template: btn_back_arrow
+    sustain: 6
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 卡在未知畫面 → 回家園重來
+    template: nav_home
+    sustain: 8
+    cooldown: 30
+    do:
+      - screenshot:
+      - tap_match: []
+      - wait: 2
+
+  - name: 完全無法辨識 → 按系統返回鍵
+    # ⚠ absent 要把開機畫面一起列進來。純攔截擋得住「觸發」卻擋不住「計時」：
+    #   sustain 累加的依據是這條規則自己的條件，不是「這一輪有沒有輪到它」。
+    #   說明見 CLAUDE.md 的冷啟動那段。
+    absent: [nav_home, btn_back_arrow, label_donate_panel, btn_dispatch_start,
+             label_dispatch_done, label_dispatch_done_b, label_dispatch_sent,
+             label_boot_logo, label_boot_network, label_title_menu,
+             label_tap_to_start]
+    sustain: 45
+    max_fires: 5          # 按這麼多次還脫不了困，就交給下一條重開遊戲
+    cooldown: 20
+    do:
+      - screenshot:
+      - back:
+      - wait: 3
+
+  - name: 一直脫不了困 → 重開遊戲
+    # 兜底按了 5 次系統返回鍵還是認不出畫面。返回鍵解決不了兩種狀況：**對它無效
+    # 的結算頁**（只能點空白處），以及**按下去反而會叫出確認框**的頁面——後者會
+    # 變成開開關關的死循環。重開遊戲讓畫面回到「開機 → 家園」這條認得的路。
+    #
+    # ⚠ absent 要和上面那條**完全一樣**。少列任何一個，這條就會在那個畫面上誤
+    #   觸發，而重開遊戲要 152 秒。
+    # ⚠ 上面那條一定要有 max_fires，否則它每輪都成立、永遠輪不到這裡。
+    absent: [nav_home, btn_back_arrow, label_donate_panel, btn_dispatch_start,
+             label_dispatch_done, label_dispatch_done_b, label_dispatch_sent,
+             label_boot_logo, label_boot_network, label_title_menu,
+             label_tap_to_start]
+    sustain: 45
+    max_fires: 3      # 重開這麼多次還是認不出來，就別再重開了（見下一條）
+    do:
+      - restart_app: 45
+
+  - name: 重開遊戲也救不回來 → 收工
+    # 最後的保險絲。重開三次還是認不出畫面，代表遇到的東西不是「重開就會好」的
+    # ——再重開下去只會每半分鐘關開遊戲一次，直到有人來看。
+    #
+    # ⚠ 這條非有不可。實測 2026-08-25：領獎確認框的文字被遊戲改掉，模板比不中而
+    #   落到兜底，接著**每 30 秒重開一次遊戲，從 08:03 跑到 12:17**，
+    #   足足 4 小時 14 分，而且是使用者自己按停止才停的——
+    #   而重開那條當時沒有 max_fires，所以永遠輪不到任何人喊停。
+    #
+    # ⚠ 收工比空轉好：這一輪讓出去，排程會照常跑下一個腳本，下一個排定時刻也會
+    #   重新開始。截圖留著當補模板的來源。
+    absent: [nav_home, btn_back_arrow, label_donate_panel, btn_dispatch_start,
+             label_dispatch_done, label_dispatch_done_b, label_dispatch_sent,
+             label_boot_logo, label_boot_network, label_title_menu,
+             label_tap_to_start]
+    sustain: 45
+    do:
+      - log: 重開遊戲三次仍然認不出畫面，這一輪先收工
+      - screenshot: stuck_after_restart
+      - finish:
+

@@ -1,0 +1,594 @@
+/*
+ * 元件語彙：外殼、卡片、狀態 chip、按鈕、面板標題、標籤、霓虹燈號。
+ *
+ * 和 `tokens.css` 的分工：那份（產生的）只回答「顏色與尺寸是多少」，這份回答
+ * 「這些東西長什麼樣子」。要換配色去改 `data/palette.js`，要改造型才動這裡。
+ *
+ * ⚠ **這裡一個顏色都不要寫死。** 整套配色會跟著背景主題的色相換掉（174 組），
+ *   寫死的那一個會變成「換了主題只有它沒變」——而且只在某幾組主題上才看得出來。
+ *   需要淡一點的顏色用 `color-mix(in srgb, var(--x) N%, transparent)`。
+ */
+
+/* ══════════════════════════════════════════════════════════════════════
+   外殼：標題列與狀態列
+   ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * 上緣高光漸層 ＋ 往下打的投影，讓標題列像浮在內容上方，而不是一片平的底色。
+ *
+ * ⚠ **底色要寫在這裡，不能寫在元件的 inline style 上。** 下面 `[data-bgtheme]`
+ *   那條毛玻璃規則永遠贏不過 inline。
+ */
+.app-chrome {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-1) 90%, #fff var(--chrome-hi, 10%)),
+    var(--bg-1) 70%
+  );
+  border-color: var(--border);
+  box-shadow: var(--chrome-shadow, 0 8px 22px -10px rgb(0 0 0 / 55%)),
+    inset 0 1px 0 color-mix(in srgb, #fff var(--chrome-inset, 8%), transparent);
+  position: relative;
+  z-index: 10;
+}
+:root[data-theme='light'] .app-chrome {
+  --chrome-hi: 60%;
+  --chrome-inset: 70%;
+  --chrome-shadow: 0 8px 22px -12px color-mix(in srgb, var(--text-0) 26%, transparent);
+}
+
+/* 狀態列在下面，投影要往上打，否則它看起來像貼在內容底下 */
+.app-chrome--bottom {
+  box-shadow: 0 -6px 18px -10px rgb(0 0 0 / 45%),
+    inset 0 1px 0 color-mix(in srgb, #fff var(--chrome-inset, 6%), transparent);
+}
+
+/*
+ * 選了背景主題之後，外殼改成毛玻璃讓漸層透成一層底色。
+ *
+ * ⚠ **卡片刻意不參加。** 88% 不透明的卡片疊在最糟的漸層上，深色 `--text-2` 量到
+ *   **4.24:1**——離 AA 的 4.5 只差一點點，正是「不要卡在剛好貼齊的邊界」那個形狀。
+ *   整個介面跟著主題變色是靠 `palette.js` 換色相做到的，不是靠透明度。
+ *
+ * ⚠ **88% 是量出來的。** WebGradients 原本用的 58% 會讓 `--text-2` 掉到 2.54:1。
+ */
+:root[data-bgtheme='on'] .app-chrome {
+  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/*
+ * 卡片也是毛玻璃。
+ *
+ * ⚠ **不透明的卡片會讓整個介面「死硬」**——換了主題只有邊邊在變，中間一大塊還是
+ *   實心色塊。但透明度是拿可讀性換的，所以配套是**會自己適應的遮罩**：溫和的漸層
+ *   用淡遮罩（顏色鮮豔），極端的（`wg40` 純黑到純白）自動加重，而且文字最後還會
+ *   對「合成之後的實際底色」重新鉗一次。整套推導在 `data/gradients.js`。
+ *
+ * ⚠ **底色是 JS 算好之後給的（`--card-bg`）**，不要在這裡再乘一次 alpha——
+ *   同一個數字寫在兩個地方，改了其中一個的那天不會有人發現。
+ *
+ * ⚠ `saturate()` 是必要的：blur 會把透上來的漸層攪成灰，補一點回去才看得出主題。
+ */
+:root[data-bgtheme='on'] .card,
+:root[data-bgtheme='on'] .nc-card {
+  background: var(--card-bg, var(--bg-2));
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* 內容區的畫布 */
+.app-canvas {
+  background: var(--bg-0);
+}
+:root[data-bgtheme='on'] .app-canvas {
+  background: transparent;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   卡片
+   ══════════════════════════════════════════════════════════════════════ */
+
+.card,
+.nc-card {
+  position: relative;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+/* 頂部那道高光讓卡片和背景分得開，不必靠加粗邊框 */
+.card::before,
+.nc-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--card-hi);
+  pointer-events: none;
+}
+.card > *,
+.nc-card > * {
+  position: relative;
+}
+
+/*
+ * hover 時浮起來一點。
+ * ⚠ **只給「點下去會有事發生」的卡片。** 純顯示的面板（紀錄、裝置）也跟著動的話，
+ *   滑鼠掃過去整個版面都在跳——而這個視窗是拿來盯狀態的。
+ */
+.nc-hover {
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.nc-hover:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* 面板的標題列。右邊那段灰字放規格／筆數這種「不是主角但每次都要看」的資訊 */
+/*
+ * 面板標題列。
+ *
+ * ⚠ **標題那一列要釘死高度。** 各面板擺的控制項不一樣高（模擬器那邊是 28px 的
+ *   小按鈕，日誌那邊有 32px 的圖示鍵），不釘死的話行高就跟著最高的那一個走，
+ *   兩個面板的標題於是差了 2px——而它們是並排的，一眼就看得出來。
+ */
+.pane-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;              /* 9 + 32 + 9 */
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-3) 55%, transparent),
+    transparent
+  );
+  flex: none;
+}
+/*
+ * 標題那一組：名稱（13.5px）＋規格（11.5px）。
+ *
+ * ⚠ **兩段字級不同的文字要對基線，而基線對齊必須發生在「只有它們兩個」的容器裡。**
+ *   直接給它們 `align-self: baseline`（讓它們和整條標題列的其他項目一起排基線）
+ *   會出事：基線的位置取決於那一行裡最高的是誰，而各面板標題列擺的東西不一樣
+ *   （一邊是 28px 的按鈕，一邊是輸入框與開關）——同一組字在兩個面板上就落在
+ *   不同的高度。包成自己的一組之後，組內對基線、組本身置中，兩邊必定一致。
+ */
+/* 直向排列的標題列（日誌那邊底下還有一排標籤），第一列一樣要 32px */
+.pane-hd .hd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.pane-hd .hd-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pane-hd .t {
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+}
+.pane-hd .s {
+  font-size: 11.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   狀態 chip：兩行的資訊塊，亮起來會呼吸
+   ══════════════════════════════════════════════════════════════════════ */
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 11px;
+  max-width: 260px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-2) 88%, #fff var(--chrome-hi, 12%)),
+    var(--bg-2)
+  );
+  box-shadow: 0 1px 2px rgb(0 0 0 / 26%),
+    inset 0 1px 0 color-mix(in srgb, #fff var(--chrome-inset, 7%), transparent);
+  transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+}
+.chip.clickable {
+  cursor: pointer;
+}
+.chip.clickable:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.chip .tx {
+  line-height: 1.16;
+  overflow: hidden;
+}
+.chip .mn {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip .sb {
+  font-size: 10.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * ⚠ **亮起來才發光。** 沒亮的時候是一顆安靜的灰點——每一顆都在呼吸的話，
+ *   「哪一個真的在跑」反而看不出來，而那正是這些燈存在的理由。
+ */
+.chip.live {
+  border-color: color-mix(in srgb, var(--glow) 70%, var(--border));
+  animation: chip-breathe 2.8s ease-in-out infinite;
+}
+@keyframes chip-breathe {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
+    box-shadow: 0 0 7px -1px color-mix(in srgb, var(--glow) 30%, transparent),
+      inset 0 0 5px color-mix(in srgb, var(--glow) 10%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--glow) 100%, transparent);
+    box-shadow: 0 0 18px 2px color-mix(in srgb, var(--glow) 55%, transparent),
+      inset 0 0 11px color-mix(in srgb, var(--glow) 24%, transparent);
+  }
+}
+
+.nc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: color-mix(in srgb, var(--text-2) 70%, transparent);
+}
+.nc-dot.live {
+  background: var(--glow);
+  box-shadow: 0 0 6px var(--glow), 0 0 12px color-mix(in srgb, var(--glow) 50%, transparent);
+  animation: dot-breathe 2.4s ease-in-out infinite;
+}
+@keyframes dot-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 5px var(--glow), 0 0 9px color-mix(in srgb, var(--glow) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 11px 1px var(--glow), 0 0 20px color-mix(in srgb, var(--glow) 60%, transparent);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   按鈕
+   ══════════════════════════════════════════════════════════════════════ */
+
+.nc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--text-1);
+  cursor: pointer;
+  white-space: nowrap;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-2) 88%, #fff var(--chrome-hi, 12%)),
+    var(--bg-2)
+  );
+  box-shadow: 0 1px 2px rgb(0 0 0 / 22%),
+    inset 0 1px 0 color-mix(in srgb, #fff var(--chrome-inset, 7%), transparent);
+  transition: transform 0.14s, border-color 0.14s, color 0.14s, filter 0.14s;
+}
+.nc-btn:hover:not(:disabled) {
+  color: var(--text-0);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.nc-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+/*
+ * ⚠ **停用的按鈕要看得出是停用的，但不能糊到讀不出字。** `opacity: .45` 會把文字
+ *   一起吃掉——那顆按鈕正是需要 tooltip 說明「為什麼不能按」的時候。
+ */
+.nc-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/*
+ * 主要按鈕。
+ * ⚠ **字色用 `--accent-on` 不是白色。** 黃色系的主題主色很亮，白字讀不到；
+ *   而為了讓白字讀得到去把主色壓暗，會讓一整片主題變成土色。細節見 `palette.js`。
+ */
+.nc-btn--primary {
+  border-color: transparent;
+  color: var(--accent-on);
+  background: var(--accent-grad);
+  box-shadow: 0 2px 10px -3px color-mix(in srgb, var(--accent) 65%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 20%);
+}
+.nc-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: transparent;
+  color: var(--accent-on);
+}
+
+/*
+ * 第三種樣式：主色描邊。
+ *
+ * ⚠ **一個畫面只能有一顆主要按鈕**（`--primary` 是實心主色，它在說「這裡是
+ *   出口」）。但「測試連線」也需要看得出來比旁邊那幾顆重要——那正是這一階存在
+ *   的理由：描邊與文字用主色，底只有一層極淡的主色，份量介於實心與一般之間。
+ */
+.nc-btn--soft {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.nc-btn--soft:hover:not(:disabled) {
+  color: var(--accent-text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.nc-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.nc-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-3);
+  border-color: var(--border);
+}
+
+.nc-btn--sm {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+.nc-btn--icon {
+  width: 34px;
+  padding: 0;
+}
+.nc-btn--sm.nc-btn--icon {
+  width: 28px;
+}
+
+/* 標題列那種只有圖示、沒有邊框的按鈕 */
+.iconbtn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.iconbtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--text-0);
+}
+.iconbtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.iconbtn.on {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   分頁與段落式選擇
+   ══════════════════════════════════════════════════════════════════════ */
+
+.nc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.nc-tab:hover {
+  background: var(--bg-3);
+  color: var(--text-0);
+}
+/* 選中的用漸層底 ＋ 內側描邊，而不是換一個色塊——那在 174 組主題下都成立 */
+.nc-tab.on {
+  color: var(--text-0);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 26%, transparent),
+    color-mix(in srgb, var(--accent-2) 26%, transparent)
+  );
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.nc-seg {
+  display: inline-flex;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+}
+.nc-seg button {
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: background 0.14s, color 0.14s;
+}
+.nc-seg button:hover {
+  color: var(--text-0);
+}
+.nc-seg button.on {
+  background: var(--accent-grad);
+  color: var(--accent-on);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   狀態 pill
+   ══════════════════════════════════════════════════════════════════════ */
+
+/*
+ * ⚠ **文字用 token 本尊，只有底色拿 `color-mix` 去淡化。** 反過來寫（淡文字配實底）
+ *   會讓對比整段掉下去，而這幾個 pill 是 11.5px 的小字。
+ */
+.nc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  max-width: 100%;
+  overflow: hidden;
+}
+.nc-pill > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nc-pill--ok {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+.nc-pill--warn {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 15%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 42%, transparent);
+}
+.nc-pill--bad {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  border-color: color-mix(in srgb, var(--red) 42%, transparent);
+}
+.nc-pill--accent {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+/*
+ * 「待命」用 `--text-1` 而不是 `--text-2`：它回答「這份腳本現在怎麼樣」，是功能性
+ * 資訊，讀者每次都要看。只有「已停用」才掉到最弱的那一層——那是刻意讓它退到背景去。
+ */
+.nc-pill--idle {
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--text-1) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-1) 28%, transparent);
+}
+.nc-pill--off {
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-2) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-2) 26%, transparent);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   標籤（紀錄的類別篩選）
+   ══════════════════════════════════════════════════════════════════════ */
+
+.nc-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.nc-tag:hover {
+  background: var(--bg-3);
+  color: var(--text-0);
+}
+.nc-tag.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.nc-tag .num {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.nc-tag.on .num {
+  color: inherit;
+}
+
+/*
+ * 「靜態」燈號：關掉呼吸，但**保留發光**。
+ * ⚠ 這是喜好開關（`ui.json` 的 `glow`），和 `prefers-reduced-motion` 是兩件事——
+ *   後者是系統的無障礙設定，`icons.css` 那邊無條件遵守，不做成介面上的選項。
+ */
+:root[data-glow='none'] .chip.live,
+:root[data-glow='none'] .nc-dot.live {
+  animation: none;
+}
+
+/*
+ * 下拉清單裡的多行內容不要被截斷。
+ *
+ * ⚠ naive-ui 的選項預設是單行 ＋ `text-overflow: ellipsis`，而裝置那一項是
+ *   「位址／型號／解析度」三行——被切掉的永遠是後面那兩行，也就是使用者真正要看的。
+ *   `renderLabel` 畫成多行只是第一步，這條規則才讓它撐得開。
+ */
+.n-base-select-option__content {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.n-base-select-option {
+  height: auto;
+  min-height: 34px;
+}

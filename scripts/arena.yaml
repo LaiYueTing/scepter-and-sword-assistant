@@ -1,0 +1,460 @@
+# 自動競技場
+#
+# 每天把累積的競技場券用掉：進競技場、挑排名最好的對手、打一場排位挑戰。
+# 每週一新一期開始時還會多做一件事——按下「開啟挑戰」，那顆按鈕會順便把上一期
+# 的排名獎勵自動領走（畫面上就寫著「開啟後自動領取排名獎勵」）。早一點按排名
+# 會比較前面。
+#
+# 流程：任何頁面 → 筆記 → 競技 → 競技場
+#      →（週一）結算彈窗按「開啟挑戰」
+#      → 選排名最好的對手 → 排位挑戰彈窗按下入場鍵，兩條路：
+#          「碾壓」（戰力遠高）→ 直接判贏，跳結果頁
+#          「挑戰」（戰力相近）→ 載入 → 戰鬥地圖按「開始戰鬥」→ 按快進鍵跳結果
+#      → 結果頁點空白處 → 再來一場
+#      → 券用完時遊戲自己跳「購買競技場券」，取消掉就收工
+#
+# 四個讓腳本變簡單的畫面性質：
+#
+# 1. **一場打完，對手清單就自動換成排名更前面的四個。** 不必翻頁也不必記打過
+#    誰，每次都挑最左邊（排名數字最小）那個就會一路往上爬。排名往前爬之後對手
+#    變強，入場鍵就從「碾壓」變成「挑戰」——所以兩條路同一輪裡都會用到。
+#
+# 2. **戰鬥不必真的看完。** 左側那顆 ▶| 快進鍵按下去就直接跳到勝負結果，
+#    實測按下後兩秒內出結果，一場約 20 秒。
+#
+# 3. **券用完時遊戲會自己跳購買彈窗**，不必去讀右上角的「N/20」。這比判斷按鈕
+#    外觀可靠——對手卡片上的 ⚔ 在沒券時外觀完全不變，仍是紅色可點的。
+#
+# 4. **不需要判斷「今天是不是週一」。**「開啟挑戰」只有新一期開始時才存在，
+#    沒有就代表這週開過了，直接進入挑戰流程。時間交給排程，畫面交給規則。
+
+# 五份腳本共通的約束（tap_match 換頁要 cooldown、純攔截不能有 cooldown、
+# 收尾只能用 tap_template）與開機那幾條規則的說明，見 dungeon.yaml 檔頭。
+
+name: 自動競技場
+package: com.m88.idleXX
+
+# 券最多累積 20 張，一場約 20 秒（要真的進戰鬥再快進），全部打完約 7 分鐘。
+# 15 分鐘的上限是安全網：萬一規則打架而來回震盪，它會自己收尾讓位，
+# 不會把後面的排程整個擋住。
+max_minutes: 15
+
+# 收尾：退回家園待命。競技場頁沒有底部導覽列，要先退一層到競技頁才有。
+on_finish:
+  - log: 收工，返回家園待命
+  - tap_template: [nav_home, btn_back_arrow]
+  - wait: 2.5
+  - tap_template: [nav_home, btn_back_arrow]
+  - wait: 2.5
+  - tap_template: nav_home
+  - wait: 2
+
+rules:
+  # ==================== 每週一：開新一期 ====================
+
+  - name: 競技場結算彈窗 → 開啟挑戰
+    # 新一期開始時才會有這個彈窗。按下去會自動領走上一期的排名獎勵並開始新一期。
+    #
+    # ⚠ 排在最前面。這個彈窗蓋住整個畫面，底下的競技場頁認得出來也不該先動作。
+    template: btn_open_challenge
+    do:
+      - tap_template: btn_open_challenge
+      - wait: 3
+
+  # ==================== 排位挑戰：把券用完 ====================
+  # 一輪是「挑對手 → 按挑戰 → 開始戰鬥 → 快進到結果 → 關掉結果頁」，打完之後
+  # 對手清單自動換成排名更前面的四個，於是同一組規則會一路循環到券用完。
+  #
+  # ⚠ 順序是「最深的畫面優先」：結果頁蓋在戰鬥上、戰鬥蓋在彈窗上、彈窗蓋在
+  #   列表上。反過來排的話，結果頁還沒關掉就會去比對底下的列表。
+
+  # 結果頁分勝負兩條，因為**贏了要把挑對手的接力歸零**（清單會換人，沒有理由
+  # 繼續往後退），輸了不歸零才會自然退一格。第三條是安全網：認不出勝負時照樣
+  # 把頁面關掉，不要卡在那裡。
+  #
+  # ⚠ 兩張橫幅的位置差 257px（勝利 y=205、失敗 y=462），所以不能只掛一張再靠
+  #   位移；而「點擊空白處關閉」兩頁都有（0.991／0.989），剛好當安全網。
+
+  - name: 挑戰勝利 → 點空白處關閉
+    # 勝利 1.000、失敗那頁只有 0.179，餘裕很大。
+    template: label_arena_win
+    cooldown: 3
+    do:
+      - reset_fires: [競技場頁 → 挑對手,
+                      上一場輸了 → 改挑弱一點的對手,
+                      又輸了 → 挑最後一個對手,
+                      連續三場都打不贏 → 收工]
+      - tap: [360, 640]
+      - wait: 2.5
+
+  - name: 設定為不換對手 → 關掉結果頁，下一場挑同一格
+    # 關掉 arena_retry_on_loss 時走這條。它把第一順位那條歸零，於是下一場照樣
+    # 挑同一格——**沒有這條的話整輪只會打一場**：第一順位用完 max_fires 之後，
+    # 退格那兩條又因為開關關掉而不啟用，畫面上就沒有規則接手了。
+    #
+    # ⚠ 用 label_tap_blank_close 而不是 label_arena_lose：勝利那條排在前面已經
+    #   接走了，所以剩下的一定是「輸了」或「認不出勝負」，兩種都該重來同一格。
+    template: label_tap_blank_close
+    when_option: "!arena_retry_on_loss"
+    cooldown: 3
+    do:
+      - reset_fires: [競技場頁 → 挑對手]
+      - tap: [360, 640]
+      - wait: 2.5
+
+  - name: 挑戰失敗 → 點空白處關閉
+    # 失敗 1.000、勝利那頁只有 0.368。刻意**不歸零**——接力就是靠這個往後退。
+    template: label_arena_lose
+    cooldown: 3
+    do:
+      - tap: [360, 640]
+      - wait: 2.5
+
+  - name: 挑戰結果 → 點空白處關閉
+    # 安全網：勝負橫幅都認不出來時（新的結果樣式、動畫中間格）照樣把頁面關掉。
+    # 這時不知道勝負，所以**不歸零**——寧可多退一格，也不要在打不贏的對手上
+    # 反覆花券。認不出來的那一場會寫進紀錄，之後補模板。
+    template: label_tap_blank_close
+    cooldown: 3
+    do:
+      - log_match:
+          結果: {of: {勝利: label_arena_win, 失敗: label_arena_lose}}
+      - tap: [360, 640]
+      - wait: 2.5
+
+  - name: 競技場戰鬥準備 → 開始戰鬥
+    # 進場後有 57 秒的準備倒數，按下去就直接開打。和公會討伐共用同一個模板
+    # （實測 1.000）。
+    #
+    # ⚠ 必須排在快進鍵**前面**。兩者在準備畫面上都是 1.000，而順序就是優先度
+    #   ——排後面的話快進會先按下去，實機驗證過的走法是先開打再快進。
+    template: btn_start_battle
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 競技場戰鬥中 → 按快進鍵跳到結果
+    # 左側那顆 ▶| 按下去就直接跳到勝負結果，不必等戰鬥演完。
+    #
+    # ⚠ 錨點用快進鍵自己，不要用回合條——回合條在競技場列表頁也有 0.725，
+    #   而快進鍵在列表頁只有 0.403。
+    # 戰鬥中 0.920～0.978（特效會蓋過去），其餘畫面 ≤0.572、既有樣本 ≤0.717，
+    # 門檻 0.85 兩邊都夠。
+    template: btn_battle_skip
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 排位挑戰彈窗 → 按下入場鍵
+    # 對手卡片點下去會先跳這張彈窗（對手戰力與防守技能），按底下那顆才真的
+    # 進場，一次消耗一張競技場券。
+    #
+    # ⚠ 那顆按鈕有兩種文字，而且**決定了接下來要不要打**：戰力遠高於對手時是
+    #   「碾壓」，按下去直接判贏、跳到結果頁；戰力相近時是「挑戰」，按下去會
+    #   載入戰鬥地圖，要再按開始戰鬥、快進到結果。爬到排名前段之後對手變強，
+    #   同一輪裡兩種都會遇到。只掛一種的話另一種會整條落空而卡在彈窗前面。
+    #
+    # ⚠ 每種文字各要兩張。同一顆按鈕在「彈窗剛跳出來」與「完全顯示」時整個
+    #   彈窗會差一個像素（實測挑戰鍵 x 306 對 305），害另一種只剩 0.821。
+    #   四張各自 1.000，其餘畫面 ≤0.657、既有樣本 ≤0.679。
+    # ⚠ 模板只裁按鈕上那兩個字，不要連右邊的券數徽章——那個數字會變。
+    # ⚠ region 要框住按鈕那一帶。不框的話彈窗標題「排位挑戰」也有同樣兩個字。
+    #
+    # ⚠ 場次上限掛在這裡，因為這條規則**每一場恰好觸發一次**（按下去彈窗就關了），
+    #   而且不會被 reset_fires 歸零——挑對手那三條會，它不會。次數用完之後由下一
+    #   條收工。
+    # ⚠ 用 max_fires_daily 而不是 max_fires：後者每輪重置，補跑或手動再按一次就
+    #   重新計數（設 3 場跑兩輪＝6 場）。而「今天打過幾場」畫面上看不到（只看得到
+    #   剩幾張券），所以只能自己記——細節見 core/dailystate.py。
+    template: [btn_arena_crush, btn_arena_crush_b,
+               btn_arena_challenge, btn_arena_challenge_b]
+    region: [230, 860, 260, 80]
+    when_option: crush_arena
+    cooldown: 3
+    max_fires_daily: "${arena_max_battles:20}"
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 今天打夠了 → 關掉彈窗收工
+    # 上面那條的每日上限用完之後才輪得到這裡（順序即優先度，而用完的規則不會被
+    # 回傳）。彈窗已經開著但還沒按下去，所以**這一場的券還沒花掉**。
+    #
+    # ⚠ 模板要和上面那條完全一樣。少掛任何一種按鈕文字，那種情況就會卡在彈窗
+    #   前面——彈窗上返回鍵只有 0.58，兜底也救不回來。
+    # 彈窗沒有取消鍵，用系統返回鍵關掉。
+    template: [btn_arena_crush, btn_arena_crush_b,
+               btn_arena_challenge, btn_arena_challenge_b]
+    region: [230, 860, 260, 80]
+    do:
+      - log: 已達今天設定的場次上限
+      - back:
+      - wait: 2
+      - count:
+      - finish:
+
+  - name: 競技場券用盡 → 買滿再繼續打
+    # 預設關閉。開了才會花晨星換券（10 晨星一張、今日限購 8 張）。
+    #
+    # ⚠ 這條與下面那條是同一個畫面的兩種處理，靠開關二選一，所以順序無關緊要；
+    #   但下面那條**刻意不綁開關**，這樣買到限購上限（max_fires 用完）之後，
+    #   它就會接手把這一輪收掉，不會卡在彈窗前面。
+    template: label_arena_ticket
+    when_option: buy_arena_tickets=true
+    max_fires: 8           # 今日限購 8 張，買完就讓下面那條收工
+    cooldown: 3
+    do:
+      - tap_template: btn_buy_max      # ⏫ 一次加到上限
+      - wait: 1
+      - tap_template: btn_buy_ticket
+      - wait: 2.5
+
+  - name: 競技場券用盡 → 取消購買並收工
+    # 券用完時**遊戲自己會跳購買彈窗**（持有數量 0、10 晨星一張、今日限購 8 張），
+    # 所以不必去讀右上角的「N/20」。
+    #
+    # ⚠ 這條要排在「挑對手」前面。彈窗蓋在列表上，底下的 ⚔ 仍然比得到。
+    # 取消而不購買：那是晨星，值不值得換排名該由使用者決定，不該由腳本花掉。
+    template: label_arena_ticket
+    do:
+      - tap_template: btn_cancel
+      - wait: 2
+      - count:
+      - finish:
+
+  # ---- 挑對手：輸了就往後退一格，贏了回到第一順位 ----
+  #
+  # 四個對手橫排：**左邊三個排名在你前面**（打贏才會往上爬），**第四個排名在你
+  # 後面、必定是碾壓**（打贏不會加排名，只拿積分與競技幣）。
+  #
+  # ⚠ 排名與戰力不是同一件事，而畫面上讀不到可靠的戰力比較（OCR 讀不出小數點，
+  #   5.9 億會讀成 59 億，細節見 CLAUDE.md）。所以不去猜誰打得贏，改用**打了才
+  #   知道**：輸了就退一格，退到第 3 個還輸就收工，不要把整天的券餵給打不過的人。
+  #
+  # 接力靠的是 max_fires——那是引擎唯一的「這一輪發生過什麼」的記憶。三條規則
+  # 由上而下排，前一條用完了才輪到下一條：
+  #
+  #     第一順位（用完一次）→ 退而求其次（用完一次）→ 最後一搏
+  #
+  # 而「挑戰勝利 → 點空白處關閉」會 reset_fires 把前兩條歸零，所以**贏了就回到
+  # 第一順位**（贏了清單會換人，沒有理由繼續退）。輸了不歸零，於是自然往後走。
+  #
+  # ⚠ 三條的 pick 都不要寫死成 1/2/3：第一順位由使用者設定，退格是「再往右一個」。
+  #   arena_retry_on_loss 關掉的話後兩條不啟用，行為就退回「永遠挑同一格」。
+  # ⚠ 四顆 ⚔ 長得一模一樣，靠位置分。pick 給數字就是由左數來第幾個。
+  # ⚠ 沒券時這顆按鈕**外觀完全不變**，仍是紅色可點的——按下去才會跳購買彈窗，
+  #   由上面那條收工。所以這裡不必判斷還有沒有券。
+
+  - name: 競技場頁 → 挑對手
+    template: btn_arena_fight
+    pick: "${arena_opponent:1}"
+    when_option: crush_arena
+    cooldown: 3
+    max_fires: 1
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 上一場輸了 → 改挑弱一點的對手
+    template: btn_arena_fight
+    pick: "${arena_opponent_2:2}"
+    when_option: arena_retry_on_loss
+    cooldown: 3
+    max_fires: 1
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 又輸了 → 挑最後一個對手
+    template: btn_arena_fight
+    pick: "${arena_opponent_3:3}"
+    when_option: arena_retry_on_loss
+    cooldown: 3
+    max_fires: 1
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 連續三場都打不贏 → 收工
+    # 走到這裡代表三格都試過而且都輸了，再打下去只是把券換成安慰獎的積分。
+    # 券留著明天用（每 5 小時回一張，不會滿出來）。
+    #
+    # ⚠ 要有 sustain：上面三條用完 max_fires 到這條成立之間會有一小段空窗，
+    #   而清單頁本來就一直看得到 ⚔。
+    require: [anchor_arena, btn_arena_fight]
+    when_option: arena_retry_on_loss
+    sustain: 6
+    do:
+      - count:
+      - finish:
+
+  - name: 競技場裡沒事可做 → 收工
+    # 走到這裡代表：開賽彈窗不在（這週開過了）、也沒有對手可挑（關掉挑戰、
+    # 或清單是空的）。
+    #
+    # ⚠ 要有 sustain。按下開啟挑戰之後會蓋一層「獲得獎勵」的動畫，那幾秒
+    #   這條和開賽那條可能同時成立，等動畫跑完再收工才不會漏看。
+    require: [anchor_arena]
+    absent: [btn_arena_fight, btn_open_challenge, label_arena_ticket]
+    sustain: 5
+    do:
+      - count:
+      - finish:
+
+  # ==================== 導覽 ====================
+
+  - name: 競技頁 → 進入競技場
+    template: card_arena_main
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 筆記頁 → 進入競技
+    template: card_arena
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 其他頁面 → 點筆記
+    template: nav_note
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 2
+
+  # ==================== 開機 ====================
+  # 和另外三份腳本共用同一組模板與同一套處理方式。
+
+  - name: 公告 → 勾選今日不再提醒後關閉
+    # ⚠ 必須排在「誤入次要頁面」前面，否則返回鍵會先被按掉。
+    # 偏移 -73 是量出來的（模板中心 362、圓圈中心 289），細節見 dungeon.yaml。
+    template: label_notice_dont_remind
+    cooldown: 5
+    do:
+      - tap_match: [-73, -1]
+      - wait: 0.8
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 標題畫面 → 點擊開始遊戲
+    # 不點就永遠停在這裡，而這張沒有返回鍵、兜底救不回來。
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    cooldown: 5
+    do:
+      - tap: [360, 900]
+      - wait: 3
+
+  - name: 遊戲啟動中 → 等開場動畫
+    template: label_boot_logo
+    do: []
+
+  - name: 遊戲啟動中 → 等載入完成
+    template: label_boot_network
+    do: []
+
+  - name: 載入中 → 等畫面切換
+    template: [label_loading, label_loading_b, label_loading_c]
+    do: []
+
+  # ==================== 兜底 ====================
+
+  - name: 觀戰確認框 → 確定退出
+    # 「要退出觀戰狀態嗎?」——按了系統返回鍵之後跳出來的。
+    #
+    # ⚠ 少了這條會死循環：兜底按返回鍵 → 叫出這個框 → 認不得 → 再按返回鍵 →
+    #   框關掉又開起來。實測有使用者卡在這裡 17 分鐘、空按 26 次返回鍵。
+    #   modal 對話框對系統返回鍵通常無效或反效果，一定要各自認得。
+    #
+    # 模板取訊息那行字（其餘樣本 ≤0.549），確定鍵用既有的 btn_confirm（1.000）。
+    template: label_leave_spectate
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+
+  - name: 誤入次要頁面 → 點返回退出
+    # ⚠ 用 require + absent 而不是 template：競技頁與競技場頁**兩邊都有**返回鍵，
+    #   單靠 template 的話 sustain 會跨頁一路累加——進到競技場頁的第一個 tick 這條
+    #   的 4 秒早就滿了，而「已經開過了」的 3 秒才剛從零開始數，於是每次都被搶先
+    #   退出去，在「進競技場 ↔ 退出來」之間無限循環。
+    #
+    #   把競技場的兩個畫面列進 absent，條件在那兩頁上是 false，計時才會真的歸零。
+    # ⚠ 戰鬥那幾張也要列進 absent。準備畫面上返回鍵是 1.000 而 anchor_arena
+    #   只有 0.578——條件成立，而準備倒數有 57 秒，4 秒的 sustain 一定會滿，
+    #   於是把剛用掉一張券的自己退出戰鬥。純攔截擋不住計時，只有讓條件在那些
+    #   畫面上變成 false 才會歸零。
+    require: [btn_back_arrow]
+    absent: [anchor_arena, btn_open_challenge, btn_battle_skip,
+             label_tap_blank_close]
+    sustain: 4
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 完全無法辨識 → 按系統返回鍵
+    # ⚠ 一定要把開機畫面列進 absent，否則開機那 100 秒裡計時會一直累加，
+    #   等到某個轉場空窗就會誤觸發（見 CLAUDE.md 冷啟動那段）。
+    # ⚠ 挑戰流程那幾張畫面（彈窗、戰鬥、結果頁、購買彈窗）也要列進來。那幾張
+    #   上面 btn_back_arrow 只有 ≤0.66、anchor_arena ≤0.58，都認不到，
+    #   計時會一路累加。
+    absent: [nav_home, btn_back_arrow, anchor_arena, btn_open_challenge,
+             btn_arena_challenge, btn_arena_challenge_b, btn_battle_skip,
+             label_tap_blank_close, label_arena_ticket,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 5          # 按這麼多次還脫不了困，就交給下一條重開遊戲
+    do:
+      - screenshot: arena_unknown
+      - back:
+      - wait: 3
+
+  - name: 一直脫不了困 → 重開遊戲
+    # 兜底按了 5 次系統返回鍵還是認不出畫面。返回鍵解決不了兩種狀況：**對它無效
+    # 的結算頁**（只能點空白處），以及**按下去反而會叫出確認框**的頁面——後者會
+    # 變成開開關關的死循環。重開遊戲讓畫面回到「開機 → 家園」這條認得的路。
+    #
+    # ⚠ absent 要和上面那條**完全一樣**。少列任何一個，這條就會在那個畫面上誤
+    #   觸發，而重開遊戲要 152 秒。
+    # ⚠ 上面那條一定要有 max_fires，否則它每輪都成立、永遠輪不到這裡。
+    absent: [nav_home, btn_back_arrow, anchor_arena, btn_open_challenge,
+             btn_arena_challenge, btn_arena_challenge_b, btn_battle_skip,
+             label_tap_blank_close, label_arena_ticket,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 3      # 重開這麼多次還是認不出來，就別再重開了（見下一條）
+    do:
+      - restart_app: 45
+
+  - name: 重開遊戲也救不回來 → 收工
+    # 最後的保險絲。重開三次還是認不出畫面，代表遇到的東西不是「重開就會好」的
+    # ——再重開下去只會每半分鐘關開遊戲一次，直到有人來看。
+    #
+    # ⚠ 這條非有不可。實測 2026-08-25：領獎確認框的文字被遊戲改掉，模板比不中而
+    #   落到兜底，接著**每 30 秒重開一次遊戲，從 08:03 跑到 12:17**，
+    #   足足 4 小時 14 分，而且是使用者自己按停止才停的——
+    #   而重開那條當時沒有 max_fires，所以永遠輪不到任何人喊停。
+    #
+    # ⚠ 收工比空轉好：這一輪讓出去，排程會照常跑下一個腳本，下一個排定時刻也會
+    #   重新開始。截圖留著當補模板的來源。
+    absent: [nav_home, btn_back_arrow, anchor_arena, btn_open_challenge,
+             btn_arena_challenge, btn_arena_challenge_b, btn_battle_skip,
+             label_tap_blank_close, label_arena_ticket,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    do:
+      - log: 重開遊戲三次仍然認不出畫面，這一輪先收工
+      - screenshot: stuck_after_restart
+      - finish:
+

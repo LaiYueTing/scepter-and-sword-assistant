@@ -1,0 +1,7 @@
+opencv-python>=4.10
+numpy>=1.26
+PyYAML>=6.0
+
+# 圖形介面。用的是 Windows 內建的 WebView2，不自帶瀏覽器引擎，所以只多幾百 KB。
+# 只跑命令列（main.py run）的話這一項可以不裝。
+pywebview>=5.0

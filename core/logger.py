@@ -86,6 +86,20 @@ def pad(text: str, width: int) -> str:
     return text + " " * max(0, width - display_width(text))
 
 
+def pretty_seconds(seconds: float) -> str:
+    """把秒數寫成好讀的形式：45 秒 / 3 分 12 秒 / 1 小時 05 分。
+
+    ⚠ 紀錄與任務卡共用這一份。分開寫的下場是同一輪在兩個地方長得不一樣——
+      實測 39 秒的那一輪，紀錄寫「39 秒」而卡片寫「0 分 39 秒」。
+    """
+    s = int(seconds)
+    if s < 60:
+        return f"{s} 秒"
+    if s < 3600:
+        return f"{s // 60} 分 {s % 60:02d} 秒"
+    return f"{s // 3600} 小時 {s % 3600 // 60:02d} 分"
+
+
 class ChineseFormatter(logging.Formatter):
     """把等級與模組名換成中文，並按顯示寬度對齊欄位。"""
 

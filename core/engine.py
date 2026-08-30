@@ -33,16 +33,6 @@ class ScriptError(RuntimeError):
     """腳本定義有誤。"""
 
 
-def _pretty_seconds(seconds: float) -> str:
-    """把秒數寫成好讀的形式：45 秒 / 3 分 12 秒 / 1 小時 05 分。"""
-    s = int(seconds)
-    if s < 60:
-        return f"{s} 秒"
-    if s < 3600:
-        return f"{s // 60} 分 {s % 60:02d} 秒"
-    return f"{s // 3600} 小時 {s % 3600 // 60:02d} 分"
-
-
 
 def _option_reason(spec: str) -> str:
     """把 when_option 寫成人看得懂的條件，用在「這條規則為何不啟用」的訊息。"""
@@ -646,7 +636,7 @@ class Engine:
         self._end_waiting_line()
         elapsed = time.time() - started
         log.info("結束：完成 %d 次，耗時 %s", self.completed,
-                 _pretty_seconds(elapsed))
+                 logger.pretty_seconds(elapsed))
         return self.completed
 
     def stop(self) -> None:
@@ -732,7 +722,7 @@ class Engine:
             self._waiting_logged = now
         self._waiting_name = name
 
-        elapsed = _pretty_seconds(now - self._waiting_block_start)
+        elapsed = logger.pretty_seconds(now - self._waiting_block_start)
         if not self._tty and heartbeat > 60:
             heartbeat = 60.0
 
@@ -793,7 +783,7 @@ class Engine:
         self._clear_waiting_line()
         if total >= 60:
             log.info("等待結束，共 %s（最後狀態：%s）",
-                     _pretty_seconds(total), self._waiting_name)
+                     logger.pretty_seconds(total), self._waiting_name)
         self._waiting_name = None
         self._waiting_block_start = 0.0
 

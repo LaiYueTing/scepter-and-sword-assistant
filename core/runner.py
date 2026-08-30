@@ -147,9 +147,14 @@ class Runner:
                     if self.one_shot:
                         raise
                 spent = int((datetime.now() - started).total_seconds())
+                # ⚠ 不要寫「剛才完成」。這句會一直掛在卡片上到下一輪為止，
+                #   而下一輪可能是好幾個小時以後——那時「剛才」已經不成立了。
+                #   卡片的徽章講的是**現在是什麼狀態**，不是「剛剛發生什麼」。
+                took = logger.pretty_seconds(spent)
                 self._task(current.name, "done",
-                           f"剛才完成 {engine.completed} 次"
-                           f"（{spent // 60} 分 {spent % 60:02d} 秒）")
+                           f"已完成 {engine.completed} 次（{took}）"
+                           if engine.completed
+                           else f"這一輪沒有完成（{took}）")
 
                 if self.one_shot or self.stop_event.is_set():
                     break

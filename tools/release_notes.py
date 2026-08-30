@@ -26,6 +26,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 用來把短雜湊接成 commit 連結，和 core/updater.py 指的是同一個儲存庫。
+REPO = "LaiYueTing/scepter-and-sword-assistant"
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # 段落順序就是輸出順序。整理類的合成一段——使用者看不到的東西不值得各佔一節。
@@ -132,8 +135,11 @@ def render(items: list[tuple[str, str, str]]) -> str:
     lines.append("")
     lines.append("### 這一版整合的變更")
     lines.append("")
+    # ⚠ 短雜湊要寫成明確的 markdown 連結。包在反引號裡的 SHA **GitHub 不會自動
+    #   連結**，於是清單只是一串看得到、點不進去的字；而那份清單的用途正是
+    #   「想知道某一條到底改了什麼就點進去看」。
     for sha, subject, _body in items:
-        lines.append(f"- `{sha}` {subject}")
+        lines.append(f"- [`{sha}`](https://github.com/{REPO}/commit/{sha}) {subject}")
     return "\n".join(lines).rstrip() + "\n"
 
 

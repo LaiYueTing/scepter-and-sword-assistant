@@ -59,26 +59,36 @@ def previous_tag() -> str | None:
     return None
 
 
-def commits(since: str | None) -> list[tuple[str, str]]:
-    """回傳 [(標題, body)]，舊的在前面（讀起來才是發生順序）。"""
-    span = f"{since}..HEAD" if since else "HEAD"
-    raw = git("log", span, "--reverse", "--no-merges", "--format=%H%x00%s%x00%b%x1e")
+def commits(since: str | None, until: str = "HEAD") -> list[tuple[str, str]]:
+    """回傳 [(標題, body)]，舊的在前面（讀起來才是發生順序）。
+
+    ⚠ 終點要能指定。發版當下 HEAD 常常已經**超過**那個 tag——別人剛 commit
+      了下一版的東西，或者 tag 是稍早打的。用 HEAD 當終點就會把不屬於這一版
+      的 commit 寫進說明（實測踩過一次）。發布時請指定 `--until <tag>`。
+    """
+    span = f"{since}..{until}" if since else until
+    raw = git("log", span, "--reverse", "--no-merges", "--format=%h%x00%s%x00%b%x1e")
     out = []
     for chunk in raw.split("\x1e"):
         if not chunk.strip():
             continue
-        _, subject, body = chunk.strip("\n").split("\x00", 2)
-        out.append((subject.strip(), body.strip()))
+        sha, subject, body = chunk.strip("\n").split("\x00", 2)
+        out.append((sha.strip(), subject.strip(), body.strip()))
     return out
 
 
-def render(items: list[tuple[str, str]]) -> str:
-    """把 commit 排成 Markdown。認不得格式的一律歸到整理那段，不要吞掉。"""
+def render(items: list[tuple[str, str, str]]) -> str:
+    """把 commit 排成 Markdown。認不得格式的一律歸到整理那段，不要吞掉。
+
+    ⚠ 末尾一定要列出**這一版整合了哪些 commit**。一個版本底下有五個修正是
+      正常的，而分段描述只講「修了什麼」，看不出這一版涵蓋到哪裡——那份清單
+      才是版本與 commit 之間的對照表。
+    """
     buckets: dict[str, list[tuple[str, str, bool]]] = {t: [] for t, _ in
                                                        [(s, k) for s, k in SECTIONS]}
     breaking: list[str] = []
 
-    for subject, body in items:
+    for _sha, subject, body in items:
         m = HEAD_RE.match(subject)
         kind = m.group("type") if m else ""
         text = m.group("text") if m else subject
@@ -117,23 +127,33 @@ def render(items: list[tuple[str, str]]) -> str:
             if body:
                 lines.append(body)
                 lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append("### 這一版整合的變更")
+    lines.append("")
+    for sha, subject, _body in items:
+        lines.append(f"- `{sha}` {subject}")
     return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="從 commit 生成發版說明")
     ap.add_argument("--since", help="從哪個 tag 之後算起（預設是上一個 tag）")
+    ap.add_argument("--until", default="HEAD",
+                    help="算到哪裡為止（預設 HEAD）。發布時填這一版的 tag，"
+                         "免得把還沒發的 commit 也寫進去")
     ap.add_argument("--out", help="寫到檔案，省略就印到終端機")
     args = ap.parse_args()
 
     since = args.since or previous_tag()
-    items = commits(since)
+    items = commits(since, args.until)
     if not items:
         print(f"[提醒] {since or '整段歷史'} 之後沒有 commit，沒有東西可以發。")
         return 1
 
-    print(f"[資訊] 從 {since or '第一個 commit'} 起算，共 {len(items)} 個 commit",
-          file=sys.stderr)
+    print(f"[資訊] {since or '第一個 commit'} → {args.until}，"
+          f"共 {len(items)} 個 commit", file=sys.stderr)
     text = render(items)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8", newline="")

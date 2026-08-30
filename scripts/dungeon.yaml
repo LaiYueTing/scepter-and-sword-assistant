@@ -248,6 +248,11 @@ rules:
   - name: 明天開新副本 → 今天不領獎，打完這一場就收工
     # 次數已經在詳情頁買滿了，這一場只是把今天的例行走完（評級仍會更新），
     # 獎勵留到明天。打完就收工，免得沒有次數用盡的收工條件而一直打下去。
+    #
+    # ⚠ 退出前一定要自己按掉「尚未領取日常副本獎勵，確定要退出副本嗎?」。
+    #   別條不領獎的規則不必管它——退出之後引擎還會再轉一輪，「退出確認對話框
+    #   → 確定退出」自然接手；而這條緊接著 finish，引擎當場就停了，on_finish
+    #   只找 nav_home 與返回鍵，對這個彈窗完全無效，遊戲會整個卡在上面。
     template: btn_claim_reward
     when_option: "stock_up_before_new_dungeon=true"
     when_flag: [明天開新副本]
@@ -255,6 +260,8 @@ rules:
       - log_match:
           評級: {region: [270, 140, 200, 220], of: {S: rank_s, A: rank_a, B: rank_b}}
       - tap: [75, 1219]
+      - wait_for: label_exit_confirm
+      - tap_template: btn_confirm
       - wait: 2.5
       - count:
       - finish:

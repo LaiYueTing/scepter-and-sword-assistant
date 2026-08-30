@@ -426,7 +426,11 @@ class Api:
                 ok, why = updater.apply(path)
                 if not ok:
                     raise RuntimeError(why)
-                updater.restart()
+                # ⚠ **不要在這裡就 restart()。** 它排的是一個「等這個行程結束
+                #   就啟動新版」的背景 PowerShell，而使用者不一定當場重啟——
+                #   那個 PowerShell 會一直潛伏著，等他哪天關掉程式，新版就自己
+                #   跳出來，還可能和他自己雙擊的那次撞成「助手已經在執行中」。
+                #   改由 update_restart() 觸發，那才是明確的意思表示。
                 self._channel.send("update_done",
                                   {"ok": True, "version": rel.version})
             except Exception as e:
@@ -544,6 +548,19 @@ class Api:
             return self.win_quit({})
         self._channel.send("confirm_close", None)
         return {}
+
+    def update_restart(self, _: dict) -> dict:
+        """換好檔之後、使用者選「立即重新啟動」時才走這條。
+
+        排定「等這個行程結束就啟動新版」的背景工作，然後關掉自己。兩件事的
+        順序不能反：`restart()` 等的就是這個 PID。
+
+        ⚠ 選「稍後」的話這條不會跑，什麼都不排——下次使用者自己開就是新版。
+        """
+        from core import updater
+        if not updater.restart():
+            raise RuntimeError("排不了重新啟動，請自己關掉再開一次")
+        return self.win_quit({})
 
     def win_quit(self, _: dict) -> dict:
         """真的要結束：先跑完收尾，再關視窗。

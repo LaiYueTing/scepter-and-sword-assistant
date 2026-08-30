@@ -13,6 +13,7 @@ import {
   Swords
 } from 'lucide-vue-next'
 import AboutDialog from './AboutDialog.vue'
+import UpdateDialog from './UpdateDialog.vue'
 import AppearanceDialog from './AppearanceDialog.vue'
 import WindowControls from './WindowControls.vue'
 import { useHostStore } from '../stores/host'
@@ -25,6 +26,8 @@ const route = useRoute()
 const message = useMessage()
 const showAppearance = ref(false)
 const showAbout = ref(false)
+const showUpdated = ref(false)
+const installedVersion = ref('')
 
 const percent = computed(() => {
   const p = host.updateProgress
@@ -100,6 +103,24 @@ watch(
     if (u.error) message.warning(`檢查更新失敗：${u.error}`)
     else if (u.found) message.success(`偵測到新版本 v${u.version}`)
     else message.success(`已經是最新版本（v${host.version}）`)
+  }
+)
+
+/**
+ * 換好檔之後問使用者要不要現在重新啟動。
+ *
+ * ⚠ **一定要問，而且問完才排重啟。** 換檔本身只是把新的 EXE 放到位，畫面上
+ *   完全沒有反應——使用者的回報就是「他不會 UI 跳出來詢問是否重啟嗎?」。
+ *   而排定重啟的背景工作是「等這個行程結束就啟動新版」，先排後問的話它會
+ *   一直潛伏著，等使用者哪天關掉程式就自己跳出來。
+ */
+watch(
+  () => host.updateReady,
+  (v) => {
+    if (!v) return
+    installedVersion.value = v.version
+    showUpdated.value = true
+    host.updateReady = null
   }
 )
 
@@ -212,7 +233,7 @@ async function onUpdate() {
           host.running
             ? '執行中不更新：換檔要重新啟動，會中斷正在打的副本或討伐'
             : host.update?.found
-              ? `${updateLabel}（${host.update.size_text}，裝完會自動重新啟動）`
+              ? `${updateLabel}（${host.update.size_text}，裝完會問你要不要重新啟動）`
               : '檢查更新'
         }}
       </NTooltip>
@@ -282,6 +303,7 @@ async function onUpdate() {
 
     <AppearanceDialog v-model:show="showAppearance" />
     <AboutDialog v-model:show="showAbout" />
+    <UpdateDialog v-model:show="showUpdated" :version="installedVersion" />
   </header>
 </template>
 

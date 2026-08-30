@@ -35,7 +35,10 @@ export const useHostStore = defineStore('host', {
     // 這次的查詢是使用者自己按的嗎。自動查那次不出聲（沒網路不是他當下關心的事），
     // 手動按的一定要回一句話——查完什麼都沒有的話，看起來就像那顆按鈕壞了。
     updateAsked: false,
-    updateProgress: null // { done, total }
+    updateProgress: null, // { done, total }
+    // 換好檔了，等使用者回答「要不要現在重新啟動」。⚠ 一定要問——排定重啟的
+    // 那個背景工作是等這個行程結束才動作的，不問的話畫面上完全沒有反應。
+    updateReady: null // { version }
   }),
 
   getters: {
@@ -112,7 +115,8 @@ export const useHostStore = defineStore('host', {
             break
           case 'update_done':
             this.updateProgress = null
-            if (!data.ok) this.status = `更新失敗：${data.error}`
+            if (data.ok) this.updateReady = { version: data.version }
+            else this.status = `更新失敗：${data.error}`
             break
           case 'fatal':
           case 'exit':

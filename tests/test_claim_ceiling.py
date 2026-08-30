@@ -14,7 +14,12 @@ os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core.config import Config
 from core.engine import Engine, Script, ScriptError, apply_options
-from core import vision
+from core import dailystate, vision
+
+# ⚠ 「先把領獎次數買滿」用 max_fires_daily，計數記在 state.json 裡而且**跨執行
+#   保留**——不隔離的話，機器上今天真的買過的次數會把測試擋掉，看起來像回歸。
+_STATE = dailystate.PATH.read_bytes() if dailystate.PATH.exists() else None
+dailystate.PATH.unlink(missing_ok=True)
 
 # ⚠ like_teammates 關掉：「結算頁 → 幫隊友按讚」排在領獎前面而且沒有 cooldown，
 #   開著的話結算頁永遠停在它那裡，驗不到底下的領獎規則。
@@ -112,6 +117,11 @@ e = new_engine()
 check(step(e, DETAIL_S, busy=[MATCHING]),
       "這一級已是 S 而沒有難度等著解鎖 → 已在最高難度", "詳情頁照常")
 check(step(e, RESULT_S), "結算 S 級 → 領取獎勵", "結算頁照常領獎")
+
+if _STATE is not None:
+    dailystate.PATH.write_bytes(_STATE)
+else:
+    dailystate.PATH.unlink(missing_ok=True)
 
 print()
 print("全部通過。")

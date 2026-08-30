@@ -659,12 +659,21 @@ class Engine:
         """跑完一輪後的收尾，例如回到家園待命，方便下一輪或人工接手。
 
         不另外寫「執行收尾動作」：on_finish 的第一個動作就是自己的 log。
+
+        ⚠ **逐步回報進度給狀態列。** 收尾實測要 14～18 秒（那些 `wait` 是在讓
+          換頁動畫跑完，省不掉），而狀態列若停在一句不動的「正在執行收尾動作」，
+          使用者看到的就是「按下停止之後當掉了」——回報就是這樣來的。
+          只要那行字一直在變，同樣的 15 秒就不會被當成當機。
         """
         if not self.script.on_finish or self.dry_run:
             return
         self._finishing = True
         try:
-            self._execute(self.script.on_finish, self.device.screencap(), None)
+            screen = self.device.screencap()
+            steps = self.script.on_finish
+            for i, action in enumerate(steps, 1):
+                self._emit_status(f"收尾中　第 {i} 步，共 {len(steps)} 步")
+                self._execute([action], screen, None)
         except Exception as e:                      # 收尾失敗不該影響主要結果
             log.warning("收尾動作未完成：%s", e)
         finally:

@@ -43,9 +43,9 @@ async function run(once) {
 async function stop() {
   try {
     await host.stop()
-    // 按下停止到真正結束約 10 秒（收尾要逐層退回家園）。這句話一定要說出來，
+    // 按下停止到真正結束實測 14～18 秒（收尾要逐層退回家園）。這句話一定要說，
     // 否則看起來像當掉。
-    message.info('已要求停止，正在執行收尾動作（約 10 秒）⋯')
+    message.info('已要求停止，正在執行收尾動作（約 15 秒）⋯')
   } catch (e) {
     message.error(e.message)
   }

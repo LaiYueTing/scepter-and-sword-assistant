@@ -323,7 +323,8 @@ def download(rel: Release, on_progress=None) -> Path | None:
 
     got = part.stat().st_size
     if total and got != total:
-        log.warning("下載不完整：只拿到 %d / %d 位元組", got, total)
+        log.warning("下載不完整：只拿到 %.1f / %.1f MB",
+                    got / 1048576, total / 1048576)
         part.unlink(missing_ok=True)
         return None
     if part.read_bytes()[:2] != b"MZ":
@@ -332,7 +333,9 @@ def download(rel: Release, on_progress=None) -> Path | None:
         return None
 
     os.replace(part, target)
-    log.info("已下載 %s（%d 位元組）", target.name, got)
+    # ⚠ 用 MB 不用位元組。「81208677 位元組」讀的人得自己心算才知道是不是
+    #   完整的一份，而這一行的用途正是「確認拿到的份量對不對」。
+    log.info("已下載 %s（%.0f MB）", target.name, got / 1048576)
     return target
 
 

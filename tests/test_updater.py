@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -301,6 +303,57 @@ def test_sweep_temp() -> None:
         check("回報清掉的數量", swept == 1, f"回報 {swept}")
 
 
+def test_backup_path_when_old_is_stuck() -> None:
+    """`.old` 還被佔著的時候，備份要換一個名字，不要在同一個路徑上硬碰硬。
+
+    這是 2026-08-30 使用者回報的 [WinError 5]：更新按下去只說「換不掉舊版：
+    存取被拒」，而真正卡住的是那個誰都看不到的 `.old`——上一版的行程還開著
+    （工作管理員裡是兩個處理程序），或者防毒正握著它。
+
+    ⚠ 兩種成因都要驗：**被別的行程開著**與**唯讀屬性**，實測都是同一個
+      WinError 5。
+    """
+    print("備份路徑（.old 卡住時）")
+    with tempfile.TemporaryDirectory() as tmp:
+        here = Path(tmp)
+        cur = here / "ScepterSwordAssistant.exe"
+        cur.write_bytes(b"MZ" + b"x" * 64)
+        old = cur.with_name(cur.name + ".old")
+
+        check("沒有 .old 時就用原本的名字",
+              updater._spare_backup(cur).name == cur.name + ".old")
+
+        old.write_bytes(b"stale")
+        check("有 .old 但沒人佔著時照樣用原本的名字",
+              updater._spare_backup(cur).name == cur.name + ".old")
+
+        old.write_bytes(b"stale")
+        holder = open(old, "rb")            # 上一版的行程還開著
+        try:
+            picked = updater._spare_backup(cur)
+            check("被佔著時換一個名字", picked != old, picked.name)
+            check("換出來的名字帶時間戳",
+                  bool(re.search(r"\.exe\.\d{14}\.old$", picked.name)),
+                  picked.name)
+            try:
+                os.replace(cur, picked)
+                check("用新名字真的搬得動", True)
+            except OSError as e:
+                check("用新名字真的搬得動", False, str(e))
+        finally:
+            holder.close()
+
+        # 唯讀是另一個成因，實測同樣是 WinError 5
+        cur.write_bytes(b"MZ" + b"x" * 64)
+        old.write_bytes(b"stale")
+        os.chmod(old, stat.S_IREAD)
+        try:
+            picked = updater._spare_backup(cur)
+            check("唯讀的 .old 也要換名字", picked != old, picked.name)
+        finally:
+            os.chmod(old, stat.S_IWRITE)
+
+
 def test_cannot_apply_from_source() -> None:
     """從原始碼跑的時候要明講「換不了」，不要默默做出一個壞掉的 EXE。"""
     print("執行環境判斷")
@@ -315,6 +368,7 @@ def main() -> int:
     test_restart_env_scrubbed()
     test_download_verification()
     test_sweep_temp()
+    test_backup_path_when_old_is_stuck()
     test_cannot_apply_from_source()
     print("\n全部通過。" if ok else "\n有項目未通過。")
     return 0 if ok else 1

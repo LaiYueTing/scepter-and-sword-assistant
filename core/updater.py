@@ -30,6 +30,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from core import logger
@@ -137,6 +138,42 @@ def check_status() -> tuple["Release | None", str]:
 def check() -> Release | None:
     """有比現在新的版本才回傳，否則 None。"""
     return check_status()[0]
+
+def _target_exe() -> Path:
+    """更新要換掉的那一個檔案。
+
+    ⚠ 一律以**自己的實際路徑**為準，不要用寫死的名字。使用者可以把 EXE 改成
+      任何檔名（GitHub 的附件叫 ScepterSwordAssistant.exe，而桌面捷徑指向的
+      是他自己命名的那一個），寫死就會換錯檔案、或在旁邊多生一個。
+
+    沒有 frozen 時退回 ROOT 底下的預設名字——那只有開發環境會走到，而那條路
+    `can_apply()` 本來就會拒絕換檔。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable)
+    return ROOT / "杖劍傳說助手.exe"
+
+
+def _spare_backup(cur: Path) -> Path:
+    """挑一個搬得動的備份路徑，回傳要用的那個。
+
+    ⚠ 舊的 `.old` 常常還被佔著：上一版的行程沒真的關掉（縮在系統匣就是這樣，
+      使用者看到的是「處理程序有兩個」）、防毒正在掃、或者檔案是唯讀的。而
+      `os.replace` 的**目標**被佔用時丟的是 **[WinError 5] 存取被拒**——訊息
+      指著新舊兩個路徑，完全看不出真正卡住的是那個 `.old`。
+
+    實測兩種情況都會踩到（被別的行程開著、唯讀屬性），所以刪不掉就換一個帶
+    時間戳的名字，不要在同一個路徑上硬碰硬。
+    """
+    first = cur.with_name(cur.name + ".old")
+    try:
+        first.unlink(missing_ok=True)
+        return first
+    except OSError:
+        log.warning("舊的備份檔還被佔著，改用帶時間戳的名字：%s", first.name)
+        return cur.with_name(
+            f"{cur.name}.{datetime.now():%Y%m%d%H%M%S}.old")
+
 
 def can_apply() -> tuple[bool, str]:
     """現在這個執行環境換不換得了檔。回傳（可以嗎, 不行的理由）。"""
@@ -258,8 +295,13 @@ def download(rel: Release, on_progress=None) -> Path | None:
     ⚠ 也要看檔頭。GitHub 偶爾會回一頁 HTML（維護中、速率限制），那種內容大小
       對得上與否都不該拿去換執行檔。
     """
-    target = ROOT / f"杖劍傳說助手-{rel.tag}.exe"
-    part = target.with_suffix(".part")
+    # ⚠ 暫存檔名要**跟著自己的檔名走**，而且一看就知道是暫存的。
+    #   原本寫死成「杖劍傳說助手-v1.0.1.exe」，兩個後果：使用者的 EXE 其實叫
+    #   ScepterSwordAssistant.exe（GitHub 附件名），於是旁邊多出一個看起來
+    #   像正式版的檔案；而換檔失敗時它就留在那裡，讓人以為「捷徑要改指到這個」。
+    cur = _target_exe()
+    target = cur.with_name(cur.name + ".new")
+    part = cur.with_name(cur.name + ".part")
 
     total, ranged = _probe(rel.url)
     if not total:
@@ -304,17 +346,23 @@ def apply(new_exe: Path) -> tuple[bool, str]:
     if not ok:
         return False, why
 
-    cur = Path(sys.executable)
-    backup = cur.with_name(cur.name + ".old")
-    try:
-        backup.unlink(missing_ok=True)
-    except OSError:
-        pass
+    cur = _target_exe()
+    backup = _spare_backup(cur)
 
     try:
         os.replace(cur, backup)          # 執行中的 EXE 改得了名，覆寫不了
     except OSError as e:
-        return False, f"換不掉舊版：{e}"
+        # ⚠ 訊息要說得出**下一步做什麼**。原本只寫「換不掉舊版：[WinError 5]
+        #   存取被拒」，而使用者從那句話完全看不出要去關掉什麼——實際上最常見
+        #   的成因是另一個助手還開著（縮在系統匣也算，工作管理員裡會看到兩個
+        #   處理程序），其次是防毒的即時掃描正握著檔案。
+        return False, "\n".join([
+            f"換不掉舊版：{e}",
+            "請確認沒有另一個助手還在執行（縮到系統匣的也算），"
+            "或暫時關掉防毒的即時掃描再試一次。",
+            f"新版已經下載好，也可以關掉助手之後手動把 {new_exe.name} "
+            f"改名成 {cur.name} 換上去。",
+        ])
 
     try:
         os.replace(new_exe, cur)
@@ -327,8 +375,15 @@ def apply(new_exe: Path) -> tuple[bool, str]:
 
 
 def cleanup() -> None:
-    """刪掉上一次更新留下的 `.old` 與沒下載完的 `.part`。啟動時呼叫。"""
-    for leftover in list(ROOT.glob("*.exe.old")) + list(ROOT.glob("*.part")):
+    """刪掉上一次更新留下的殘骸。啟動時呼叫。
+
+    ⚠ 三種都要收：`.old`（換檔成功後的舊版）、`*.<時間戳>.old`（`.old` 當時
+      被佔著而改用的備用名）、`.new` / `.part`（下載到一半或換檔失敗留下的）。
+      少收哪一種，那個檔案就會一直躺在 EXE 旁邊讓使用者猜它是什麼。
+    """
+    leftovers = (list(ROOT.glob("*.exe.old")) + list(ROOT.glob("*.exe.*.old"))
+                 + list(ROOT.glob("*.new")) + list(ROOT.glob("*.part")))
+    for leftover in leftovers:
         try:
             leftover.unlink()
         except OSError:

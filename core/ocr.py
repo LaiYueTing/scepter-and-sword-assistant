@@ -150,6 +150,11 @@ def read(
             ["powershell", "-NoProfile", "-NonInteractive",
              "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
             capture_output=True, timeout=timeout,
+            # ⚠ 打包版是 --windowed、沒有主控台，所以每呼叫一次就會**新開一個**
+            #   PowerShell 視窗，畫面上閃一下黑框。副本詳情頁每進去一次就讀一次
+            #   副本名稱與難度，於是使用者看到的是「跑一跑就跳出視窗又跳掉」。
+            #   adb.py / discover.py / updater.py 早就都帶了這個旗標，只有這裡漏掉。
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if proc.returncode == 2:
             _unavailable = True

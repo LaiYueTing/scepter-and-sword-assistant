@@ -99,6 +99,53 @@ try:
     check("壞檔不會拋錯，計數當 0", fresh(3)._today == 0)
     dailystate.PATH.unlink(missing_ok=True)
     check("檔案不存在也當 0", fresh(3)._today == 0)
+
+    print("=== 6. 介面看得到、也重設得掉 ===")
+    OTHER = "chores/捐獻面板 → 花晨星捐贈"
+    def seed(counts):
+        dailystate.PATH.write_text(
+            json.dumps({"date": date.today().isoformat(), "counts": counts},
+                       ensure_ascii=False), encoding="utf-8")
+    seed({KEY: 3, OTHER: 2})
+    check("counts() 讀得到全部", dailystate.counts() == {KEY: 3, OTHER: 2})
+    dailystate.reset(KEY)
+    check("只清掉指定的那一項", dailystate.counts() == {OTHER: 2})
+    dailystate.reset()
+    check("留空就是全部清掉", dailystate.counts() == {})
+
+    print("=== 7. 方法表：列得出上限，執行中不給重設 ===")
+    from gui.api import Api
+
+    class _Channel:
+        def send(self, *a, **k):
+            pass
+
+    api = Api(_Channel())
+    api._cfg = cfg
+    seed({KEY: 3, "arena/這條規則已經改名了 → 動作": 1})
+    rows = {r["key"]: r for r in api.daily_state({})["rows"]}
+    check("帶得出今天的次數與上限",
+          rows[KEY]["done"] == 3 and rows[KEY]["limit"] == 3)
+    # ⚠ 被計數的是**動作**（打一場、捐一次），所以標籤取「→」後面那半。
+    check("標籤取「→」後面那半", rows[KEY]["label"] == "按下入場鍵")
+    # ⚠ 狀態檔裡有、現在的腳本裡沒有的鍵也要列出來——它仍然佔著位子，而使用者
+    #   正是來這裡找「為什麼今天不打了」的。
+    check("腳本裡已經沒有的鍵仍然列得出來",
+          "arena/這條規則已經改名了 → 動作" in rows)
+
+    api._runner = type("_R", (), {"is_alive": staticmethod(lambda: True)})()
+    try:
+        api.daily_reset({})
+        guarded = False
+    except RuntimeError:
+        guarded = True
+    # ⚠ 引擎是在**建立時**把計數讀進規則裡的，執行中歸零要下一輪才生效——
+    #   「按了看起來沒作用」是最難查的那種形狀，所以後端直接擋下來。
+    check("執行中不給重設", guarded)
+    check("而且真的一個都沒被清掉", dailystate.counts().get(KEY) == 3)
+    api._runner = None
+    api.daily_reset({"key": KEY})
+    check("停下來之後重設得掉", dailystate.counts().get(KEY) is None)
 finally:
     if BACKUP is None:
         dailystate.PATH.unlink(missing_ok=True)

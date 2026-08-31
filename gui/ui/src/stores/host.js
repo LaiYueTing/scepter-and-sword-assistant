@@ -19,6 +19,8 @@ export const useHostStore = defineStore('host', {
     device: { serial: '', host: '', port: 0, spec: '' },
     tasks: [],
     options: { items: {}, groups: [] },
+    // 今天做了幾次（跨執行保留的那幾項，見 core/dailystate.py）。
+    daily: { date: '', rows: [], path: '' },
 
     running: false,
     closing: false, // 正在收尾，按鈕全部要停用
@@ -165,6 +167,17 @@ export const useHostStore = defineStore('host', {
       this.tasks = s.tasks
       this.running = s.running
       this.ready = true
+      this.loadDaily().catch(() => {})
+    },
+
+    /** 今天各項的計數。 */
+    async loadDaily() {
+      this.daily = await this.call('daily_state')
+    },
+
+    /** 把某一項（或全部，key 留空）今天的計數歸零。 */
+    async resetDaily(key = '') {
+      this.daily = await this.call('daily_reset', { key })
     },
 
     async start(once = false, only = '') {

@@ -16,10 +16,11 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from core import confedit, logger, optionmeta, uistate
+from core import confedit, dailystate, logger, optionmeta, uistate
 from core.config import (ROOT, VERSION, WEEKDAY_NAMES, Config, TaskConfig,
                          resource_file)
 from .bridge import Channel
@@ -245,6 +246,69 @@ class Api:
         self._cfg = Config.load()
         log.info("設定檔已由內建編輯器整份寫回")
         return {}
+
+    # ================= 當日計數 =================
+    #
+    # ⚠ **這裡顯示的不是「今天跑過哪些腳本」。** 專案的原則是「不記錄跑過沒，
+    #   腳本會進遊戲自己確認」，而那條的前提是答案寫在畫面上。這一份記的是
+    #   **少數答案不在畫面上**的項目（打過幾場競技場、捐了幾次晨星、買了幾次
+    #   領獎次數），本來就存在 `state.json` 裡——介面只是把它變成看得見的。
+    #   細節與破例的判準見 `core/dailystate.py`。
+
+    def daily_state(self, _: dict) -> dict:
+        """今天各項的計數與上限。"""
+        from core.engine import Script, ScriptError   # 延後載入：會拉進 cv2
+
+        cfg = self._cfg or Config.load()
+        done = dailystate.counts()
+        rows, seen = [], set()
+        for task in cfg.tasks:
+            try:
+                script = Script.load(task.name, cfg.options)
+            except (ScriptError, OSError):
+                continue        # 腳本壞掉是「開始執行」要報的事，不是這一格
+            for rule in script.rules:
+                if not rule.max_fires_daily:
+                    continue
+                key = f"{task.name}/{rule.name}"
+                seen.add(key)
+                rows.append({
+                    "key": key,
+                    "task": optionmeta.task_label(task.name),
+                    # ⚠ 取「→」**後面**那半。被計數的是動作（打一場、捐一次、
+                    #   買一次），前半只是「在哪個畫面上」。
+                    "label": rule.name.split("→")[-1].strip(),
+                    "done": done.get(key, 0),
+                    "limit": rule.max_fires_daily,
+                })
+        # 狀態檔裡有、但現在的腳本沒有的鍵（改過規則名、關掉的開關）。
+        # ⚠ 要列出來，不要安靜地藏起來——它仍然佔著位子，而使用者是來這裡
+        #   找「為什麼今天不打了」的。
+        for key, value in done.items():
+            if key not in seen:
+                task, _, name = key.partition("/")
+                rows.append({
+                    "key": key,
+                    "task": optionmeta.task_label(task) or task,
+                    "label": name.split("→")[-1].strip() + "（已不在腳本裡）",
+                    "done": value,
+                    "limit": 0,
+                })
+        return {"date": date.today().isoformat(), "rows": rows,
+                "path": str(dailystate.PATH)}
+
+    def daily_reset(self, params: dict) -> dict:
+        """把某一項（或全部）今天的計數歸零。
+
+        ⚠ 執行中不給按。引擎在建立時就把計數讀進規則裡了，中途歸零要下一輪才
+          生效——而那正是「按了看起來沒作用」最難查的形狀。
+        """
+        if self.is_running():
+            raise RuntimeError("執行中不能重設當日計數，請先停止")
+        key = params.get("key") or None
+        dailystate.reset(key)
+        log.info("已重設當日計數：%s", key or "全部")
+        return self.daily_state({})
 
     # ================= 執行 =================
 

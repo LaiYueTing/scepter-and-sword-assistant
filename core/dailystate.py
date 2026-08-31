@@ -50,10 +50,8 @@ def get(key: str) -> int:
     return _load().get(key, 0)
 
 
-def add(key: str, amount: int = 1) -> int:
-    """記一次，回傳累計值。寫不進去就只回傳算出來的數字，不中斷流程。"""
-    counts = _load()
-    counts[key] = counts.get(key, 0) + amount
+def _save(counts: dict[str, int]) -> None:
+    """寫回今天的計數。寫不進去只記一行 debug，不中斷流程。"""
     try:
         PATH.write_text(
             json.dumps({"date": date.today().isoformat(), "counts": counts},
@@ -61,4 +59,27 @@ def add(key: str, amount: int = 1) -> int:
             encoding="utf-8", newline="")
     except OSError as e:
         log.debug("每日計數寫不進 %s：%s", PATH, e)
+
+
+def add(key: str, amount: int = 1) -> int:
+    """記一次，回傳累計值。"""
+    counts = _load()
+    counts[key] = counts.get(key, 0) + amount
+    _save(counts)
     return counts[key]
+
+
+def counts() -> dict[str, int]:
+    """今天所有項目的計數。介面要把它畫出來，所以要有一個公開的入口。"""
+    return _load()
+
+
+def reset(key: str | None = None) -> dict[str, int]:
+    """把今天的計數歸零並回傳歸零後的結果。`key` 留空就是全部。
+
+    ⚠ 執行中不要動它。引擎是在建立時把 `_today` 讀進規則裡的，改了要下一輪才
+      生效——而在那之前使用者看到的數字和引擎手上的那份是兩回事。
+    """
+    remain = {} if key is None else {k: v for k, v in _load().items() if k != key}
+    _save(remain)
+    return remain

@@ -50,7 +50,7 @@ def resource_files(kind: str, pattern: str) -> list[Path]:
 
 # 由 bump_version.py 在編譯前自動同步，跟 version_info.txt 保持一致。
 # 那個檔案只是 PyInstaller 的參數、不會被打包進 EXE，所以程式自己要留一份。
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 
 class ConfigError(RuntimeError):

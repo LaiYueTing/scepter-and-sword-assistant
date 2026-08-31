@@ -85,6 +85,10 @@ class Rule:
     # 有多個匹配時挑哪一個：best 分數最高（預設）、lowest / highest 最下 / 最上、
     # first / last 最左 / 最右，或直接給數字＝由左數來第幾個（1 起算）。
     pick: str | int = "best"
+    # 給了多個模板時，pick 要不要跨模板一起比。預設 false——那時 template 的
+    # **順序就是優先度**（羈絆那條「紅 ❗ 排前面等於先領完再派」靠的就是這個）。
+    # 只有「這幾個模板是同一種東西的不同長相」時才該打開。
+    pick_across: bool = False
     # 綁定 config 的 options 開關，前面加 ! 表示反向，也可以寫 key=value
     when_option: str | None = None
     # 綁定 set_flag 設出來的旗標，前面加 ! 表示反向；給清單就是全部都要成立。
@@ -201,6 +205,7 @@ class Script:
                     require=as_list(item.get("require")),
                     measure=item.get("measure"),
                     pick=item.get("pick", "best"),
+                    pick_across=bool(item.get("pick_across", False)),
                     when_option=item.get("when_option"),
                     when_flag=as_list(item.get("when_flag")),
                     actions=item.get("do") or [],
@@ -354,6 +359,17 @@ def _threshold(spec: dict[str, Any], key: str) -> float | None:
         return float(spec[key])
     people = spec.get(f"{key}_players")
     return units_for_players(people) if people is not None else None
+
+
+# 具名的挑選策略。`min()` 取最小，所以要往「畫面下方／右邊」挑的就取負值。
+# ⚠ 抽到模組層級是為了讓 pick_across 也用同一份——兩邊各寫一份的話，
+#   「跨模板挑最下面」和「單一模板挑最下面」有一天會不一致。
+_PICK_KEYS = {
+    "lowest": lambda m: -m.y,      # y 最大 = 畫面最下面
+    "highest": lambda m: m.y,
+    "last": lambda m: -m.x,
+    "first": lambda m: m.x,
+}
 
 
 def measure_raw(screen: np.ndarray, spec: dict[str, Any]) -> float:
@@ -823,6 +839,20 @@ class Engine:
             return False, None
 
         if rule.template:
+            if rule.pick_across and len(rule.template) > 1:
+                # 每個模板各自挑出的贏家再比一次，就是全域的那一個——
+                # lowest / highest / first / last 都是取極值，所以這樣等價。
+                #
+                # 需要它的形狀是「同一種東西的兩張臉」：副本列表上每張卡片都有
+                # 評級標章，只是打過的是「最高評級」、沒打過的是「暫無評級」，
+                # 而我們要的是「最下面那張卡片」，跟標章是哪一種無關。
+                pool = [m for m in (self._locate(screen, n, th, rule)
+                                    for n in rule.template) if m]
+                if not pool:
+                    return False, None
+                key = _PICK_KEYS.get(rule.pick)
+                return True, (min(pool, key=key) if key
+                              else max(pool, key=lambda m: m.score))
             for name in rule.template:
                 m = self._locate(screen, name, th, rule)
                 if m:
@@ -991,13 +1021,7 @@ class Engine:
             ordered = sorted(found, key=lambda m: m.x)
             return ordered[min(nth, len(ordered)) - 1]
 
-        keys = {
-            "lowest": lambda m: -m.y,      # y 最大 = 畫面最下面
-            "highest": lambda m: m.y,
-            "last": lambda m: -m.x,
-            "first": lambda m: m.x,
-        }
-        key = keys.get(rule.pick)
+        key = _PICK_KEYS.get(rule.pick)
         if key is None:
             log.warning("規則「%s」的 pick 值無效：%s，改用 best", rule.name, rule.pick)
             return max(found, key=lambda m: m.score)

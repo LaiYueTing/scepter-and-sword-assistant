@@ -136,6 +136,7 @@ class Runner:
                 # ⚠ 補跑期間也要帶上限，否則會一路輾過排定時刻。讓位之後那一格
                 #   由 _passed_during() 接住並排到佇列最前面。
                 nxt = next_scheduled(scheduled)
+                failed = ""
                 try:
                     engine.run(until=nxt[0] if nxt else None)
                 except AdbError as e:
@@ -143,7 +144,20 @@ class Runner:
                     #   結束，否則當天剩下的腳本全部不會執行。這一輪放掉，
                     #   下一個排定時刻再試。
                     log.error("執行「%s」時中斷：%s", script.name, e)
-                    self._task(current.name, "error", "連線中斷")
+                    failed = "連線中斷"
+                    if self.one_shot:
+                        raise
+                except Exception as e:
+                    # ⚠ **沒預料到的例外也只能放掉這一輪**，理由和上面相同，而代價
+                    #   更大：斷線至少會留下一行紀錄，這種例外原本是一路往上冒到
+                    #   介面的背景執行緒、只在狀態列閃一句話。實測 2026-09-01
+                    #   08:00 的副本在第 27 秒消失，當天 09:00 的雜務與 09:30 的
+                    #   每日活動全部沒有執行，而紀錄上只有一段 3 小時 57 分的空白
+                    #   ——連「壞在哪裡」都問不出來。
+                    # ⚠ 一定要用 log.exception。訊息本身多半看不出是哪裡壞的，而
+                    #   這種例外照定義就是我們沒想到的那一種，traceback 是唯一線索。
+                    log.exception("執行「%s」時發生未預期的錯誤：%s", script.name, e)
+                    failed = "執行時發生錯誤"
                     if self.one_shot:
                         raise
                 spent = int((datetime.now() - started).total_seconds())
@@ -151,10 +165,16 @@ class Runner:
                 #   而下一輪可能是好幾個小時以後——那時「剛才」已經不成立了。
                 #   卡片的徽章講的是**現在是什麼狀態**，不是「剛剛發生什麼」。
                 took = logger.pretty_seconds(spent)
-                self._task(current.name, "done",
-                           f"已完成 {engine.completed} 次（{took}）"
-                           if engine.completed
-                           else f"這一輪沒有完成（{took}）")
+                # ⚠ **出錯的那一輪不能寫成「這一輪沒有完成」。** 那句話和「次數
+                #   用盡就收工」長得一模一樣，卡片也會從紅色變回一般色——出過事
+                #   在畫面上就完全看不出來了。
+                if failed:
+                    self._task(current.name, "error", f"{failed}（{took}）")
+                else:
+                    self._task(current.name, "done",
+                               f"已完成 {engine.completed} 次（{took}）"
+                               if engine.completed
+                               else f"這一輪沒有完成（{took}）")
 
                 if self.one_shot or self.stop_event.is_set():
                     break

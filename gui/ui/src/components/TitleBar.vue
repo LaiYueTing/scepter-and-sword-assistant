@@ -13,6 +13,7 @@ import {
   Swords
 } from 'lucide-vue-next'
 import AboutDialog from './AboutDialog.vue'
+import UpdateAskDialog from './UpdateAskDialog.vue'
 import UpdateDialog from './UpdateDialog.vue'
 import AppearanceDialog from './AppearanceDialog.vue'
 import WindowControls from './WindowControls.vue'
@@ -26,7 +27,8 @@ const route = useRoute()
 const message = useMessage()
 const showAppearance = ref(false)
 const showAbout = ref(false)
-const showUpdated = ref(false)
+const showAsk = ref(false)      // 查到新版：要不要現在裝
+const showUpdated = ref(false)  // 裝好了：要不要現在重新啟動
 const installedVersion = ref('')
 
 const percent = computed(() => {
@@ -98,11 +100,20 @@ const runningTask = computed(() => {
 watch(
   () => host.update,
   (u) => {
-    if (!host.updateAsked || !u) return
+    if (!u) return
+    // 查到而且裝得下去就當場問。⚠ **自動查到那次也要問**：看不到那顆按鈕的人
+    //   （縮在系統匣、視窗一掛好幾天）否則會一直用著舊版。執行中不問，那時
+    //   本來就不給更新。
+    const ask = u.found && u.can_apply && !host.running && !host.closing
+    if (ask) showAsk.value = true
+
+    if (!host.updateAsked) return
     host.updateAsked = false
     if (u.error) message.warning(`檢查更新失敗：${u.error}`)
-    else if (u.found) message.success(`偵測到新版本 v${u.version}`)
-    else message.success(`已經是最新版本（v${host.version}）`)
+    // ⚠ 跳了框就不要再跳 toast——同一件事講兩次。
+    else if (u.found) {
+      if (!ask) message.success(`偵測到新版本 v${u.version}`)
+    } else message.success(`已經是最新版本（v${host.version}）`)
   }
 )
 
@@ -303,6 +314,7 @@ async function onUpdate() {
 
     <AppearanceDialog v-model:show="showAppearance" />
     <AboutDialog v-model:show="showAbout" />
+    <UpdateAskDialog v-model:show="showAsk" />
     <UpdateDialog v-model:show="showUpdated" :version="installedVersion" />
   </header>
 </template>

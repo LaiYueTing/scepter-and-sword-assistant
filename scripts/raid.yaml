@@ -172,6 +172,7 @@ rules:
     sustain: 20          # 讓平滑視窗填滿，也避免某個回合剛好排滿的瞬間值
     max_fires: 3
     do:
+      - tally: 參戰
       - log: 順序條估到 10 人以上
       - tap_template: btn_join_battle
       - wait: 6
@@ -213,6 +214,7 @@ rules:
     sustain: "${raid_plateau_sustain:120}"
     max_fires: 3
     do:
+      - tally: 參戰
       - log: 湊不到 10 人，但讀數已經不再往上
       - tap_template: btn_join_battle
       - wait: 6
@@ -237,6 +239,7 @@ rules:
     sustain_minutes: "${raid_solo_after_minutes:15}"
     max_fires: 3
     do:
+      - tally: 參戰
       - log: 等了 15 分鐘仍無人開場；單人效益差，這是最後手段
       - tap_match: []
       - wait: 6
@@ -252,6 +255,7 @@ rules:
     sustain_minutes: "${raid_join_wait_minutes:5}"
     max_fires: 3
     do:
+      - tally: 參戰
       - tap_template: btn_join_battle
       - wait: 6
       - count:
@@ -308,6 +312,7 @@ rules:
     when_option: claim_raid_reward
     cooldown: 4          # 見檔頭：用 tap_match 換頁的規則都要設
     do:
+      - tally: 領取討伐獎勵
       - tap_match: [-31, 35]
       - wait: 2
 

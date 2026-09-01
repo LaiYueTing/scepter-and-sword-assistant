@@ -113,6 +113,55 @@ try:
     dailystate.reset()
     check("留空就是全部清掉", dailystate.counts() == {})
 
+    print("=== 7. tally：只數不擋 ===")
+    from core.engine import Script, ScriptError
+    sc = Script.load("raid", cfg.options)
+    joins = [r for r in sc.rules
+             if any(a.get("tally") == "參戰" for a in r.actions)]
+    # 討伐有四種入場方式，全部數進同一格——「今天參戰幾次」是一件事。
+    check("四條入場規則共用同一格", len(joins) == 4)
+    check("腳本知道自己的鍵前綴", sc.stem == "raid")
+
+    seed({})
+    e = Engine.__new__(Engine)
+    e.script, e.dry_run, e.device = sc, False, None
+    e._flags = set()
+    for _ in range(9):
+        e._do("tally", "參戰", None, None)
+    check("數到 9 也不會停", dailystate.counts().get("raid/參戰") == 9)
+    # ⚠ 這是 tally 和 max_fires_daily 的唯一差別，也是它存在的理由：規則的
+    #   ready() 完全不看它。
+    check("規則仍然可以觸發", joins[0].ready(time.time()))
+
+    print("=== 8. 打錯的 tally 要在載入時就擋下來 ===")
+    # ⚠ tally 只數不擋，所以打錯了**沒有任何症狀**——面板上少一列而已，
+    #   而那正是沒有人會發現的那種錯。所以形狀要在載入時就驗。
+    import tempfile as _tf
+
+    import yaml as _yaml
+
+    import core.engine as _eng
+
+    def load_inline(rules):
+        tmp = Path(_tf.mkdtemp()) / "inline.yaml"
+        tmp.write_text(_yaml.safe_dump({"name": "測試", "rules": rules},
+                                       allow_unicode=True), encoding="utf-8")
+        real = _eng.resource_file
+        _eng.resource_file = lambda kind, fn: tmp
+        try:
+            return Script.load("inline"), ""
+        except ScriptError as err:
+            return None, str(err)
+        finally:
+            _eng.resource_file = real
+
+    _, err = load_inline([{"name": "X → Y", "template": "nav_home",
+                           "max_fires_daily": 2, "do": [{"tally": "Z"}]}])
+    check("同時有 tally 與 max_fires_daily 會被擋下", "數兩次" in err)
+    _, err = load_inline([{"name": "X → Y", "template": "nav_home",
+                           "do": [{"tally": ""}]}])
+    check("tally 沒給名稱也會被擋下", "要給一個名稱" in err)
+
     print("=== 7. 方法表：列得出上限，執行中不給重設 ===")
     from gui.api import Api
 

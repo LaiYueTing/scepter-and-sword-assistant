@@ -152,6 +152,9 @@ class Script:
     # 等待時附在狀態後面的即時資訊，形狀和 log_match 一樣。用在「會一路變動」的
     # 值（副本戰鬥中的評級）：寫進紀錄只會洗版，附在狀態列剛好。
     status: dict[str, Any] = field(default_factory=dict)
+    # 腳本檔名（不含副檔名）。`tally` 與 `max_fires_daily` 拿它當 state.json 的
+    # 鍵前綴——不同腳本可能有同名的規則，共用一個鍵會互相扣次數。
+    stem: str = ""
 
     def referenced_templates(self) -> set[str]:
         """列出腳本用到的所有模板名稱，供 doctor 檢查是否齊全。
@@ -224,6 +227,22 @@ class Script:
                 rule._daily_key = f"{Path(name).stem}/{rule.name}"
                 rule._today = dailystate.get(rule._daily_key)
 
+        # tally 只數不擋，所以打錯了不會有任何症狀——面板上少一列而已，而那正是
+        # 沒有人會發現的那種錯。在載入時把形狀擋下來。
+        # ⚠ 同一條規則不能既有 tally 又有 max_fires_daily：後者本來就會記一次，
+        #   兩個一起會把同一件事數成兩次。
+        for rule in rules:
+            for action in rule.actions:
+                if "tally" not in action:
+                    continue
+                label = action["tally"]
+                if not isinstance(label, str) or not label.strip():
+                    raise ScriptError(f"規則「{rule.name}」的 tally 要給一個名稱")
+                if rule.max_fires_daily:
+                    raise ScriptError(
+                        f"規則「{rule.name}」同時有 tally 與 max_fires_daily，"
+                        "同一件事會被數兩次")
+
         # reset_fires 指的是「別條規則的名字」，打錯的話執行時什麼都不會發生，
         # 而紀錄上完全看不出來——所以在這裡就擋下來。
         known = {r.name for r in rules}
@@ -264,6 +283,7 @@ class Script:
             stuck_timeout=float(raw.get("stuck_timeout", 90)),
             max_minutes=float(raw.get("max_minutes", 0)),
             status=raw.get("status") or {},
+            stem=Path(name).stem,
         )
 
 
@@ -1169,6 +1189,19 @@ class Engine:
             else:
                 log.warning("等了 %.0f 秒仍沒看到：%s",
                             WAIT_FOR_TIMEOUT, "、".join(names))
+
+        elif verb == "tally":
+            # 「今天做了幾次」——只數，**永遠不擋**。
+            #
+            # ⚠ 和 `max_fires_daily` 的差別就是這一條：後者是上限，數到了規則
+            #   就不再成立；`tally` 從不參與任何判斷，它和 `log:` 同一類，是
+            #   輸出不是狀態。
+            # ⚠ **不要拿它去做「今天做過就跳過」。** 專案「不記狀態、畫面才是
+            #   真相」那條原則管的是決策，而畫面本來就答得出次數用盡、獎勵已領。
+            #   拿計數去決定要不要做，等於讓一個記錄錯誤變成整天不執行。
+            # ⚠ 名稱由腳本給（而不是用規則名），這樣好幾條規則可以數進同一格
+            #   ——討伐的四種入場方式都是「參戰一次」。
+            dailystate.add(f"{self.script.stem}/{arg}")
 
         elif verb == "count":
             self.completed += 1

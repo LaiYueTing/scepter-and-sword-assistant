@@ -275,6 +275,7 @@ rules:
     when_option: claim_reward
     when_flag: [已在最高難度]
     do:
+      - tally: 領取副本獎勵
       - tap: [520, 1217]
       - wait: 2
 

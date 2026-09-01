@@ -43,12 +43,13 @@ const showOptions = ref(false)
       style="grid-template-columns: 320px 1fr; min-height: 0"
     >
       <!-- 左欄疊兩塊：模擬器在上，當日計數在下。
-           ⚠ 當日計數用 `flex: 0 1 auto`：**照內容高度**擺，多出來的全部給模擬器那塊
-             （它有下拉、三個欄位和三顆按鈕，被壓扁會先出現內部捲軸）。寫死百分比
-             的話，計數只有兩三列時仍然會佔掉那麼多，而列數是會變的。 -->
+           ⚠ **模擬器 `flex: none`，剩下的全給當日計數。** 模擬器的欄位是固定的
+             （下拉、三個欄位、三顆按鈕），被壓扁只會冒出內部捲軸；會變長的是計數
+             那塊——項目數跟著腳本走。把可變的那塊放在會伸縮的位置，兩邊都不必
+             再調百分比。 -->
       <div class="flex flex-col gap-3" style="min-height: 0">
-        <DevicePanel style="flex: 1 1 auto; min-height: 0" />
-        <DailyPanel style="flex: 0 1 auto; min-height: 0" />
+        <DevicePanel style="flex: none" />
+        <DailyPanel style="flex: 1 1 auto; min-height: 0" />
       </div>
       <LogView style="min-height: 0" />
     </div>

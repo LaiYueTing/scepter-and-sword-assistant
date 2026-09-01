@@ -109,6 +109,7 @@ rules:
     template: [label_dispatch_done, label_dispatch_done_b]
     cooldown: 3
     do:
+      - tally: 羈絆領獎
       - tap: [360, 180]
       - wait: 2
 
@@ -162,6 +163,7 @@ rules:
     region: [60, 600, 660, 120]
     cooldown: 4
     do:
+      - tally: 羈絆委派
       - tap_template: btn_dispatch_start
       - wait: 2.5
 

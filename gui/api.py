@@ -267,20 +267,37 @@ class Api:
                 script = Script.load(task.name, cfg.options)
             except (ScriptError, OSError):
                 continue        # 腳本壞掉是「開始執行」要報的事，不是這一格
+            title = optionmeta.task_label(task.name)
             for rule in script.rules:
-                if not rule.max_fires_daily:
-                    continue
-                key = f"{task.name}/{rule.name}"
-                seen.add(key)
-                rows.append({
-                    "key": key,
-                    "task": optionmeta.task_label(task.name),
-                    # ⚠ 取「→」**後面**那半。被計數的是動作（打一場、捐一次、
-                    #   買一次），前半只是「在哪個畫面上」。
-                    "label": rule.name.split("→")[-1].strip(),
-                    "done": done.get(key, 0),
-                    "limit": rule.max_fires_daily,
-                })
+                if rule.max_fires_daily:
+                    key = f"{task.name}/{rule.name}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    rows.append({
+                        "key": key,
+                        "task": title,
+                        # ⚠ 取「→」**後面**那半。被計數的是動作（打一場、捐一次、
+                        #   買一次），前半只是「在哪個畫面上」。
+                        "label": rule.name.split("→")[-1].strip(),
+                        "done": done.get(key, 0),
+                        "limit": rule.max_fires_daily,
+                        "stale": False,
+                    })
+                # `tally` 只數不擋，所以沒有上限可寫。名稱由腳本給，好幾條規則
+                # 可以數進同一格（討伐的四種入場方式都是「參戰一次」）——所以
+                # 這裡要去重，不能一條規則畫一列。
+                for action in rule.actions:
+                    label = action.get("tally")
+                    if not label:
+                        continue
+                    key = f"{task.name}/{label}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    rows.append({"key": key, "task": title, "label": label,
+                                 "done": done.get(key, 0), "limit": 0,
+                                 "stale": False})
         # 狀態檔裡有、但現在的腳本沒有的鍵（改過規則名、關掉的開關）。
         # ⚠ 要列出來，不要安靜地藏起來——它仍然佔著位子，而使用者是來這裡
         #   找「為什麼今天不打了」的。
@@ -290,9 +307,10 @@ class Api:
                 rows.append({
                     "key": key,
                     "task": optionmeta.task_label(task) or task,
-                    "label": name.split("→")[-1].strip() + "（已不在腳本裡）",
+                    "label": name.split("→")[-1].strip(),
                     "done": value,
                     "limit": 0,
+                    "stale": True,
                 })
         return {"date": date.today().isoformat(), "rows": rows,
                 "path": str(dailystate.PATH)}

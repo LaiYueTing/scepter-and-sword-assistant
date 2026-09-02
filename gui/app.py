@@ -179,9 +179,9 @@ def main() -> int:
     # ⚠ **視窗一定要走 `attach_window()`（它存進底線開頭的屬性），不能直接掛成
     #   `api.window`。** pywebview 會走訪 js_api 的每一個公開成員，而 window 底下是
     #   .NET 的 Form——屬性鏈無限長，掃到就一路遞迴到 maximum recursion depth，
-    #   **每秒刷幾十行錯誤而視窗照樣開得起來**，所以會被誤判成只是雜訊。
-    #   我第一次就是想當然耳地寫成 `api.window = window`，理由是「pywebview 只挑
-    #   callable」——那是錯的，它掃的是成員不是方法。
+    #   **每秒刷幾十行錯誤而視窗照樣開得起來**，所以很容易被當成只是雜訊。
+    #   ⚠ 「pywebview 只挑 callable，所以掛上去也沒關係」是錯的：它掃的是**成員**，
+    #   不是方法。`Api` 的公開成員必須全部都是方法。
     api.attach_window(window)
 
     def on_loaded() -> None:
@@ -241,8 +241,8 @@ def main() -> int:
         ⚠ **通道要在這裡收，不能等 `closed`。** `closed` 是 WebView2 已經被處置
           之後才發的，中間那段每一發 `evaluate_js` 都會丟
           `ObjectDisposedException`——而那是 pywebview **自己 log 完才吞掉**的，
-          我們的 `try/except` 根本接不到，例外就一路寫進 assistant.log。
-          （第一次我在 `_emit` 裡接、失敗就停，完全沒有用。）
+          我們的 `try/except` 根本接不到，例外就一路寫進 assistant.log——所以在
+          `_emit` 裡接是沒有用的，要在這裡就把通道收掉。
         """
         channel.close()
         if api.is_running():

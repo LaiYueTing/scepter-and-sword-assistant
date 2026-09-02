@@ -1217,7 +1217,9 @@ class Engine:
                 self.yielded = True
 
         elif verb == "screenshot":
-            name = arg if isinstance(arg, str) else datetime.now().strftime("%H%M%S")
+            # ⚠ 檔名要帶日期。只用時分秒的話跨天會互相覆蓋，而且事後翻的時候
+            #   分不出哪一張是哪天的——那正是要拿它去補模板的時候。
+            name = arg if isinstance(arg, str) else datetime.now().strftime("%m%d-%H%M%S")
             path = LOG_DIR / "frames" / f"{name}.png"
             vision.imwrite_unicode(path, screen)
             log.info("已存截圖：%s", path)

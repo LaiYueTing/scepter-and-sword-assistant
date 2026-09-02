@@ -42,7 +42,8 @@ CANDIDATE_PORTS = _MUMU_PORTS + _OTHER_PORTS
 _LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
-# adb 回報的狀態 → 中文。介面與紀錄全繁體，這一欄原本是唯一漏掉的英文。
+# adb 回報的狀態 → 中文。那是**資料**不是訊息，不翻的話會一路印到下拉選單、
+# tooltip 與紀錄上。
 #
 # ⚠ 認不得的狀態要**原樣寫出來**，不要吞掉或寫成「未知」。adb 還會回
 #   authorizing、no permissions 這些，翻不到的至少要讓人拿原文去搜。

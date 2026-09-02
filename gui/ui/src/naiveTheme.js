@@ -41,9 +41,9 @@ export function useNaiveTokens(themeRef) {
          *   自己畫的地方在變，naive 畫的那幾塊留在原地。使用者的回報是「介面
          *   設定視窗背景不會跟著改？」。
          *
-         * ⚠ 以前是每個對話框各補一條 `.n-card { background: var(--bg-1) }`，
-         *   那等於每加一個對話框就要記得補一次，而漏掉的那個只會在某個主題下
-         *   看起來怪。改成在這裡一次交代完。
+         * ⚠ 一次在這裡交代完，不要每個對話框各補一條
+         *   `.n-card { background: var(--bg-1) }`——那等於每加一個對話框就要
+         *   記得補一次，而漏掉的那個只會在某些主題下才看得出來。
          */
         baseColor: pick('--bg-0'),
         bodyColor: pick('--bg-0'),

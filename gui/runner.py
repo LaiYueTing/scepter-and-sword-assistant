@@ -44,9 +44,9 @@ class RunnerThread(threading.Thread):
         except Exception as e:
             # 連不上裝置、腳本讀不到都會走到這裡。訊息本身已經是給人看的中文。
             #
-            # ⚠ **一定要寫進紀錄。** 原本只送 `failed` 事件，而那只會在狀態列閃
-            #   一句話——實機跑起來之後能看到的只有紀錄，排程死掉卻不留痕跡是
-            #   最糟的形狀。
+            # ⚠ **一定要寫進紀錄。** 只送 `failed` 事件的話，那句話只在狀態列閃
+            #   一下就被蓋掉——實機跑起來之後能看到的只有紀錄，排程死掉卻不留
+            #   痕跡是最糟的形狀。
             log.exception("排程結束於未預期的錯誤：%s", e)
             error = str(e)
         self.channel.send("running", False)

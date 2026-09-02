@@ -7,9 +7,13 @@
 版本是**發布**的單位，commit 是**修正**的單位，兩者不必一對一——一個 tag
 底下有五個 `fix` 是正常的，而發布頁要把那五個列出來。
 
-⚠ **不要手打發版說明。** 踩過一次：v1.0.1 第一版的說明把 v1.0.0 就有的東西
-  寫成這一版的新內容，因為那是憑「這一段工作做過什麼」寫的。從 commit 生成
-  的話，那種錯在結構上就不會發生——`git log <上一個 tag>..HEAD` 是唯一的真相。
+⚠ **不要手打發版說明。** 憑「這一段工作做過什麼」寫，會把上一版就有的東西寫成
+  這一版的新內容——兩者只有在「上一版之後沒有人動過」時才相等。從 commit 生成的
+  話那種錯在結構上就不會發生：`git log <上一個 tag>..HEAD` 是唯一的真相。
+
+⚠ **`gh release create` 是在遠端建 tag，本機不會有。** 生成之前要先
+  `git fetch --tags`，否則找不到上一個 tag 就會退回更早的那個，把已經發過的
+  內容再寫一次。
 
 ⚠ **生成之後一定要讀一遍再發。** 這支工具負責「不漏、不多、對得上 commit」，
   而「這條對使用者意味著什麼」仍然是人要判斷的。
@@ -65,9 +69,9 @@ def previous_tag() -> str | None:
 def commits(since: str | None, until: str = "HEAD") -> list[tuple[str, str]]:
     """回傳 [(標題, body)]，舊的在前面（讀起來才是發生順序）。
 
-    ⚠ 終點要能指定。發版當下 HEAD 常常已經**超過**那個 tag——別人剛 commit
-      了下一版的東西，或者 tag 是稍早打的。用 HEAD 當終點就會把不屬於這一版
-      的 commit 寫進說明（實測踩過一次）。發布時請指定 `--until <tag>`。
+    ⚠ 終點要能指定。發版當下 HEAD 常常已經**超過**那個 tag（別人剛 commit 了
+      下一版的東西，或 tag 是稍早打的），用 HEAD 當終點就會把不屬於這一版的
+      commit 寫進說明。發布時請指定 `--until <tag>`。
     """
     span = f"{since}..{until}" if since else until
     raw = git("log", span, "--reverse", "--no-merges", "--format=%h%x00%s%x00%b%x1e")

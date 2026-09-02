@@ -64,9 +64,8 @@ async function choose(action) {
 
     <!--
       ⚠ **對齊交給版面，不要用 em 去推別的元件的尺寸。** 說明的字級比標籤小，
-        同樣的 `em` 換算出來比較短——原本寫 `margin-left: 1.85em`，說明反而跑到
-        標籤的左邊去。這裡的作法是把說明**放進 NCheckbox 自己的內容區**，
-        對齊由它負責，我們一個像素都不必推算。
+        同樣的 `em` 換算出來比較短，說明會跑到標籤左邊去。作法是把說明**放進
+        NCheckbox 自己的內容區**，對齊由它負責，一個像素都不必推算。
     -->
     <NCheckbox v-model:checked="remember" class="remember">
       <div>記住我的選擇，下次不要再問</div>

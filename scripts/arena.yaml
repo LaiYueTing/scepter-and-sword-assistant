@@ -41,9 +41,12 @@ max_minutes: 15
 
 # 收尾：退回家園待命。競技場頁沒有底部導覽列，要先退一層到競技頁才有。
 on_finish:
+  # ⚠ 每一步之前都要 wait_for，理由見 dungeon.yaml 的 on_finish。
   - log: 收工，返回家園待命
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
   - tap_template: nav_home

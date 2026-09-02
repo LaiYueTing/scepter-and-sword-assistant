@@ -24,10 +24,13 @@ max_minutes: 8
 # ⚠ 只能用 tap_template，不能寫死座標——這是無條件執行的清單，沒有 template
 #   守著畫面是什麼。
 on_finish:
+  # ⚠ 每一步之前都要 wait_for，理由見 dungeon.yaml 的 on_finish。
   - log: 本輪結束，返回家園待命
   - wait: 2
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
   - tap_template: nav_home

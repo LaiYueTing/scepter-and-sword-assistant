@@ -37,12 +37,16 @@ stuck_timeout: 900
 # 試著點家園、找不到才點返回鍵退一層：戰鬥 → 詳情頁 → 每日活動頁 → 筆記頁 → 家園。
 # 只有筆記頁與家園有底部導覽列，所以最多要退三層才找得到 nav_home。
 on_finish:
+  # ⚠ 每一步之前都要 wait_for，理由見 dungeon.yaml 的 on_finish。
   - log: 本輪結束，返回家園待命
   - wait: 2
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
   - tap_template: nav_home

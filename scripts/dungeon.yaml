@@ -29,11 +29,22 @@ stuck_timeout: 900
 # nav_home 找不到；要再退到筆記頁才有。每步先試著點家園、找不到才點返回鍵，
 # 重複點 nav_home 是安全的（已經在家園再點還是家園）。
 on_finish:
+  # ⚠ **每一步 tap_template 前面都要先 wait_for。** 收尾是無條件清單，沒有規則
+  #   可以等畫面，而 `finish` 常常剛好落在轉場的那一刻——實測 2026-09-02 09:41
+  #   每日活動剛按下配對就滿了 3 次而收工，四步全部空點、人停在配對畫面上；
+  #   同一天 12:33 討伐也一樣（加入戰鬥之後戰鬥正在載入）。
+  #   `wait_for` 每 0.5 秒看一次、**認得出來就立刻往下走**，上限 25 秒，
+  #   所以正常情況幾乎不花時間，只有真的認不得才會等。
+  # ⚠ **最後那一步刻意不補。** 它的用途是「已經到家園就再確認一次」，而前一步
+  #   已經等過了；在那裡再等一輪只會把「按下停止到真正結束」拖長。
   - log: 收工，返回家園待命
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
   - tap_template: [nav_home, btn_back_arrow]
   - wait: 2.5
   - tap_template: nav_home

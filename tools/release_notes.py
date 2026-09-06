@@ -46,6 +46,9 @@ SECTIONS: list[tuple[str, tuple[str, ...]]] = [
      ("refactor", "perf", "docs", "chore", "style", "test", "build", "ci")),
 ]
 
+# 「整理」那一段的標題，`tools` 的修正會被塞進去
+HOUSEKEEPING = next(t for t, _ in SECTIONS if t.startswith("整理"))
+
 # <type>(<scope>)!: <說明>
 HEAD_RE = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?: (?P<text>.+)$")
 
@@ -110,6 +113,14 @@ def render(items: list[tuple[str, str, str]]) -> str:
         #   對讀發布頁的人沒有任何意義——版本號就寫在標題上。末尾那份 commit
         #   對照表仍然列它，那裡要的是完整。
         if kind == "chore" and scope == "release":
+            continue
+
+        # ⚠ `tools/` 底下的東西不會打包進 EXE，所以那裡的修正對使用者**沒有
+        #   任何差別**。歸進「修正」段的話，讀的人會以為助手的行為變了——
+        #   一律放到整理段並註明，判斷「要不要更新」才不會被誤導。
+        if scope == "tools" and kind in ("fix", "feat", "perf"):
+            buckets[HOUSEKEEPING].append(
+                (f"{text}（只影響開發，助手本身沒有差別）", body, True))
             continue
 
         for title, kinds in SECTIONS:

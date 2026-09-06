@@ -106,6 +106,12 @@ def render(items: list[tuple[str, str, str]]) -> str:
         if m and m.group("bang"):
             breaking.append(text)
 
+        # ⚠ 遞增版本號那一筆不進分段。它每一版都有，而「遞增版本號到 vX.Y.Z」
+        #   對讀發布頁的人沒有任何意義——版本號就寫在標題上。末尾那份 commit
+        #   對照表仍然列它，那裡要的是完整。
+        if kind == "chore" and scope == "release":
+            continue
+
         for title, kinds in SECTIONS:
             if kind in kinds or (not m and kinds[0] == "refactor"):
                 buckets[title].append((text, body, bool(scope)))

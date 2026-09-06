@@ -30,6 +30,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.logger import force_utf8_output      # noqa: E402
+
 # 用來把短雜湊接成 commit 連結，和 core/updater.py 指的是同一個儲存庫。
 REPO = "LaiYueTing/scepter-and-sword-assistant"
 
@@ -148,6 +151,7 @@ def render(items: list[tuple[str, str, str]]) -> str:
 
 
 def main() -> int:
+    force_utf8_output()     # commit 訊息裡有「≈」「−」這類 cp950 沒有的字
     ap = argparse.ArgumentParser(description="從 commit 生成發版說明")
     ap.add_argument("--since", help="從哪個 tag 之後算起（預設是上一個 tag）")
     ap.add_argument("--until", default="HEAD",

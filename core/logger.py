@@ -111,7 +111,7 @@ class ChineseFormatter(logging.Formatter):
         return super().format(record)
 
 
-def _force_utf8_output() -> None:
+def force_utf8_output() -> None:
     """把終端機輸出改成 UTF-8。
 
     Windows 的主控台是 UTF-8 的，但**輸出一旦被導向檔案或管線就會退回 cp950**，
@@ -119,6 +119,9 @@ def _force_utf8_output() -> None:
     UnicodeEncodeError 當掉，紀錄那邊則是每筆量測都印一次 logging 錯誤。
 
     errors="replace" 是刻意的：顯示不出來的字寧可變成「?」，也不要為它中斷執行。
+
+    `tools/` 底下那幾支 CLI 也叫這一支——它們印的是中文與「≈」「≥」這類符號，
+    自己抄一份就會有其中一份忘了改的那天。
     """
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -147,7 +150,7 @@ def setup(level: int = logging.INFO) -> None:
     if _configured:
         return
 
-    _force_utf8_output()
+    force_utf8_output()
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     fmt = formatter()
 

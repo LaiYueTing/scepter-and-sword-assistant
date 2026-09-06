@@ -121,13 +121,19 @@ class Tray:
         icon.ContextMenuStrip = menu
         icon.Visible = True
 
-        # 雙擊還原。單擊不做事——單擊在 Windows 的慣例裡只是選取，
+        # 左鍵雙擊還原視窗。單擊不做事：單擊在 Windows 的慣例裡只是選取，
         # 把它接成「開視窗」會在使用者只想看 tooltip 的時候彈出來。
-        def on_click(sender, args) -> None:
-            if args.Button == MouseButtons.Left and args.Clicks == 2:
+        #
+        # ⚠ **一定要用 `MouseDoubleClick`，不能用 `MouseUp` 去判 `Clicks`。**
+        #   `NotifyIcon` 的 `MouseUp` 帶的 `Clicks` **永遠是 0**（單擊、雙擊
+        #   都一樣），拿它判斷雙擊會完全不觸發，而且不會有任何錯誤訊息。
+        # ⚠ **右鍵雙擊也會進這個事件**，所以要判按鍵，否則右鍵連按兩下
+        #   會在叫出選單的同時把視窗也開出來。
+        def on_double_click(sender, args) -> None:
+            if args.Button == MouseButtons.Left:
                 self._on_show()
 
-        icon.MouseUp += on_click
+        icon.MouseDoubleClick += on_double_click
         self._icon = icon
 
     # ---------- 更新與拆除 ----------

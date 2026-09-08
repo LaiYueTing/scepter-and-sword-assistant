@@ -258,6 +258,18 @@ class Script:
                         f"規則「{rule.name}」的 reset_fires 指到不存在的規則："
                         + "、".join(missing))
 
+        # finish 只收兩種寫法：空的（跑收尾）與 skip_cleanup（不跑）。打錯字的話
+        # 收尾照跑，而那正是「看起來沒事」的那種錯——在載入時就擋下來。
+        for rule in rules:
+            for action in rule.actions:
+                if "finish" not in action:
+                    continue
+                arg = action["finish"]
+                if arg not in (None, "", "skip_cleanup"):
+                    raise ScriptError(
+                        f"規則「{rule.name}」的 finish 參數只能留空或 skip_cleanup，"
+                        f"目前是：{arg}")
+
         # when_flag 指的是別條規則用 set_flag 設出來的名字。打錯的話那條規則會
         # **永遠不成立**，而紀錄上只會看到「沒有規則成立」——和 reset_fires 同一
         # 個理由，在載入時就擋下來。
@@ -545,6 +557,7 @@ class Engine:
         self._stop = False
         self._stop_event = stop_event or threading.Event()
         self._finishing = False         # 正在跑 on_finish，此時等待不可被打斷
+        self._skip_cleanup = False      # `finish: skip_cleanup` 要求跳過 on_finish
         # 等待狀態的即時回報。終端機是原地更新那一行，GUI 則是狀態列——
         # 兩者要的是同一份資訊，所以在同一個地方發出去。
         self._status_hook = status_hook
@@ -592,6 +605,7 @@ class Engine:
         self._measure_logged.clear()
         self._measure_history.clear()
         self._last_log_text = ""
+        self._skip_cleanup = False
         # 用指派而不是 clear()：測試常常拿 Engine.__new__ 造一個沒跑過 __init__
         # 的引擎，那種引擎沒有這個欄位。
         self._flags = set()
@@ -701,7 +715,7 @@ class Engine:
           使用者看到的就是「按下停止之後當掉了」——回報就是這樣來的。
           只要那行字一直在變，同樣的 15 秒就不會被當成當機。
         """
-        if not self.script.on_finish or self.dry_run:
+        if not self.script.on_finish or self.dry_run or self._skip_cleanup:
             return
         self._finishing = True
         try:
@@ -1151,7 +1165,10 @@ class Engine:
             if not pkg:
                 log.warning("腳本沒有指定 package，無法重開遊戲")
             else:
-                log.warning("連續脫困失敗，重新啟動遊戲")
+                # ⚠ 訊息要中性。這個動作有兩個用途（兜底脫困、遊戲要求更新後
+                #   重開），寫死其中一個的話另一條路上的紀錄就是假的；為什麼要
+                #   重開，觸發的規則名稱那一行已經說了。
+                log.warning("重新啟動遊戲")
                 d.stop_app(pkg)
                 self._sleep(3)
                 d.launch_app(pkg)
@@ -1320,6 +1337,13 @@ class Engine:
         elif verb == "finish":
             # 不寫紀錄：觸發的規則名稱（「…→ 收工」）已經說了為什麼要結束，
             # 緊接著 on_finish 的第一行還會再說一次「本輪結束」。
+            #
+            # `finish: skip_cleanup` 給「連遊戲都進不去」的收工用（伺服器維護中）。
+            # 收尾是逐層退回家園，而那條路上的每一步都先 `wait_for` 25 秒——
+            # 畫面上根本沒有導覽列與返回鍵時，那是純粹的空等，還會留下三行
+            # 「畫面上找不到任何模板」看起來像出了事。
+            if arg == "skip_cleanup":
+                self._skip_cleanup = True
             self.stop()
 
         else:

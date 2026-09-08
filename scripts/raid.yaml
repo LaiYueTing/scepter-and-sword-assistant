@@ -491,6 +491,29 @@ rules:
   # 兜底按下系統返回鍵。兩條分別認開場 logo 與標題畫面，詳細的時間軸與模板分數見
   # dungeon.yaml 的同名規則。
 
+  - name: 伺服器維護中 → 收工，下一輪再試
+    # 維護時進不去遊戲，這一輪直接收工讓位。⚠ 要排在「標題畫面 → 點擊開始遊戲」
+    # 前面，否則會在「點進去 → 氣泡再跳出來」之間循環。說明見 dungeon.yaml。
+    template: label_server_maintenance
+    do:
+      - finish: skip_cleanup
+
+  - name: 遊戲要求重新進入 → 重開遊戲
+    # 同一個確認框有多種訊息（版本更新、世界發生變動），處理都是「按確定、自己
+    # 重開」。不重開就進不去，而這張畫面上導覽列與返回鍵都不在。說明見 dungeon.yaml。
+    template: [label_restart_to_update, label_world_changed]
+    max_fires: 2
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+      - restart_app:
+
+  - name: 重開之後仍要求重新進入 → 收工，下一輪再試
+    # 上一條的 max_fires 用完才輪到這裡。說明見 dungeon.yaml。
+    template: [label_restart_to_update, label_world_changed]
+    do:
+      - finish: skip_cleanup
+
   - name: 帳號在其他用戶端登入 → 按確定回到登入畫面
     # 在別的裝置登入同一個帳號時會被踢出並跳出這個對話框，不按確定就永遠停在
     # 這裡（兜底接不住：這張畫面上返回鍵只有 0.487，而 modal 對話框對系統返回鍵

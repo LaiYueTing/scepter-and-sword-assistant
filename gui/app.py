@@ -102,6 +102,27 @@ def _wake(window) -> None:
         _explaining.clear()
 
 
+# 縮到系統匣時跳的那一則。三句話對應三件事：**去哪了、還在不在做事、怎麼回來**，
+# 最後一行是「點下去會怎樣」——沒有它就沒有人知道這則可以點掉。
+#
+# ⚠ **要自己斷行。** 一整串跑完會擠成一團，而 toast 的寬度只有那麼多（實測
+#   `\n` 在 Windows 11 的 toast 上有效，三行都畫得出來）。
+TRAY_HINT_TEXT = ("已縮到系統匣，排程與腳本繼續執行。\n"
+                  "雙擊右下角的圖示可以叫回視窗。\n"
+                  "（點擊這則通知將不再提醒）")
+
+
+def dismiss_tray_hint(channel) -> None:
+    """使用者點了那則通知：以後就不再跳。
+
+    ⚠ **只寫檔案不夠，畫面也要跟著換。** 「介面設定」那一列讀的是前端載入時抓下來
+      的值，不推事件的話它會一直停在「提醒」，要重開助手才對得上——使用者回報過，
+      而那看起來就像「點了沒有記住」。
+    """
+    uistate.set("tray_hint", False)
+    channel.send("ui_pref", {"key": "tray_hint", "value": False})
+
+
 def main() -> int:
     """開視窗。回傳結束碼，讓 `main.py` 直接拿去 sys.exit。"""
     # 同一時間只能有一個助手在操作模擬器。
@@ -265,8 +286,13 @@ def main() -> int:
     tray.install()
     # ⚠ 這一則要說完三件事：**去哪了、還在不在做事、怎麼回來**。少了最後一項，
     #   使用者會再雙擊一次 EXE——而那會被防多開擋下來，看起來就像「按了沒反應」。
+    #
+    # 最後那句是「點下去會怎樣」：沒有它就沒有人知道這則通知可以點掉。
+    # ⚠ 點擊那條路不保證走得到（見 `Tray.notify`），所以「介面設定」裡也有同一個
+    #   開關——關掉之後 `win_hide` 就不會再呼叫這個 hook 了。
     api.set_hidden_hook(
-        lambda: tray.notify("已縮到系統匣：排程與腳本繼續執行。雙擊右下角的圖示可以叫回視窗。"))
+        lambda: tray.notify(TRAY_HINT_TEXT,
+                            on_click=lambda: dismiss_tray_hint(channel)))
 
     # 之後有人再啟動一次，就把這個視窗叫回前景
     lock.listen(lambda: _wake(window))

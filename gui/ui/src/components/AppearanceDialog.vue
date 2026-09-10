@@ -113,6 +113,28 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
           <button :class="{ on: ui.onClose === 'quit' }" @click="ui.setOnClose('quit')">直接結束</button>
         </div>
       </section>
+
+      <div class="rule"></div>
+
+      <!--
+        縮到系統匣的那則通知。
+        ⚠ 它也可以由「點那則通知」直接關掉（gui/tray.py 的 BalloonTipClicked），
+          但那條路不保證走得到——Windows 11 的 toast 不一定回報點擊——所以這裡
+          是唯一保證有效的入口，而且是關掉之後唯一能開回來的地方。
+      -->
+      <section class="hd">
+        <div>
+          <div class="k">縮到系統匣時提醒</div>
+          <div class="s">
+            套用範圍：縮到系統匣的那一刻。開啟時會跳一則通知說明程式還在背景執行。
+            點那則通知也會關掉這個提醒。
+          </div>
+        </div>
+        <div class="nc-seg" style="flex: none">
+          <button :class="{ on: ui.trayHint }" @click="ui.setTrayHint(true)">提醒</button>
+          <button :class="{ on: !ui.trayHint }" @click="ui.setTrayHint(false)">不提醒</button>
+        </div>
+      </section>
     </div>
 
     <!--

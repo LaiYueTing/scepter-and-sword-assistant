@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useLogStore } from './logs'
+import { useUiStore } from './ui'
 import { api } from '../bridge'
 
 /**
@@ -108,6 +109,11 @@ export const useHostStore = defineStore('host', {
           case 'tested':
             this.testing = false
             this.testResult = data
+            break
+          case 'ui_pref':
+            // 後端自己改掉了某個介面偏好——點掉那則系統匣通知就是一次。
+            // ⚠ 少了這一段，開關會停在舊值直到下次啟動，看起來像「沒有記住」。
+            if (data.key === 'tray_hint') useUiStore().trayHint = !!data.value
             break
           case 'update':
             this.update = data

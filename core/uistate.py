@@ -33,6 +33,11 @@ DEFAULTS: dict[str, Any] = {
     "bounds": {"width": 1180, "height": 840},
     # 關閉視窗時要做什麼：ask（每次問）/ tray（縮到背景）/ quit（直接結束）
     "on_close": "ask",
+    # 縮到系統匣時要不要跳氣泡通知。
+    # ⚠ 這一則的用途是「說明程式去哪了」，而那件事**知道一次就夠了**——每天縮
+    #   好幾次的人，第二次之後它就只是打擾。所以它是可以關掉的，而且點那則通知
+    #   本身就等於關掉（見 gui/tray.py 的 BalloonTipClicked）。
+    "tray_hint": True,
 }
 
 

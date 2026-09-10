@@ -611,8 +611,13 @@ class Api:
         self._on_hidden = fn
 
     def win_hide(self, _: dict) -> dict:
+        """縮到系統匣。`tray_hint` 關掉之後就安靜地縮，不再跳那則氣泡。
+
+        ⚠ 判斷放在這裡而不是外殼那邊：外殼只知道「怎麼跳通知」，不該同時管
+          「這次要不要跳」。
+        """
         self._win().hide()
-        if self._on_hidden is not None:
+        if self._on_hidden is not None and uistate.get("tray_hint"):
             self._on_hidden()
         return {}
 

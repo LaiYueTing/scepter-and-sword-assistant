@@ -280,7 +280,7 @@ async function onUpdate() {
             <Palette :size="17" />
           </button>
         </template>
-        介面設定：背景主題、狀態燈號、按下 ✕ 時的行為
+        介面設定：背景主題、狀態燈號、關閉與縮小時的行為
       </NTooltip>
 
       <!--

@@ -51,6 +51,7 @@ class Tray:
         self._on_quit = on_quit
         self._icon = None           # System.Windows.Forms.NotifyIcon
         self._stop_item = None      # 「停止執行」那一項，要跟著執行狀態開關
+        self._balloon_click = None  # BalloonTipClicked 的處理器，只掛一次
 
     # ---------- 建立 ----------
 
@@ -147,13 +148,28 @@ class Tray:
         except Exception:
             self._stop_item.Enabled = False
 
-    def notify(self, text: str) -> None:
-        """氣泡通知。只在視窗看不見的時候才有意義，所以呼叫端要自己判斷。"""
+    def notify(self, text: str, on_click: Callable[[], None] | None = None) -> None:
+        """氣泡通知。只在視窗看不見的時候才有意義，所以呼叫端要自己判斷。
+
+        `on_click` 是「使用者點了這則通知」的回呼。
+
+        ⚠ **不要把任何功能建在這個事件上。** Windows 11 把氣泡換成了 toast，
+          實測一次只收到 `BalloonTipShown` 與 `BalloonTipClosed`，沒有
+          `BalloonTipClicked`——而點擊到底會不會回報，取決於使用者是點通知本體、
+          點通知中心裡的那則，還是直接關掉。所以它只能當**順手的捷徑**，
+          真正可靠的入口是介面設定裡的那個開關。
+        """
         if self._icon is None:
             return
         try:
+            from System import EventHandler
             from System.Windows.Forms import ToolTipIcon
 
+            if on_click is not None and self._balloon_click is None:
+                # 只掛一次：每跳一則就 += 一個處理器的話，點一下會觸發 N 次。
+                self._balloon_click = EventHandler(
+                    lambda sender, args: self._off_ui(on_click))
+                self._icon.BalloonTipClicked += self._balloon_click
             self._icon.ShowBalloonTip(3000, TITLE, text, ToolTipIcon.Info)
         except Exception as e:
             log.warning("系統匣通知失敗：%s", e)

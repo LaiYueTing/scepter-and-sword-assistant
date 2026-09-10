@@ -7,7 +7,8 @@ export const useUiStore = defineStore('ui', {
     theme: 'dark', // dark | light
     bgTheme: 'default', // 背景漸層主題的 id，見 data/gradients.js
     glow: 'breathe', // breathe | none —— 燈號要不要呼吸
-    onClose: 'ask' // ask | tray | quit
+    onClose: 'ask', // ask | tray | quit
+    trayHint: true // 縮到系統匣時要不要跳那則氣泡通知
   }),
 
   actions: {
@@ -21,6 +22,10 @@ export const useUiStore = defineStore('ui', {
       this.bgTheme = (await this.pref('bg_theme')) || 'default'
       this.glow = (await this.pref('glow')) || 'breathe'
       this.onClose = (await this.pref('on_close')) || 'ask'
+      // ⚠ 這個是布林值，不能用 `|| 預設` 去補：關掉之後存的是 false，
+      //   那樣寫會每次載入都被推回 true。
+      const hint = await this.pref('tray_hint')
+      this.trayHint = hint === null ? true : !!hint
       this.apply()
     },
 
@@ -71,6 +76,11 @@ export const useUiStore = defineStore('ui', {
     async setOnClose(value) {
       this.onClose = value
       await api.call('ui_set', { key: 'on_close', value })
+    },
+
+    async setTrayHint(value) {
+      this.trayHint = value
+      await api.call('ui_set', { key: 'tray_hint', value })
     }
   }
 })

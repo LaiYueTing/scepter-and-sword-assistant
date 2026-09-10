@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from typing import Callable
 
 from core import logger
@@ -100,16 +101,16 @@ class Tray:
 
         menu = ContextMenuStrip()
         show_item = menu.Items.Add("顯示視窗")
-        show_item.Click += lambda s, e: self._on_show()
+        show_item.Click += lambda s, e: self._off_ui(self._on_show)
         # 預設項目要粗體：這是雙擊圖示會做的事，讓兩種操作對得起來
         menu.Items[0].Font = _bold(menu.Items[0].Font)
 
         self._stop_item = menu.Items.Add("停止執行")
-        self._stop_item.Click += lambda s, e: self._on_stop()
+        self._stop_item.Click += lambda s, e: self._off_ui(self._on_stop)
 
         menu.Items.Add(ToolStripSeparator())
         quit_item = menu.Items.Add("結束程式")
-        quit_item.Click += lambda s, e: self._on_quit()
+        quit_item.Click += lambda s, e: self._off_ui(self._on_quit)
 
         # ⚠ 在**選單打開的那一刻**才更新可按狀態，不要另外開一條執行緒去輪詢。
         #   使用者看不到的期間，那個狀態本來就沒有人在乎。
@@ -131,7 +132,7 @@ class Tray:
         #   會在叫出選單的同時把視窗也開出來。
         def on_double_click(sender, args) -> None:
             if args.Button == MouseButtons.Left:
-                self._on_show()
+                self._off_ui(self._on_show)
 
         icon.MouseDoubleClick += on_double_click
         self._icon = icon
@@ -156,6 +157,29 @@ class Tray:
             self._icon.ShowBalloonTip(3000, TITLE, text, ToolTipIcon.Info)
         except Exception as e:
             log.warning("系統匣通知失敗：%s", e)
+
+    @staticmethod
+    def _off_ui(fn: Callable[[], None]) -> None:
+        """把系統匣的動作丟到背景執行緒跑。**這裡的每一個回呼都要走它。**
+
+        ⚠ **在 UI 執行緒上做這些事會把整個程式鎖死。** 系統匣的事件（選單、雙擊、
+          通知的點擊）全部是在 pywebview 跑 `Application.Run()` 的那條執行緒上發的，
+          而這些動作多半要推事件給前端——那條路是 `evaluate_js`，它
+          `Invoke` 之後**阻塞等結果**，而結果的回呼又是排回 UI 執行緒的。
+          在 UI 執行緒上呼叫等於自己等自己：訊息迴圈停住，視窗叫不回來、系統匣
+          也沒反應，而防多開的鎖還握著，所以連重開一個都不行——只能去工作管理員
+          砍掉。實測三條路都會中：結束程式（送 `closing`）、停止執行（送 `status`）、
+          點掉那則通知（送 `ui_pref`）。
+
+        ⚠ 例外也要在這裡接住：讓它冒到 .NET 的事件處理器上，會把訊息迴圈一起帶走。
+        """
+        def run() -> None:
+            try:
+                fn()
+            except Exception as e:                  # pragma: no cover - 環境問題
+                log.warning("系統匣的動作失敗：%s", e)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def remove(self) -> None:
         """拿掉圖示。

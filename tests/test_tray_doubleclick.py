@@ -15,6 +15,7 @@ import ctypes
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -72,9 +73,18 @@ send = ctypes.windll.user32.SendMessageW
 
 
 def clicks(*msgs) -> int:
+    """送一串滑鼠訊息，回報「顯示視窗」被叫了幾次。
+
+    ⚠ **要等一下再數。** 系統匣的動作是丟到背景執行緒跑的（`Tray._off_ui`），
+      在 UI 執行緒上做會把整個程式鎖死。所以送完訊息的當下還沒有人動作。
+    """
     shown.clear()
     for msg in msgs:
         send(hwnd, WM_TRAY, 1, msg)
+    for _ in range(20):
+        if shown:
+            break
+        time.sleep(0.05)
     return len(shown)
 
 

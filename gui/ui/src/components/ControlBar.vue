@@ -1,13 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { NTooltip, useMessage } from 'naive-ui'
-import { FolderOpen, Play, Settings2, SkipForward, Square } from 'lucide-vue-next'
+import { FolderOpen, Play, Settings2, SkipForward, Sparkles, Square } from 'lucide-vue-next'
 import { useHostStore } from '../stores/host'
 
 const emit = defineEmits(['open-options'])
 const host = useHostStore()
 const message = useMessage()
 const starting = ref(false)
+const riftStarting = ref(false)
 
 /**
  * ⚠ **只鎖「會操作遊戲」的那兩顆。** 測試連線與玩法設定照常——那兩個正是排查
@@ -37,6 +38,33 @@ async function run(once) {
     message.error(e.message)
   } finally {
     starting.value = false
+  }
+}
+
+/**
+ * 虛空裂縫不排程，由這顆按鈕手動觸發。**執行中也按得動**：排程等待期間會叫醒它
+ * 先跑這一輪，正在跑別的腳本時就接在那一輪後面。只有收尾中與待更新時鎖住。
+ */
+const riftDisabled = computed(
+  () => !host.ready || host.closing || host.updateRequired || riftStarting.value
+)
+
+const riftHint = computed(() => {
+  if (host.closing) return '收尾中：結束前不能開始新的一輪'
+  if (host.updateRequired) return `有待安裝的更新：要先更新到 v${host.update.version} 才能開始執行`
+  if (!host.ready) return '後端尚未就緒：還在啟動，稍候再試'
+  return '打一輪虛空裂縫（10 場，打完自動離開地圖）。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
+})
+
+async function rift() {
+  riftStarting.value = true
+  try {
+    const { now } = await host.runNow('rift')
+    message.info(now ? '開始打虛空裂縫' : '正在跑別的腳本，虛空裂縫排在它之後')
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    riftStarting.value = false
   }
 }
 
@@ -77,6 +105,15 @@ async function stop() {
     <button class="nc-btn" :disabled="!host.running || host.closing" @click="stop">
       <Square :size="14" /> 停止
     </button>
+
+    <NTooltip trigger="hover">
+      <template #trigger>
+        <button class="nc-btn" :disabled="riftDisabled" @click="rift">
+          <Sparkles :size="15" /> 虛空裂縫
+        </button>
+      </template>
+      {{ riftHint }}
+    </NTooltip>
 
     <div class="flex-1"></div>
 

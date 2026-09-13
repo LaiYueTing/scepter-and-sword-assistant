@@ -352,6 +352,30 @@ class Api:
         self._channel.send("running", True)
         return {}
 
+    def run_now(self, params: dict) -> dict:
+        """把一份不排程的腳本（虛空裂縫）現在就跑一輪。
+
+        回傳 `now`：True 是馬上開始，False 是排在正在跑的那一輪後面。
+
+        三種狀態各走各的路，介面要據此說不同的話：
+          沒在執行 → 開一個只跑這一輪的排程（跑完就結束，不留在背景）
+          排程等待中 → 叫醒它先跑這個，跑完回去等原本的下一個時刻
+          正在跑別的腳本 → 接在那一輪後面，不打斷正在打的副本或討伐
+
+        ⚠ 收尾中不收。停止要求已經送出去了，塞進去的那一輪沒有人會跑到，
+          而介面上看起來會像「按了沒反應」。
+        """
+        name = str(params.get("task") or "")
+        if not name:
+            raise RuntimeError("沒有指定要跑的腳本")
+        if self.is_running():
+            if self._runner.stop_event.is_set():
+                raise RuntimeError("正在停止中，等它結束再按")
+            cfg = self._cfg or Config.load()
+            return {"now": self._runner.runner.inject(cfg.task_of(name))}
+        self.start({"only": name, "once": True})
+        return {"now": True}
+
     def stop(self, _: dict) -> dict:
         if not self.is_running():
             raise RuntimeError("沒有在執行")

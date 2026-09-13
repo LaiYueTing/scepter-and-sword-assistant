@@ -70,12 +70,30 @@ class Runner:
         self.task_hook = task_hook
         # 終端機才提示 Ctrl+C——GUI 沒有那個鍵可按，寫了只會讓人去按而沒反應
         self.interactive = interactive
+        # 外面塞進來、要「現在就跑」的腳本（介面上的「虛空裂縫」按鈕）。
+        # 排程等待中會立刻醒來跑它；正在跑別的腳本就接在那一輪後面。
+        self._injected: list[TaskConfig] = []
+        # 現在是不是在等下一個排定時刻（介面用它決定要說「馬上開始」還是「排在後面」）
+        self.waiting = False
 
     # ---------- 對外 ----------
 
     def stop(self) -> None:
         """要求結束。等待中的引擎會在一個 tick 內醒來，收尾照常執行。"""
         self.stop_event.set()
+
+    def inject(self, task: TaskConfig) -> bool:
+        """把一個不在排程裡的腳本塞進來跑一輪。回傳 True 代表會立刻開始。
+
+        給「每兩週一次、要人先組好隊伍」這種沒辦法排程的事用：排程等待期間
+        按下去就馬上跑，跑完回去等原本的下一個時刻；正在跑別的腳本時接在那一輪
+        後面（回 False），不打斷正在打的副本。
+
+        ⚠ 不讓位（`until=None`）。這是使用者明確要求的那一輪，排定時刻在中途
+          到了也讓它打完；那一格由 _passed_during() 事後接住。
+        """
+        self._injected.append(task)
+        return self.waiting
 
     def run(self) -> int:
         """依排程輪流執行，回傳結束碼。腳本讀不到會拋 ScriptError。"""
@@ -114,7 +132,18 @@ class Runner:
                     current = self._take_next(dev, queue, scheduled)
                     if current is None:
                         break
-                script = scripts[current.name]
+                script = scripts.get(current.name)
+                if script is None:
+                    # 塞進來的腳本不在啟動時那份清單裡，輪到才讀
+                    try:
+                        script = scripts[current.name] = Script.load(
+                            current.name, self.cfg.options)
+                    except Exception as e:
+                        log.error("讀不到腳本「%s」：%s", current.name, e)
+                        current = None
+                        continue
+                    self._titles[current.name] = script.name
+                injected = current.name not in {t.name for t in self.tasks}
                 log.info("───── 執行「%s」，目標次數：%s ─────",
                          script.name, current.repeat or "不限")
 
@@ -138,7 +167,7 @@ class Runner:
                 nxt = next_scheduled(scheduled)
                 failed = ""
                 try:
-                    engine.run(until=nxt[0] if nxt else None)
+                    engine.run(until=nxt[0] if nxt and not injected else None)
                 except AdbError as e:
                     # ⚠ 一輪跑到一半斷線（模擬器被關掉、網路斷了）不該讓整個排程
                     #   結束，否則當天剩下的腳本全部不會執行。這一輪放掉，
@@ -283,6 +312,8 @@ class Runner:
           也比較好——現在跑的話跑完時刻還沒到，等一下會被排程再叫一次。
         ⚠ `--once` 不讓路。那是人在旁邊手動叫的，乾等十幾分鐘會像當住了。
         """
+        if self._injected:
+            return self._injected.pop(0)
         if not self.one_shot and queue and self._due_soon(scheduled) is not None:
             log.info("排定時刻近了，先讓它跑完再補跑（還有 %d 個待補：%s）",
                      len(queue), "、".join(self._title(t) for t in queue))
@@ -313,6 +344,8 @@ class Runner:
             when, task = nxt
             if not self._sleep_until(when, task):
                 return None
+            if self._injected:
+                task = self._injected.pop(0)       # 被叫醒的：先跑塞進來的那個
             self._status("重新連線")
             try:
                 dev.connect()
@@ -381,15 +414,19 @@ class Runner:
                  when.strftime("%m/%d %H:%M"),
                  _pretty_wait((when - datetime.now()).total_seconds()),
                  "，按 Ctrl + C 可結束" if self.interactive else "")
-        while True:
-            remain = (when - datetime.now()).total_seconds()
-            if remain <= 0:
-                return True
-            self._status(f"等候下一輪「{self._title(task)}」　"
-                         f"{when.strftime('%m/%d %H:%M')} 開始，"
-                         f"還有 {_pretty_wait(remain)}")
-            if self.stop_event.wait(min(remain, 1.0)):
-                return False
+        self.waiting = True
+        try:
+            while True:
+                remain = (when - datetime.now()).total_seconds()
+                if remain <= 0 or self._injected:
+                    return True
+                self._status(f"等候下一輪「{self._title(task)}」　"
+                             f"{when.strftime('%m/%d %H:%M')} 開始，"
+                             f"還有 {_pretty_wait(remain)}")
+                if self.stop_event.wait(min(remain, 1.0)):
+                    return False
+        finally:
+            self.waiting = False
 
     def describe_setup(self) -> None:
         """開場印出「這一次是用什麼設定在跑」：版本、設定檔、裝置、資源、排程、開關。

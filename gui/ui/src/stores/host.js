@@ -195,6 +195,14 @@ export const useHostStore = defineStore('host', {
     },
 
     /**
+     * 現在就跑一輪不排程的腳本（虛空裂縫）。回傳 `now`：true 是馬上開始，
+     * false 是排在正在跑的那一輪後面。
+     */
+    async runNow(task) {
+      return await this.call('run_now', { task })
+    },
+
+    /**
      * 寫回 config.yaml。`changes` 是 `[{ path: ['options','claim_reward'], value }]`。
      *
      * ⚠ 路徑而不是整份物件：後端是**就地改寫**那一行，設定檔的註解才留得住。

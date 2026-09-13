@@ -698,6 +698,15 @@ class Engine:
     def stop(self) -> None:
         self._stop = True
 
+    def abort(self) -> None:
+        """使用者中斷這一輪：立刻結束，而且不跑收尾。
+
+        給「只中斷這一份、排程照常」的按鈕用（虛空裂縫）。中斷是人在旁邊按的，
+        畫面留在哪裡他看得到；收尾反而會在地圖上空等 25 秒找家園。
+        """
+        self._skip_cleanup = True
+        self._stop = True
+
     def _sleep(self, seconds: float) -> bool:
         """可被中斷的等待，回傳「是否被要求停止」。GUI 沒有 Ctrl+C 可送，
         所以等待本身要醒得過來。

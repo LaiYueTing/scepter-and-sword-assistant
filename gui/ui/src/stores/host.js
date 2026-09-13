@@ -25,6 +25,8 @@ export const useHostStore = defineStore('host', {
 
     running: false,
     closing: false, // 正在收尾，按鈕全部要停用
+    // 「虛空裂縫」按下去之後、還沒跑完之前為 true（排隊中或執行中），中斷鈕看它
+    riftPending: false,
     status: '待命中',
     // 任務卡各自的狀態：{ [name]: { state, note } }
     taskStates: {},
@@ -90,10 +92,12 @@ export const useHostStore = defineStore('host', {
             break
           case 'task':
             this.taskStates[data.name] = { state: data.state, note: data.note }
+            if (data.name === 'rift' && data.state !== 'running') this.riftPending = false
             break
           case 'running':
             this.running = data
             if (!data) {
+              this.riftPending = false
               this.status = '待命中'
               this.refresh() // 下一輪的排定時刻要重算
             }
@@ -199,7 +203,16 @@ export const useHostStore = defineStore('host', {
      * false 是排在正在跑的那一輪後面。
      */
     async runNow(task) {
-      return await this.call('run_now', { task })
+      const res = await this.call('run_now', { task })
+      if (task === 'rift') this.riftPending = true
+      return res
+    },
+
+    /** 中斷 runNow 塞進去的那一份，排程照常。回傳有沒有真的中斷到。 */
+    async cancelRun(task) {
+      const { cancelled } = await this.call('run_cancel', { task })
+      if (task === 'rift') this.riftPending = false
+      return cancelled
     },
 
     /**

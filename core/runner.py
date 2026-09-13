@@ -75,6 +75,8 @@ class Runner:
         self._injected: list[TaskConfig] = []
         # 現在是不是在等下一個排定時刻（介面用它決定要說「馬上開始」還是「排在後面」）
         self.waiting = False
+        # 正在跑的那一輪（腳本名, 引擎），給 abort() 用
+        self._running: tuple[str, Engine] | None = None
 
     # ---------- 對外 ----------
 
@@ -94,6 +96,20 @@ class Runner:
         """
         self._injected.append(task)
         return self.waiting
+
+    def abort(self, name: str) -> bool:
+        """中斷指定的腳本：還在排隊的拿掉、正在跑的立刻結束（不跑收尾），排程照常。
+
+        和 `stop()` 的差別：那個是整個排程結束；這個只動那一份。回傳有沒有真的
+        中斷到東西——介面要據此說「已中斷」還是「它沒有在跑」。
+        """
+        pending = [t for t in self._injected if t.name == name]
+        for t in pending:
+            self._injected.remove(t)
+        if self._running is not None and self._running[0] == name:
+            self._running[1].abort()
+            return True
+        return bool(pending)
 
     def run(self) -> int:
         """依排程輪流執行，回傳結束碼。腳本讀不到會拋 ScriptError。"""
@@ -157,6 +173,7 @@ class Runner:
                 else:
                     engine.reset()   # 同一個腳本再跑一輪，清掉上一輪的規則狀態
                 self._task(current.name, "running", "執行中")
+                self._running = (current.name, engine)
                 started = datetime.now()
                 # ⚠ 先算好「下一個排定時刻」再交給引擎，讓它到點自己讓位。少了這個，
                 #   永不收工的腳本（不領獎 ＋ 次數用完不收工 ＋ 次數不限）會把整個
@@ -186,6 +203,7 @@ class Runner:
                     failed = "執行時發生錯誤"
                     if self.one_shot:
                         raise
+                self._running = None
                 spent = int((datetime.now() - started).total_seconds())
                 # ⚠ 不要寫「剛才完成」。這句會一直掛在卡片上到下一輪為止，
                 #   而下一輪可能是好幾個小時以後——那時「剛才」已經不成立了。

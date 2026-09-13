@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { NTooltip, useMessage } from 'naive-ui'
-import { FolderOpen, Play, Settings2, SkipForward, Sparkles, Square } from 'lucide-vue-next'
+import { CircleX, FolderOpen, Play, Settings2, SkipForward, Sparkles, Square } from 'lucide-vue-next'
 import { useHostStore } from '../stores/host'
 
 const emit = defineEmits(['open-options'])
@@ -56,6 +56,20 @@ const riftHint = computed(() => {
   return '打一輪虛空裂縫（10 場，打完自動離開地圖）。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
 })
 
+/** 裂縫正在排隊或執行中，才需要中斷鈕。 */
+const riftActive = computed(
+  () => host.riftPending || host.taskStates.rift?.state === 'running'
+)
+
+async function cancelRift() {
+  try {
+    const cancelled = await host.cancelRun('rift')
+    message.info(cancelled ? '已中斷虛空裂縫，排程照常' : '虛空裂縫沒有在跑')
+  } catch (e) {
+    message.error(e.message)
+  }
+}
+
 async function rift() {
   riftStarting.value = true
   try {
@@ -108,11 +122,20 @@ async function stop() {
 
     <NTooltip trigger="hover">
       <template #trigger>
-        <button class="nc-btn" :disabled="riftDisabled" @click="rift">
+        <button class="nc-btn" :disabled="riftDisabled || riftActive" @click="rift">
           <Sparkles :size="15" /> 虛空裂縫
         </button>
       </template>
-      {{ riftHint }}
+      {{ riftActive ? '虛空裂縫正在排隊或執行中' : riftHint }}
+    </NTooltip>
+
+    <NTooltip v-if="riftActive" trigger="hover">
+      <template #trigger>
+        <button class="nc-btn" :disabled="host.closing" @click="cancelRift">
+          <CircleX :size="15" /> 中斷裂縫
+        </button>
+      </template>
+      只中斷虛空裂縫這一份，排程照常。正在跑的立刻結束、不做收尾，人會留在當時的畫面
     </NTooltip>
 
     <div class="flex-1"></div>

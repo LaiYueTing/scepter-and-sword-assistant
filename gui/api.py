@@ -376,6 +376,19 @@ class Api:
         self.start({"only": name, "once": True})
         return {"now": True}
 
+    def run_cancel(self, params: dict) -> dict:
+        """中斷 run_now 塞進去的那一份（虛空裂縫），排程照常。
+
+        正在跑的立刻結束、不跑收尾；還在排隊的拿掉。整個排程要停用 `stop`。
+        """
+        name = str(params.get("task") or "")
+        if not name or not self.is_running():
+            return {"cancelled": False}
+        cancelled = self._runner.runner.abort(name)
+        if cancelled:
+            log.info("使用者中斷了「%s」", optionmeta.task_label(name))
+        return {"cancelled": cancelled}
+
     def stop(self, _: dict) -> dict:
         if not self.is_running():
             raise RuntimeError("沒有在執行")

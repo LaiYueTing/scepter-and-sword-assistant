@@ -17,7 +17,7 @@ os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import yaml
 
-SCRIPTS = ("dungeon", "raid", "daily", "arena", "chores")
+SCRIPTS = ("dungeon", "raid", "daily", "arena", "chores", "rift")
 
 # 這些規則和腳本要做什麼完全無關——它們處理的是「進不進得去遊戲」與「卡住了
 # 怎麼辦」，所以每一份都要有。腳本各自的流程規則（配對、領獎、導覽）不在此列。
@@ -39,6 +39,10 @@ SHARED = [
     "重開遊戲也救不回來 → 收工",
 ]
 
+# 這一條在該份腳本裡刻意不同：虛空裂縫要從使用者自己組好隊伍的活動地圖開始，
+# 停在家園代表沒得做，「回家園重來」對它沒有意義——它改成「家園 → 收工」兩條。
+EXEMPT = {"rift": {"卡在未知畫面 → 回家園重來"}}
+
 ok = True
 
 
@@ -54,7 +58,8 @@ for name in SCRIPTS:
     rules[name] = {r["name"]: r for r in raw["rules"]}
 
 for shared in SHARED:
-    missing = [n for n in SCRIPTS if shared not in rules[n]]
+    missing = [n for n in SCRIPTS
+               if shared not in rules[n] and shared not in EXEMPT.get(n, ())]
     check(f"每份腳本都有「{shared}」", not missing)
     if missing:
         print("       缺：" + "、".join(missing))

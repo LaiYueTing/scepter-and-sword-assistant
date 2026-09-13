@@ -1,0 +1,324 @@
+# 虛空裂縫
+#
+# 每兩週開一次的限時活動，可以打 10 場。**隊伍由使用者自己組好、停在活動地圖上**，
+# 這份腳本只負責從那裡開始：找到門 → 進去 → 打完 → 領獎 → 再找門，直到次數用完
+# 就離開地圖回家園。它不排程，由介面上的「虛空裂縫」按鈕手動觸發，排程等待期間
+# 也按得動（Runner.inject）。
+#
+# 流程：活動地圖上有紫色的門 → 點門 → 對話框按「進入裂縫」→ 載入 → 自動戰鬥
+#      → 可能跳「進入下一層」（點掉，不點 30 秒後也會自己進）→ 再戰鬥 ⋯
+#      → 「獲得獎勵」→ 回到地圖，門可能還在、可能消失
+#      → 右側小工具寫著 N/10：不是 0 就再找門；門不見了就用小工具傳送到門邊
+#      → 0/10 → 按左下角返回 → 「離開地圖後將自動解散隊伍」按確定 → 家園
+#
+# 三個讓腳本變簡單的畫面性質：
+#
+# 1. **剩幾場寫在地圖右側的小工具上（「虛空裂縫 N/10」），而且 0 是紅色的、其他
+#    數字是黃色。** 所以「打完了沒」不必讀數字，只認那個紅色的 0（1.000／0.960，
+#    其他數字 ≤0.60）。對話框裡的「收益次數: N/10」只拿來寫紀錄。
+#
+# 2. **門沒有固定的圖案、只有固定的顏色。** 它是一團會動的紫色漩渦，模板在各幀
+#    只有 0.72～0.85、和對話框裡那張大圖差不到 0.06；核心的顏色卻極穩定
+#    （H≈129、S≈190），所以改用引擎的 `blob` 找色塊：門 5200～6750 像素，沒有門
+#    的地圖 ≤12 像素。
+#
+# 3. **門不見了不必自己找。** 點右側小工具 → 活動頁「立即前往」→ 確定，遊戲會把
+#    整隊傳送到門旁邊。所以「原地等」與「附近找」合成一條：等 20 秒沒有門就傳送。
+#
+# 五份腳本共通的約束（tap_match 換頁要 cooldown、純攔截不能有 cooldown、
+# 收尾只能用 tap_template）與開機那幾條規則的說明，見 dungeon.yaml 檔頭。
+
+name: 虛空裂縫
+package: com.m88.idleXX
+
+# ⚠ 在地圖上等門生成時畫面幾乎是靜止的，而 stuck_timeout 到了會按系統返回鍵——
+#   地圖上的返回鍵會叫出「解散隊伍」的確認框。放寬到不會在等門時誤判。
+stuck_timeout: 900
+
+# 一場約 2～4 分鐘（可能連進兩三層），10 場最多約 40 分鐘。超過就代表卡住了。
+max_minutes: 60
+
+# 收尾：0/10 那條規則已經把隊伍解散、回到家園，這裡只等家園出現。
+# ⚠ 不做逐層退回：中途被停止時人可能還在地圖上，而離開地圖會解散使用者自己組的
+#   隊伍——那不是收尾該替他決定的事。
+on_finish:
+  - log: 收工
+  - wait_for: [nav_home]
+
+rules:
+  # ==================== 確認框 ====================
+
+  - name: 解散隊伍確認框 → 確定離開
+    # 「離開地圖後將自動解散隊伍，確定要離開嗎?」——只在自己按下返回鍵（次數用完）
+    # 之後才該按確定。旗標由「次數用完」那條設。
+    template: label_leave_team_confirm
+    when_flag: [打完了]
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 3
+
+  - name: 解散隊伍確認框 → 還沒打完，取消
+    # 不是自己要離開卻跳出這個框（兜底按了返回鍵），按取消留在地圖上。
+    # 解散的是使用者自己組的隊伍，不該由腳本替他決定。
+    template: label_leave_team_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_cancel
+      - wait: 2
+
+  - name: 前往地圖確認框 → 確定
+    # 活動頁按「立即前往」之後的「要立即前往地圖，參加活動嗎?」。
+    template: label_goto_map_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 5
+
+  # ==================== 裂縫裡 ====================
+  # 順序是「最深的畫面優先」：獎勵頁與下一層對話框蓋在戰鬥上、戰鬥蓋在地圖上。
+
+  - name: 進入下一層對話框 → 進入下一層
+    # 打贏一層後可能跳出來（不一定），30 秒後會自動進，點掉省時間。
+    template: btn_next_floor
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 獲得獎勵 → 關掉，完成一場
+    # 一場打完的結算，點任意處關掉就回到地圖。點在深色面板上，不要點到底下的地圖。
+    # ⚠ count 放在這裡：這一頁每場恰好出現一次。
+    template: label_reward_gain
+    cooldown: 5
+    do:
+      - count:
+      - tap: [360, 700]
+      - wait: 2.5
+
+  - name: 裂縫對話框 → 進入裂縫
+    # 點門之後的對話框（掉落、收益次數、「組隊」與「進入裂縫」）。
+    # 次數只寫紀錄不做判斷——判斷靠地圖上那個紅色的 0（見下面）。
+    template: btn_enter_rift
+    cooldown: 3
+    do:
+      - log_text:
+          剩餘場次: {region: [500, 806, 170, 30], scale: 4, strip: ["收益次數:", "收益次數："]}
+      - tap_match: []
+      - wait: 3
+
+  - name: 戰鬥中 → 等
+    # 回合條「回合：N/30」是戰鬥畫面的錨點（0.975～1.000，地圖 ≤0.64）。
+    template: label_round
+    do: []
+
+  # ==================== 活動地圖 ====================
+
+  - name: 次數用完（紅色 0/10）→ 離開地圖回家園
+    # 小工具上的 0 是紅色的，其他數字是黃色：紅 0 在 0/10 是 1.000／0.960，
+    # 其他次數 ≤0.60。region 框住小工具的數字那一行。
+    # 按返回鍵會跳「解散隊伍」確認框，旗標讓最上面那條去按確定。
+    template: label_rift_zero
+    region: [600, 400, 110, 40]
+    require: [label_rift_widget]
+    sustain: 2
+    do:
+      - log: 10 場都打完了，離開地圖
+      - set_flag: 打完了
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 地圖上有門 → 點門
+    # 門的核心是 H≈129、S≈190 的飽和紫，用色塊找。region 避開頂部的 HUD（那裡有
+    # 紫色的天空與水晶）與底部的聊天列，exclude 挖掉小工具自己的紫色圖示。
+    # ⚠ 門有時只露出一角在畫面底部（被表情按鈕蓋住），那時面積只有一百多像素，
+    #   被 min_area 擋掉是對的——點下去會點到按鈕。
+    require: [label_rift_widget]
+    blob:
+      hue: [120, 140]
+      sat: [150, 255]
+      val: [60, 210]
+      region: [0, 110, 720, 900]
+      exclude: [[590, 320, 130, 130]]
+      min_area: 1500
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 地圖上沒有門 → 用小工具傳送到門邊
+    # 打完退出來門可能消失，會在附近重新生成。等 20 秒還沒有就點右側小工具
+    # → 活動頁「立即前往」→ 確定，遊戲會把隊伍傳送到門旁邊。
+    # ⚠ blob 的參數要和上一條完全一樣，否則「有門」與「沒門」會同時成立或都不成立。
+    require: [label_rift_widget]
+    blob:
+      hue: [120, 140]
+      sat: [150, 255]
+      val: [60, 210]
+      region: [0, 110, 720, 900]
+      exclude: [[590, 320, 130, 130]]
+      min_area: 1500
+      absent: true
+    sustain: 20
+    cooldown: 15
+    do:
+      - log: 地圖上沒看到門，改從活動頁傳送過去
+      - tap: [655, 375]
+      - wait: 3
+
+  - name: 活動頁 → 立即前往
+    # 小工具點進去的活動頁（大門圖、「獎勵次數: N/10」、「立即前往」）。
+    template: btn_go_now
+    require: [label_rift_event_page]
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 家園 → 打完了，收工
+    # 解散隊伍之後遊戲自己回到家園。已經在家園，收尾不必再退。
+    template: nav_home
+    when_flag: [打完了]
+    sustain: 2
+    do:
+      - finish: skip_cleanup
+
+  - name: 家園 → 還沒進活動地圖，收工
+    # 這份腳本要從活動地圖開始（隊伍要使用者自己組）。停在家園代表還沒進去，
+    # 腳本沒有辦法替他組隊，說一聲就收工。
+    template: nav_home
+    when_flag: ["!打完了"]
+    sustain: 5
+    do:
+      - log: 人在家園而不是活動地圖上。請先組好隊伍、走到虛空裂縫的地圖再按一次
+      - finish: skip_cleanup
+
+  # ==================== 轉場 ====================
+
+  - name: 載入中 → 等畫面切換
+    # 用載入畫面的底紋（label_loading_bg）而不是那行「載入中……」：那行字會上下
+    # 跳動、常常有一半在畫面外，三張既有模板加起來仍漏掉三分之一的幀。底紋是
+    # 靜態的，實測 30 張載入幀全部 1.000、其餘畫面 ≤0.69。
+    template: label_loading_bg
+    region: [0, 300, 720, 600]
+    do: []
+
+  # ==================== 開機 ====================
+  # 和另外五份腳本共用同一組模板與同一套處理方式。
+
+  - name: 伺服器維護中 → 收工，下一輪再試
+    template: label_server_maintenance
+    do:
+      - finish: skip_cleanup
+
+  - name: 遊戲要求重新進入 → 重開遊戲
+    template: [label_restart_to_update, label_world_changed]
+    max_fires: 2
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+      - restart_app:
+
+  - name: 重開之後仍要求重新進入 → 收工，下一輪再試
+    template: [label_restart_to_update, label_world_changed]
+    do:
+      - finish: skip_cleanup
+
+  - name: 帳號在其他用戶端登入 → 按確定回到登入畫面
+    template: label_login_conflict
+    cooldown: 5
+    do:
+      - tap_template: btn_confirm
+      - wait: 3
+
+  - name: 公告 → 勾選今日不再提醒後關閉
+    template: label_notice_dont_remind
+    cooldown: 5
+    do:
+      - tap_match: [-73, -1]
+      - wait: 0.8
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 標題畫面 → 點擊開始遊戲
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    cooldown: 5
+    do:
+      - tap: [360, 900]
+      - wait: 3
+
+  - name: 遊戲啟動中 → 等開場動畫
+    template: label_boot_logo
+    do: []
+
+  - name: 遊戲啟動中 → 等載入完成
+    template: label_boot_network
+    do: []
+
+  # ==================== 兜底 ====================
+
+  - name: 觀戰確認框 → 確定退出
+    template: label_leave_spectate
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+
+  - name: 誤入次要頁面 → 點返回退出
+    # ⚠ 活動地圖與活動頁**都有返回鍵**（0.991／1.000），一定要列進 absent，
+    #   否則等門的那 20 秒裡這條會把人退出地圖、叫出解散隊伍的確認框。
+    require: [btn_back_arrow]
+    absent: [label_rift_widget, label_rift_event_page, btn_go_now, label_round,
+             label_reward_gain]
+    sustain: 4
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 完全無法辨識 → 按系統返回鍵
+    # ⚠ 這份腳本的每一張畫面都要列進來：地圖、對話框、戰鬥、獎勵頁、活動頁、
+    #   兩張確認框。「隊伍已解散」的黑畫面底紋和載入畫面相同，歸載入那條。
+    #   少列的那張上面計時會一直累加。
+    absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
+             label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
+             label_rift_event_page, btn_go_now, label_leave_team_confirm,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 5
+    do:
+      - screenshot: rift_unknown
+      - back:
+      - wait: 3
+
+  - name: 一直脫不了困 → 重開遊戲
+    # ⚠ absent 要和上面那條完全一樣（tests/test_shared_rules.py 守著）。
+    absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
+             label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
+             label_rift_event_page, btn_go_now, label_leave_team_confirm,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 3
+    do:
+      - restart_app: 45
+
+  - name: 重開遊戲也救不回來 → 收工
+    absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
+             label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
+             label_rift_event_page, btn_go_now, label_leave_team_confirm,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    do:
+      - log: 重開遊戲三次仍然認不出畫面，這一輪先收工
+      - screenshot: stuck_after_restart
+      - finish:

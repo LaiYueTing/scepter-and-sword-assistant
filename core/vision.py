@@ -242,6 +242,52 @@ def queue_units(
     return filled / pitch
 
 
+def find_blob(screen: np.ndarray, spec: dict) -> Match | None:
+    """找畫面上最大的一塊指定顏色，回傳它的外框；不夠大就回 None。
+
+    模板認的是圖案，而有些東西沒有固定的圖案——虛空裂縫的門是一團會動的紫色
+    漩渦，同一個門連拍每一幀都不一樣，模板在各幀只有 0.72～0.85，和對話框裡
+    那張大圖差不到 0.06。但它的**顏色**極穩定：核心是 H≈129、S≈190 的飽和紫，
+    整張地圖其他地方 S 的 90 百分位只有 85。用顏色找連通區塊，門在 5200～6750
+    像素，沒有門的地圖 ≤12 像素。
+
+    欄位（HSV 用 OpenCV 的尺度：H 0～180、S/V 0～255）：
+        hue       [lo, hi]　色相範圍，必填
+        sat       [lo, hi]　飽和度範圍，預設 [150, 255]
+        val       [lo, hi]　明度範圍，預設 [0, 255]
+        region    [x, y, w, h]　只在這一帶找
+        exclude   [[x, y, w, h], …]　挖掉的區域（同色的 UI 元件）
+        min_area  至少要這麼多像素才算，預設 1000
+
+    ⚠ 回傳的是最大的那一塊，不是全部。要的是「門在哪」，而畫面上同色的小碎片
+      （粒子、遠處的植物）本來就該被面積門檻擋掉。
+    """
+    x0, y0 = 0, 0
+    region = spec.get("region")
+    area, x0, y0 = _crop(screen, tuple(region)) if region else (screen, 0, 0)
+    hsv = cv2.cvtColor(area, cv2.COLOR_BGR2HSV)
+    h_lo, h_hi = spec["hue"]
+    s_lo, s_hi = spec.get("sat", (150, 255))
+    v_lo, v_hi = spec.get("val", (0, 255))
+    mask = cv2.inRange(hsv, np.array([h_lo, s_lo, v_lo]), np.array([h_hi, s_hi, v_hi]))
+    for ex in spec.get("exclude") or []:
+        ex_x, ex_y, ex_w, ex_h = (int(v) for v in ex)
+        mask[max(0, ex_y - y0):max(0, ex_y - y0 + ex_h),
+             max(0, ex_x - x0):max(0, ex_x - x0 + ex_w)] = 0
+    # 開運算去掉一兩個像素的雜點，免得它們把兩塊不相干的東西連成一塊
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
+    if count <= 1:
+        return None
+    i = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    size = int(stats[i, cv2.CC_STAT_AREA])
+    if size < int(spec.get("min_area", 1000)):
+        return None
+    bx, by, bw, bh = (int(stats[i, k]) for k in (
+        cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+    return Match("blob", float(size), bx + x0, by + y0, bw, bh)
+
+
 def annotate(screen: np.ndarray, matches: list[Match]) -> np.ndarray:
     """在畫面上標出比對結果，供除錯使用。"""
     canvas = screen.copy()

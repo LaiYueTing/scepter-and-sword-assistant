@@ -82,6 +82,11 @@ class Rule:
     # 量某個顏色在區域裡佔了多少寬度，判斷「長度在講話」的元素（順序條、血條）。
     # 這種元素裁模板會裁到會變的內容，改量固定的 UI 顏色。欄位見 measure_raw()。
     measure: dict[str, Any] | None = None
+    # 找一塊指定顏色的東西，拿它的外框當比對結果（tap_match 就點它的中心）。
+    # 給「沒有固定圖案、只有固定顏色」的元素用——虛空裂縫的門是會動的紫色漩渦，
+    # 模板在各幀只有 0.72～0.85，顏色卻極穩定。欄位見 vision.find_blob()。
+    # ⚠ `absent: true` 反過來表達「那塊顏色不在」。
+    blob: dict[str, Any] | None = None
     # 有多個匹配時挑哪一個：best 分數最高（預設）、lowest / highest 最下 / 最上、
     # first / last 最左 / 最右，或直接給數字＝由左數來第幾個（1 起算）。
     pick: str | int = "best"
@@ -207,6 +212,7 @@ class Script:
                     absent=as_list(item.get("absent")),
                     require=as_list(item.get("require")),
                     measure=item.get("measure"),
+                    blob=item.get("blob"),
                     pick=item.get("pick", "best"),
                     pick_across=bool(item.get("pick_across", False)),
                     when_option=item.get("when_option"),
@@ -872,6 +878,12 @@ class Engine:
         if rule.measure and not self._measure(screen, rule):
             return False, None
 
+        found = None
+        if rule.blob:
+            found = vision.find_blob(screen, rule.blob)
+            if bool(found) == bool(rule.blob.get("absent")):
+                return False, None
+
         if rule.template:
             if rule.pick_across and len(rule.template) > 1:
                 # 每個模板各自挑出的贏家再比一次，就是全域的那一個——
@@ -899,9 +911,10 @@ class Engine:
             )
             return (not hit), None
 
-        if rule.require or rule.measure:
-            # 沒給 template / absent 的規則：前置條件與量測都過就成立
-            return True, None
+        if rule.require or rule.measure or rule.blob:
+            # 沒給 template / absent 的規則：前置條件與量測都過就成立。
+            # 色塊找到的外框當比對結果，tap_match 才點得到它。
+            return True, found
 
         return False, None
 

@@ -426,6 +426,15 @@ def cmd_explain(args) -> int:
             if not measure_ok(value, rule.measure):
                 ok = False
 
+        if rule.blob:
+            found = _v.find_blob(screen, rule.blob)
+            want_absent = bool(rule.blob.get("absent"))
+            notes.append("blob=" + (f"{int(found.score)}px@{found.center}"
+                                    if found else "無")
+                         + ("（要不在）" if want_absent else ""))
+            if bool(found) == want_absent:
+                ok = False
+
         if rule.template:
             best = 0.0
             for name in rule.template:

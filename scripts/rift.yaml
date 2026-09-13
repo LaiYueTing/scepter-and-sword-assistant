@@ -22,8 +22,12 @@
 #    （H≈129、S≈190），所以改用引擎的 `blob` 找色塊：門 5200～6750 像素，沒有門
 #    的地圖 ≤12 像素。
 #
-# 3. **門不見了不必自己找。** 點右側小工具 → 活動頁「立即前往」→ 確定，遊戲會把
-#    整隊傳送到門旁邊。所以「原地等」與「附近找」合成一條：等 20 秒沒有門就傳送。
+# 3. **鏡頭和角色是分開的，門用拖鏡頭找。** 點地面角色會走過去但鏡頭不跟（角色會
+#    走出畫面），拖曳地圖鏡頭就照拖的距離移動（實測 400px 就是 400px，沒有慣性）。
+#    點到遠處的門，對話框會立刻開（角色自己走過去）。所以找門是「拖鏡頭 → 看有沒有
+#    紫色色塊 → 再拖」的螺旋：右、上、左、左、下、下、右、右，涵蓋起點周圍 3x3 個
+#    畫面。實測從傳送點出發拖兩步就看到門。整圈都沒有就點右側小工具 → 活動頁
+#    「立即前往」→ 確定，遊戲把隊伍傳回傳送點、鏡頭回到角色身上，再繞一圈。
 #
 # 五份腳本共通的約束（tap_match 換頁要 cooldown、純攔截不能有 cooldown、
 # 收尾只能用 tap_template）與開機那幾條規則的說明，見 dungeon.yaml 檔頭。
@@ -38,12 +42,11 @@ stuck_timeout: 900
 # 一場約 2～4 分鐘（可能連進兩三層），10 場最多約 40 分鐘。超過就代表卡住了。
 max_minutes: 60
 
-# 收尾：0/10 那條規則已經把隊伍解散、回到家園，這裡只等家園出現。
-# ⚠ 不做逐層退回：中途被停止時人可能還在地圖上，而離開地圖會解散使用者自己組的
-#   隊伍——那不是收尾該替他決定的事。
+# 收尾：什麼都不做。0/10 那條已經把隊伍解散、回到家園（finish: skip_cleanup）；
+# 其他收工都是人在旁邊（中斷鈕、max_minutes），畫面留在哪裡他看得到。
+# ⚠ 不做逐層退回：離開地圖會解散使用者自己組的隊伍，那不是收尾該替他決定的事。
 on_finish:
   - log: 收工
-  - wait_for: [nav_home]
 
 rules:
   # ==================== 確認框 ====================
@@ -66,6 +69,25 @@ rules:
     do:
       - tap_template: btn_cancel
       - wait: 2
+
+  - name: 角色重傷確認框 → 用料理治療，繼續打
+    # 隊伍被打倒之後跳的「角色重傷無法行動，要使用料理治療嗎?」。開了開關才花料理；
+    # 三次還在死就別再餵了，交給下一條收工。
+    template: label_heal_confirm
+    when_option: rift_heal_with_food=true
+    max_fires: 3
+    cooldown: 3
+    do:
+      - log: 隊伍被打倒了，用料理治療後繼續
+      - tap_template: btn_heal_all
+      - wait: 3
+
+  - name: 角色重傷確認框 → 不花料理，收工
+    # 沒開開關（或治療三次還是被打倒）：停在這個框讓使用者自己決定，不替他按任何一邊。
+    template: label_heal_confirm
+    do:
+      - log: 隊伍被打倒了，角色重傷。沒有開啟「用料理治療」，這一輪先收工，請自己處理後再按一次
+      - finish: skip_cleanup
 
   - name: 前往地圖確認框 → 確定
     # 活動頁按「立即前往」之後的「要立即前往地圖，參加活動嗎?」。
@@ -107,6 +129,15 @@ rules:
       - tap_match: []
       - wait: 3
 
+  - name: 裂縫戰鬥準備 → 開始戰鬥
+    # 進裂縫之後先停在準備畫面（回合 0/30、「開始戰鬥」），要按了才開打。
+    # 和公會討伐、競技場共用同一顆按鈕的模板（1.000）。
+    template: btn_start_battle
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
   - name: 戰鬥中 → 等
     # 回合條「回合：N/30」是戰鬥畫面的錨點（0.975～1.000，地圖 ≤0.64）。
     template: label_round
@@ -118,10 +149,12 @@ rules:
     # 小工具上的 0 是紅色的，其他數字是黃色：紅 0 在 0/10 是 1.000／0.960，
     # 其他次數 ≤0.60。region 框住小工具的數字那一行。
     # 按返回鍵會跳「解散隊伍」確認框，旗標讓最上面那條去按確定。
+    # ⚠ 不能有 sustain。這條和「點門」在同一張畫面上同時成立，sustain 沒滿的那幾秒
+    #   點門會先贏，然後就進去打一場沒有獎勵的（實測就是這樣進去的）。紅 0 的分數
+    #   餘裕夠大（≥0.96 對 ≤0.60），不需要靠連續成立來防抖。
     template: label_rift_zero
     region: [600, 400, 110, 40]
     require: [label_rift_widget]
-    sustain: 2
     do:
       - log: 10 場都打完了，離開地圖
       - set_flag: 打完了
@@ -131,8 +164,10 @@ rules:
   - name: 地圖上有門 → 點門
     # 門的核心是 H≈129、S≈190 的飽和紫，用色塊找。region 避開頂部的 HUD（那裡有
     # 紫色的天空與水晶）與底部的聊天列，exclude 挖掉小工具自己的紫色圖示。
+    # 別的玩家（紫髮、紫色法杖）與傳送點的石拱門都量過，最多 9 像素。
     # ⚠ 門有時只露出一角在畫面底部（被表情按鈕蓋住），那時面積只有一百多像素，
     #   被 min_area 擋掉是對的——點下去會點到按鈕。
+    # 找到門就把螺旋歸零，下一次找門從頭繞。
     require: [label_rift_widget]
     blob:
       hue: [120, 140]
@@ -143,15 +178,29 @@ rules:
       min_area: 1500
     cooldown: 4
     do:
+      - reset_fires: [找門 → 鏡頭往右, 找門 → 鏡頭往上, 找門 → 鏡頭往左,
+                      找門 → 鏡頭再往左, 找門 → 鏡頭往下, 找門 → 鏡頭再往下,
+                      找門 → 鏡頭往右回頭, 找門 → 鏡頭再往右]
       - tap_match: []
       - wait: 2.5
 
-  - name: 地圖上沒有門 → 用小工具傳送到門邊
-    # 打完退出來門可能消失，會在附近重新生成。等 20 秒還沒有就點右側小工具
-    # → 活動頁「立即前往」→ 確定，遊戲會把隊伍傳送到門旁邊。
-    # ⚠ blob 的參數要和上一條完全一樣，否則「有門」與「沒門」會同時成立或都不成立。
+  # ---- 沒有門：拖鏡頭繞一圈找 ----
+  # 八條規則的條件完全一樣（在地圖上、畫面裡沒有門），靠 max_fires: 1 依序輪流，
+  # 走出「右、上、左、左、下、下、右、右」的螺旋。每拖一步引擎就重看一次畫面，
+  # 看到門就由上面那條接手。
+  #
+  # ⚠ sustain 要**全部相同**。八條共用同一個條件，計時是一起走的；第一條若等得
+  #   比較久，後面那幾條會先滿而搶先拖——同一個坑（sustain 沒滿讓後面的規則有機會）
+  #   的另一個形狀。所以第一步等 12 秒（門打完常常一兩秒後就在原地重新生成），
+  #   之後每一步緊接著上一步。
+  # ⚠ 拖曳的起點與終點要避開 UI：右側小工具（600～710, 340～440）、底部的表情
+  #   按鈕與任務橫幅（y ≥ 950）。水平拖在 y=600，垂直拖在 x=360。
+  # ⚠ blob 的參數要和「點門」那條完全一樣，否則「有門」與「沒門」會同時成立或
+  #   都不成立。
+
+  - name: 找門 → 鏡頭往右
     require: [label_rift_widget]
-    blob:
+    blob: &no_door
       hue: [120, 140]
       sat: [150, 255]
       val: [60, 210]
@@ -159,10 +208,87 @@ rules:
       exclude: [[590, 320, 130, 130]]
       min_area: 1500
       absent: true
-    sustain: 20
-    cooldown: 15
+    sustain: 12
+    max_fires: 1
     do:
-      - log: 地圖上沒看到門，改從活動頁傳送過去
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭往上
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [360, 300, 360, 800, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭往左
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭再往左
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭往下
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [360, 800, 360, 300, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭再往下
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [360, 800, 360, 300, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭往右回頭
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找門 → 鏡頭再往右
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 繞了一圈都沒有門 → 用小工具傳回傳送點
+    # 八步都拖完還沒看到門：點右側小工具 → 活動頁「立即前往」→ 確定，遊戲把隊伍
+    # 傳回傳送點、鏡頭回到角色身上，螺旋歸零再繞一圈。
+    require: [label_rift_widget]
+    blob: *no_door
+    sustain: 12
+    cooldown: 20
+    do:
+      - log: 附近沒看到門，從活動頁傳回傳送點再找
+      - reset_fires: [找門 → 鏡頭往右, 找門 → 鏡頭往上, 找門 → 鏡頭往左,
+                      找門 → 鏡頭再往左, 找門 → 鏡頭往下, 找門 → 鏡頭再往下,
+                      找門 → 鏡頭往右回頭, 找門 → 鏡頭再往右]
       - tap: [655, 375]
       - wait: 3
 
@@ -270,7 +396,7 @@ rules:
     #   否則等門的那 20 秒裡這條會把人退出地圖、叫出解散隊伍的確認框。
     require: [btn_back_arrow]
     absent: [label_rift_widget, label_rift_event_page, btn_go_now, label_round,
-             label_reward_gain]
+             label_reward_gain, btn_start_battle]
     sustain: 4
     cooldown: 3
     do:
@@ -284,7 +410,7 @@ rules:
     absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
              label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
              label_rift_event_page, btn_go_now, label_leave_team_confirm,
-             label_goto_map_confirm,
+             label_goto_map_confirm, label_heal_confirm,
              label_title_menu, label_tap_to_start, label_boot_logo,
              label_boot_network, label_loading, label_loading_b,
              label_loading_c, label_notice_dont_remind]
@@ -300,7 +426,7 @@ rules:
     absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
              label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
              label_rift_event_page, btn_go_now, label_leave_team_confirm,
-             label_goto_map_confirm,
+             label_goto_map_confirm, label_heal_confirm,
              label_title_menu, label_tap_to_start, label_boot_logo,
              label_boot_network, label_loading, label_loading_b,
              label_loading_c, label_notice_dont_remind]
@@ -313,7 +439,7 @@ rules:
     absent: [nav_home, btn_back_arrow, label_rift_widget, label_round,
              label_loading_bg, btn_enter_rift, btn_next_floor, label_reward_gain,
              label_rift_event_page, btn_go_now, label_leave_team_confirm,
-             label_goto_map_confirm,
+             label_goto_map_confirm, label_heal_confirm,
              label_title_menu, label_tap_to_start, label_boot_logo,
              label_boot_network, label_loading, label_loading_b,
              label_loading_c, label_notice_dont_remind]

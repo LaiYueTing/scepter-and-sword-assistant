@@ -396,6 +396,7 @@ options:
 | `guild_donate_free` | chores | 公會捐獻的免費那一次 |
 | `guild_donate_stars` | chores | 免費之後用晨星繼續捐。⚠ 會花資源 |
 | `guild_donate_star_times` | chores | 免費之後最多再花晨星捐幾次（0～4，每天共 5 次）。**跨執行保留** |
+| `rift_heal_with_food` | rift | 虛空裂縫裡隊伍被打倒時按「一鍵治療」繼續打。⚠ 會花料理，**必須明寫 `true`** 才生效 |
 
 `chores_fruit` / `chores_bond` / `chores_donate` 三段各自獨立，關掉的那一段整個
 不會走進去；三段都關掉就直接收工。順序固定是命運果實 → 羈絆冒險 → 公會捐獻。

@@ -68,6 +68,8 @@ OPTION_LABELS: dict[str, tuple[str, str]] = {
     "raid_page_wait_minutes": ("討伐頁無人挑戰時，等幾分鐘就自行開場", "自進入討伐頁起算。這段時間是保留給公會成員陸續上線的"),
     "raid_solo_after_minutes": ("房間內無人開打時，等幾分鐘就自行開打", "按鈕顯示「開始戰鬥」代表尚無人真正開打。單人的效益極差，這是最後手段"),
     "raid_page_giveup_minutes": ("在討伐頁停留幾分鐘就放棄", "安全網，會保存一張截圖。⚠ 必須大於上面的「自行開場」分鐘數"),
+
+    "rift_heal_with_food": ("隊伍被打倒時用料理治療，繼續打", "遊戲會問「要使用料理治療嗎」。關閉時停在那個框收工，由你決定"),
 }
 
 # 這幾個是上一個開關的子項目（爸爸關掉，它們就沒有意義）。
@@ -105,6 +107,7 @@ OPTION_GROUPS = [
     ("chores", ["chores_fruit", "chores_bond", "chores_donate",
                 "guild_donate_free", "guild_donate_stars",
                 "guild_donate_star_times"]),
+    ("rift", ["rift_heal_with_food"]),
 ]
 
 # 數值欄位的範圍與單位。key: (最小, 最大, 單位, 小數位)

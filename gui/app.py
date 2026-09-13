@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import logging
 import os
@@ -67,6 +68,32 @@ def _quiet_disposed(record: logging.LogRecord) -> bool:
         if "ObjectDisposedException" in getattr(exc[0], "__name__", ""):
             return False
     return "ObjectDisposedException" not in record.getMessage()
+
+
+def _allow_taskbar_minimize(window) -> None:
+    """讓「點工作列上的圖示」也能把視窗縮小，和別的視窗一樣。
+
+    無邊框視窗（`frameless=True` → WinForms 的 `FormBorderStyle.None`）建出來的
+    樣式**沒有 `WS_MINIMIZEBOX`**（實測 0x16010000），而 Windows 的工作列是看這個
+    旗標決定點圖示要不要縮小——沒有它就只會把視窗叫到前面，於是只剩自繪的那顆
+    縮小鍵能用。WinForms 對 None 這種邊框不理會 `MinimizeBox` 屬性，只能自己補
+    樣式位元。實測補上之後最大化／還原／縮小都留得住，不會被 WinForms 洗掉。
+
+    ⚠ 要等 handle 建好（接在 `shown` 上），太早叫 `Handle` 會把視窗提前建出來。
+    """
+    try:
+        handle = window.native.Handle.ToInt64()
+        user32 = ctypes.windll.user32
+        user32.GetWindowLongPtrW.restype = ctypes.c_longlong
+        user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.SetWindowLongPtrW.restype = ctypes.c_longlong
+        user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                             ctypes.c_longlong]
+        gwl_style, ws_minimizebox = -16, 0x00020000
+        style = user32.GetWindowLongPtrW(handle, gwl_style)
+        user32.SetWindowLongPtrW(handle, gwl_style, style | ws_minimizebox)
+    except Exception as e:
+        log.warning("補不上視窗的縮小樣式，工作列點圖示不會縮小：%s", e)
 
 
 def _restore(window) -> None:
@@ -219,6 +246,7 @@ def main() -> int:
         channel.send("ready", {"shell": "web"})
 
     window.events.loaded += on_loaded
+    window.events.shown += lambda: _allow_taskbar_minimize(window)
 
     # 開發用的診斷出口：把一段 JS 丟進頁面跑，結果印到 stderr。
     #

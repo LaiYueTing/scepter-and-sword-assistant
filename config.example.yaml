@@ -179,8 +179,8 @@ options:
   raid_page_wait_minutes: 7
 
   # 進了房間卻連一場戰鬥實例都沒有（按鈕是「開始戰鬥」），等這麼久才自己開。
-  # 單人開場效益極差，所以這是最後手段
-  raid_solo_after_minutes: 15
+  # 單人開場效益極差，所以這是最後手段。要填 10 以下：旁觀滿 10 分鐘會被踢回討伐頁
+  raid_solo_after_minutes: 8
 
   # 安全網：在討伐頁折騰超過這麼久就收工並存一張截圖。
   # ⚠ 一定要大於 raid_page_wait_minutes，否則等人還沒等完就先收工

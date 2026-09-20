@@ -66,7 +66,7 @@ OPTION_LABELS: dict[str, tuple[str, str]] = {
     "raid_plateau_players": ("人數停在幾人不再增加就入場", "用於接住「今日湊不到 10 人」的情況。人數仍在上升時不會成立"),
     "raid_plateau_sustain": ("停留幾秒視為不再增加", "設得太短會在人數仍在上升時就入場"),
     "raid_page_wait_minutes": ("討伐頁無人挑戰時，等幾分鐘就自行開場", "自進入討伐頁起算。這段時間是保留給公會成員陸續上線的"),
-    "raid_solo_after_minutes": ("房間內無人開打時，等幾分鐘就自行開打", "按鈕顯示「開始戰鬥」代表尚無人真正開打。單人的效益極差，這是最後手段"),
+    "raid_solo_after_minutes": ("房間內無人開打時，等幾分鐘就自行開打", "按鈕顯示「開始戰鬥」代表尚無人真正開打。單人的效益極差，這是最後手段。要填 10 以下：旁觀滿 10 分鐘會被踢回討伐頁"),
     "raid_page_giveup_minutes": ("在討伐頁停留幾分鐘就放棄", "安全網，會保存一張截圖。⚠ 必須大於上面的「自行開場」分鐘數"),
 
     "rift_heal_with_food": ("隊伍被打倒時用料理治療，繼續打", "遊戲會問「要使用料理治療嗎」。關閉時停在那個框收工，由你決定"),
@@ -126,7 +126,7 @@ OPTION_RANGES: dict[str, tuple[float, float, str, int]] = {
     "raid_plateau_players": (1, 30, "", 1),
     "raid_plateau_sustain": (10, 600, "", 0),
     "raid_page_wait_minutes": (1, 60, "", 0),
-    "raid_solo_after_minutes": (1, 60, "", 0),
+    "raid_solo_after_minutes": (1, 9, "", 0),
     "raid_page_giveup_minutes": (1, 90, "", 0),
 }
 

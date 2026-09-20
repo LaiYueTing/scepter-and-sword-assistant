@@ -570,6 +570,7 @@ class Engine:
         self._last_change = time.time()
         self._prev_frame: np.ndarray | None = None
         self._until: datetime | None = None      # 到這個時刻就讓位給下一個腳本
+        self._yielded_now = False                # yield_if_due 剛讓位，_execute 要中斷
         self._waiting_name: str | None = None
         self._waiting_block_start = 0.0  # 這一整段「沒有動作」是何時開始的
         self._waiting_logged = 0.0       # 上次寫心跳到紀錄檔的時間
@@ -633,8 +634,11 @@ class Engine:
         ⚠ 沒有 `until` 的話，永不收工的腳本會把排程整個擋住，而紀錄上看起來
           一切正常。
 
-        ⚠ 讓位的檢查點在「完成一次」之後（`count` 動作裡），不是每一輪。時間到
+        ⚠ 讓位的檢查點是 `count` 動作與 `yield_if_due` 動作，不是每一輪。時間到
           就當場停的話很可能停在戰鬥中途，收尾會把人退出戰鬥、那次次數就白費了。
+          只靠 `count` 不夠：副本「未達 S → 退出重打」那條路不經過 `count`，
+          連打幾十場都拿不到 S 的日子，時刻過了幾小時它都不知道。所以腳本要在
+          「下一場還沒開始」的位置（按下配對之前）放 `yield_if_due`。
         """
         self._until = until
         # 不再寫一行「開始執行腳本 X」：呼叫端的分隔線已經寫了腳本名稱與目標次數。
@@ -1099,15 +1103,32 @@ class Engine:
             self.device.back()
             self._last_change = time.time()
 
+    def _yield_if_due(self) -> bool:
+        """排定時刻到了就讓位（回傳 True），沒到什麼都不做。"""
+        if not (self._until and datetime.now() >= self._until):
+            return False
+        log.info("已到下一個排程時刻，這一輪先收工讓位")
+        self._stop = True
+        # ⚠ 讓位和「自己收工」要分得出來。讓位代表**該做的還沒做完**
+        #   （次數還有、獎勵還沒領），排程那邊要把它排回去，等這一波
+        #   排定時刻與補跑清完再接著跑。少了這個記號，副本讓位一次就
+        #   等於整天只打到一半——而紀錄上每一行都正常。
+        self.yielded = True
+        return True
+
     def _execute(
         self, actions: list[dict[str, Any]], screen: np.ndarray, match: Match | None
     ) -> None:
         for action in actions:
             for verb, arg in action.items():
-                if self.dry_run and verb not in ("log", "screenshot", "wait", "count"):
+                if self.dry_run and verb not in ("log", "screenshot", "wait", "count", "yield_if_due"):
                     log.info("[試跑] 略過動作 %s: %s", verb, arg)
                     continue
                 self._do(verb, arg, screen, match)
+                if self._yielded_now:
+                    # yield_if_due 讓位了：這條規則剩下的動作（多半是按配對）不做
+                    self._yielded_now = False
+                    return
 
     def _do(self, verb: str, arg: Any, screen: np.ndarray, match: Match | None) -> None:
         d = self.device
@@ -1246,14 +1267,12 @@ class Engine:
             self.completed += 1
             log.info("完成第 %d 次", self.completed)
             # 打完一場是最安全的讓位時機（見 run 的說明）
-            if self._until and datetime.now() >= self._until:
-                log.info("已到下一個排程時刻，這一輪先收工讓位")
-                self._stop = True
-                # ⚠ 讓位和「自己收工」要分得出來。讓位代表**該做的還沒做完**
-                #   （次數還有、獎勵還沒領），排程那邊要把它排回去，等這一波
-                #   排定時刻與補跑清完再接著跑。少了這個記號，副本讓位一次就
-                #   等於整天只打到一半——而紀錄上每一行都正常。
-                self.yielded = True
+            self._yield_if_due()
+
+        elif verb == "yield_if_due":
+            # 腳本標出來的安全讓位點（見 run 的說明）。讓位了就不再執行這條規則
+            # 剩下的動作，由 _execute 看這個旗標中斷。
+            self._yielded_now = self._yield_if_due()
 
         elif verb == "screenshot":
             # ⚠ 檔名要帶日期。只用時分秒的話跨天會互相覆蓋，而且事後翻的時候

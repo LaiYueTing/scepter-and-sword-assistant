@@ -391,6 +391,30 @@ rules:
       - tap_template: btn_confirm
       - wait: 2
 
+  - name: 點空白處關不掉的頁面 → 重開遊戲
+    # 「只能點空白處關閉」的頁面若點下去沒有作用，底下那條點空白處的規則會每
+    # 5 秒點一次、每一輪都成立，兜底鏈永遠輪不到（實測空點 80 分鐘）。這條用
+    # sustain 接住：頁面連續在畫面上 90 秒，代表點了幾十次都沒關掉。
+    #
+    # ⚠ 一定要排在點空白處那條**前面**。sustain 沒滿的期間它讓給後面那條點，
+    #   滿了才輪到它；排在後面的話每一輪都被搶走，永遠輪不到。
+    template: label_tap_blank_close
+    sustain: 90
+    max_fires: 1
+    do:
+      - screenshot: blank_page_stuck
+      - restart_app: 45
+
+  - name: 重開之後仍關不掉 → 收工
+    # 重開遊戲回來還是同一張頁面，代表它不是「重開就會好」的。收尾在這張頁面上
+    # 做不了任何事（導覽列與返回鍵都不在），所以跳過。
+    template: label_tap_blank_close
+    sustain: 90
+    do:
+      - log: 這張頁面點空白處關不掉，重開遊戲也還在，這一輪先收工
+      - screenshot: blank_page_stuck_after_restart
+      - finish: skip_cleanup
+
   - name: 誤入次要頁面 → 點返回退出
     # ⚠ 活動地圖與活動頁**都有返回鍵**（0.991／1.000），一定要列進 absent，
     #   否則等門的那 20 秒裡這條會把人退出地圖、叫出解散隊伍的確認框。

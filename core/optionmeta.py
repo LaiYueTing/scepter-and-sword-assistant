@@ -36,6 +36,7 @@ OPTION_LABELS: dict[str, tuple[str, str]] = {
     "claim_reward": ("評級 S 就領獎", "關閉後一律不領獎，打完就退出，可以持續刷友情點數"),
     "stop_when_no_count": ("領獎次數用完就收工", "關閉後會繼續打，搭配上一項用於刷友情點數"),
     "buy_counts": ("次數用完時用晨星補買幾次", "遊戲每日限購 2 次。填 0 表示不購買"),
+    "claim_rank_a_after": ("打幾場都拿不到 S 就改領 A", "同一輪連續這麼多場沒有 S，之後結算是 A 也領獎。填 0 表示不啟用，一直打到 S 為止"),
     "stock_up_before_new_dungeon": (
         "新副本開放前一天先囤領獎次數",
         "當天不領取舊副本的獎勵（達成 S 也不領）、用晨星把次數買滿、只打一場就收工，把次數全部保留到隔天在新副本上使用。"
@@ -92,7 +93,7 @@ SUB_OPTIONS = {
 #       grouped = {k for _, ks in OPTION_GROUPS for k in ks}
 #       [k for k in options if k not in grouped or k not in OPTION_LABELS]
 OPTION_GROUPS = [
-    ("dungeon", ["claim_reward", "stop_when_no_count", "buy_counts",
+    ("dungeon", ["claim_reward", "stop_when_no_count", "buy_counts", "claim_rank_a_after",
                  "stock_up_before_new_dungeon",
                  "accept_with_partners", "auto_battle_mode", "like_teammates"]),
     ("raid", ["claim_raid_reward", "wait_for_others",
@@ -120,6 +121,7 @@ OPTION_RANGES: dict[str, tuple[float, float, str, int]] = {
     "arena_opponent_2": (1, 4, "", 0),
     "arena_opponent_3": (1, 4, "", 0),
     "buy_counts": (0, 2, "", 0),
+    "claim_rank_a_after": (0, 30, "", 0),
     "guild_donate_star_times": (0, 4, "", 0),
     "raid_join_players": (1, 30, "", 0),
     "raid_join_wait_minutes": (1, 60, "", 0),

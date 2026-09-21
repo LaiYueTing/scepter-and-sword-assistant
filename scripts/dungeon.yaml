@@ -323,6 +323,40 @@ rules:
     #
     # C、D 級目前沒有實機畫面所以沒有模板——那種情況會寫「評級：（認不出）」，
     # 只影響紀錄，規則照樣退出重打。之後遇到了再補一張就好。
+    #
+    # ⚠ max_fires 就是「打幾場都拿不到 S 就改領 A」的計數：設定 claim_rank_a_after
+    #   為 N 時，這條退出 N 次之後就用完，換底下那兩條接手。0 表示不限（一直打到
+    #   S 為止，這是預設）。計數每輪歸零，讓位之後排回來重跑也會歸零。
+    template: btn_claim_reward
+    max_fires: "${claim_rank_a_after:0}"
+    do:
+      - log_match:
+          評級: {region: [270, 140, 200, 220], of: {S: rank_s, A: rank_a, B: rank_b}}
+      - tap: [75, 1219]
+      - wait: 2.5
+
+  - name: 打了幾場都拿不到 S → A 也領獎
+    # 只有上面那條的 max_fires 用完才輪得到這裡，所以 claim_rank_a_after 沒設
+    # （max_fires 0 = 不限）時永遠不會觸發。條件和「結算 S 級 → 領取獎勵」相同：
+    # 要開著領獎、而且已在最高難度（還有難度等著解鎖時，A 更不值得花次數）。
+    # 領獎確認框由既有的「領獎確認對話框 → 點確定」接手，count 也在那裡。
+    #
+    # ⚠ require 一定要留著：條件必須是上面那條的子集。少了它，「領取獎勵」那顆
+    #   按鈕認不出來的畫面（簡體介面、模板過期）會越過計數直接走到這裡領 A。
+    template: rank_a
+    region: [270, 140, 200, 220]
+    require: [btn_claim_reward]
+    when_option: claim_reward
+    when_flag: [已在最高難度]
+    do:
+      - log: 連續幾場都拿不到 S，這一場 A 也領獎
+      - tally: 領取副本獎勵
+      - tap: [520, 1217]
+      - wait: 2
+
+  - name: 打了幾場都拿不到 S 但這場連 A 都不到 → 退出重打
+    # 上面那條的 max_fires 用完之後，B 以下的結算仍然要退出重打，否則會停在
+    # 結算頁沒人接手。動作和「結算未達 S」完全一樣。
     template: btn_claim_reward
     do:
       - log_match:

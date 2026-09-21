@@ -379,6 +379,7 @@ options:
 |---|---|---|
 | `claim_reward` | dungeon | 評級 S 就領獎。設 false 則打完直接退出，不消耗領獎次數 |
 | `stop_when_no_count` | dungeon | 次數用盡又買不到就收工。設 false 則繼續打（刷友情點數） |
+| `claim_rank_a_after` | dungeon | 連續打幾場都拿不到 S 之後，A 也領獎。0（預設）表示一直打到 S 為止 |
 | `auto_battle_mode` | dungeon | 進戰鬥後自動開啟遊戲內的「自動模式」 |
 | `like_teammates` | dungeon | 結算頁順手幫隊友按讚 |
 | `claim_raid_reward` | raid | 討伐獎勵亮著就先領走，再往下一關 |

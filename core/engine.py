@@ -23,7 +23,7 @@ import yaml
 
 from . import dailystate, logger, vision
 from .adb import Device
-from .config import LOG_DIR, resource_file
+from .config import LOG_DIR, WEEKDAYS, resource_file
 from .vision import Match, Region
 
 log = logger.get("engine")
@@ -34,14 +34,35 @@ class ScriptError(RuntimeError):
 
 
 
-def _option_reason(spec: str) -> str:
+def _option_reason(spec: str | list[str]) -> str:
     """把 when_option 寫成人看得懂的條件，用在「這條規則為何不啟用」的訊息。"""
+    if isinstance(spec, list):
+        return "、".join(_option_reason(s) for s in spec)
     if "=" in spec:
         key, _, val = spec.partition("=")
         return f"{key.strip()} = {val.strip()}"
     if spec.startswith("!"):
         return f"{spec[1:]} = false"
     return f"{spec} = true"
+
+
+def _weekdays(value: Any, rule_name: str) -> list[int]:
+    """把 when_weekday 轉成星期數字（0 是星期一）。
+
+    ⚠ 寫錯就在載入時報錯：認不得的話那條規則會永遠不成立，而紀錄上只會看到
+      「沒有規則成立」。
+    """
+    if value is None:
+        return []
+    days = []
+    for item in [value] if isinstance(value, (str, int)) else value:
+        day = WEEKDAYS.get(str(item).strip().lower().removeprefix("週")
+                           .removeprefix("星期"))
+        if day is None:
+            raise ScriptError(f"規則「{rule_name}」的 when_weekday 認不得：{item}"
+                              "（要寫成「週一」這種形式）")
+        days.append(day)
+    return days
 
 
 def _state_label(rule_name: str) -> str:
@@ -94,8 +115,12 @@ class Rule:
     # **順序就是優先度**（羈絆那條「紅 ❗ 排前面等於先領完再派」靠的就是這個）。
     # 只有「這幾個模板是同一種東西的不同長相」時才該打開。
     pick_across: bool = False
-    # 綁定 config 的 options 開關，前面加 ! 表示反向，也可以寫 key=value
-    when_option: str | None = None
+    # 綁定 config 的 options 開關，前面加 ! 表示反向，也可以寫 key=value；
+    # 給清單就是全部都要成立。
+    when_option: str | list[str] | None = None
+    # 只在星期幾成立（0 是星期一，和 `datetime.weekday()` 對齊）。腳本裡寫
+    # 「週一」或清單，和 weekly_at 收同一套寫法。
+    when_weekday: list[int] = field(default_factory=list)
     # 綁定 set_flag 設出來的旗標，前面加 ! 表示反向；給清單就是全部都要成立。
     # 用來把「在 A 畫面看到的事實」帶到 B 畫面判斷——兩張畫面沒有共同元素時，
     # 條件本身表達不了（副本的「這一級已經是天花板了嗎」就是這種形狀）。
@@ -217,6 +242,7 @@ class Script:
                     pick_across=bool(item.get("pick_across", False)),
                     when_option=item.get("when_option"),
                     when_flag=as_list(item.get("when_flag")),
+                    when_weekday=_weekdays(item.get("when_weekday"), item["name"]),
                     actions=item.get("do") or [],
                     cooldown=float(item.get("cooldown", 0)),
                     once=bool(item.get("once", False)),
@@ -503,7 +529,7 @@ def _measure_trace(raw: float, filled: int, window: int, spec: dict[str, Any]) -
 def apply_options(rules: list[Rule], options: dict[str, Any]) -> list[Rule]:
     """依 config 的開關停用不適用的規則，回傳被停用的那些。
 
-    `when_option` 支援三種寫法：
+    `when_option` 支援這幾種寫法，給清單就是全部都要成立：
         like_teammates          該開關為 true 才啟用（設定檔沒有這個鍵也算 true）
         !claim_reward           該開關為 false 才啟用
         buy_counts=2            該設定值等於 2 才啟用
@@ -516,30 +542,32 @@ def apply_options(rules: list[Rule], options: dict[str, Any]) -> list[Rule]:
     """
     disabled = []
     for rule in rules:
-        spec = rule.when_option
-        if not spec:
+        specs = rule.when_option
+        if not specs:
             continue
-
-        if "=" in spec:
-            # 值比較。沒設定這個項目就當作不符合——數值沒有合理的預設值，
-            # 布林則是刻意要「明講才算數」（見上面的 ⚠）。
-            #
-            # ⚠ 比較要忽略大小寫。YAML 的 true 讀進來是 Python 的 True，
-            #   str() 之後是 "True"，和腳本裡寫的 `=true` 對不起來。
-            key, _, want_value = spec.partition("=")
-            actual = options.get(key.strip())
-            ok = (actual is not None
-                  and str(actual).strip().lower() == want_value.strip().lower())
-        else:
-            key, want = spec, True
-            if key.startswith("!"):
-                key, want = key[1:], False
-            ok = bool(options.get(key, True)) == want
-
-        if not ok:
+        if not all(_option_ok(spec, options)
+                   for spec in ([specs] if isinstance(specs, str) else specs)):
             rule._disabled = True
             disabled.append(rule)
     return disabled
+
+
+def _option_ok(spec: str, options: dict[str, Any]) -> bool:
+    """單一個 when_option 條件成不成立，寫法見 apply_options。"""
+    if "=" in spec:
+        # 值比較。沒設定這個項目就當作不符合——數值沒有合理的預設值，
+        # 布林則是刻意要「明講才算數」（見 apply_options 的 ⚠）。
+        #
+        # ⚠ 比較要忽略大小寫。YAML 的 true 讀進來是 Python 的 True，
+        #   str() 之後是 "True"，和腳本裡寫的 `=true` 對不起來。
+        key, _, want_value = spec.partition("=")
+        actual = options.get(key.strip())
+        return (actual is not None
+                and str(actual).strip().lower() == want_value.strip().lower())
+    key, want = spec, True
+    if key.startswith("!"):
+        key, want = key[1:], False
+    return bool(options.get(key, True)) == want
 
 
 class Engine:
@@ -878,6 +906,10 @@ class Engine:
         #   旗標可查。那支是一張畫面一張畫面地驗規則，本來就沒有「上一頁看到
         #   什麼」，所以一律當成成立，不要讓它把好規則判成落空。
         flags = getattr(self, "_flags", None)
+        # 星期幾同理：selftest 的結果不能跟著跑測試那天是星期幾變。
+        if (rule.when_weekday and flags is not None
+                and datetime.now().weekday() not in rule.when_weekday):
+            return False, None
         if rule.when_flag and flags is not None:
             for want in rule.when_flag:
                 if (want[1:] in flags) if want.startswith("!") else (want not in flags):

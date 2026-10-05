@@ -174,6 +174,22 @@ rules:
       - tap_match: []
       - wait: 2.5
 
+  - name: 週一開新一期 → 有券就打，不受每日場次上限
+    # 新一期剛開始，早一點往前爬排名會比較前面，所以週一把累積的券全部用掉；
+    # 其他天照 arena_max_battles。券用完時遊戲會跳購買彈窗，由下面那條收工。
+    #
+    # ⚠ 要排在下一條前面，而且動作與模板要和它完全一樣——這裡只是把上限拿掉。
+    # ⚠ 這條不掛 max_fires_daily，所以週一打的場次不算進下一條的每日計數。
+    template: [btn_arena_crush, btn_arena_crush_b,
+               btn_arena_challenge, btn_arena_challenge_b]
+    region: [230, 860, 260, 80]
+    when_option: [crush_arena, arena_monday_use_all=true]
+    when_weekday: 週一
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 3
+
   - name: 排位挑戰彈窗 → 按下入場鍵
     # 對手卡片點下去會先跳這張彈窗（對手戰力與防守技能），按底下那顆才真的
     # 進場，一次消耗一張競技場券。

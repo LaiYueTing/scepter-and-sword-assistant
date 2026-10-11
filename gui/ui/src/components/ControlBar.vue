@@ -53,7 +53,7 @@ const riftHint = computed(() => {
   if (host.closing) return '收尾中：結束前不能開始新的一輪'
   if (host.updateRequired) return `有待安裝的更新：要先更新到 v${host.update.version} 才能開始執行`
   if (!host.ready) return '後端尚未就緒：還在啟動，稍候再試'
-  return '打一輪虛空裂縫（10 場，打完自動離開地圖）。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
+  return '把虛空裂縫剩下的場次打完，打完自動離開地圖。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
 })
 
 /** 裂縫正在排隊或執行中，才需要中斷鈕。 */

@@ -185,3 +185,9 @@ textarea,
   .n-button__state-border {
   border-color: transparent !important;
 }
+
+/* 提示框限寬自動換行。naive-ui 預設不限寬，長的說明會整行跑出視窗外被切掉。 */
+.n-popover.n-tooltip {
+  max-width: min(360px, calc(100vw - 32px));
+  white-space: normal;
+}

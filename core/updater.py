@@ -407,11 +407,16 @@ def sweep_temp() -> int:
       唯讀工具（doctor、selftest）不上防多開的鎖，可能正有一份在跑；忽略錯誤地
       刪下去會把它**刪成半殘**而當場炸掉。
 
-    ⚠ **探測方式是「試著刪掉一個 DLL」，不是「試著開啟」。** 開啟沒有用——
+    ⚠ **探測方式是「試著刪掉 python3XX.dll」，不是「試著開啟」。** 開啟沒有用——
       Windows 的預設共用模式允許再開一次，實測 `open("ab")` 對正被使用的檔案
       **會成功**，於是 `rmtree` 照樣開刪，把目錄刪成半殘才卡住。而刪除不一樣：
-      預設的開檔沒有 `FILE_SHARE_DELETE`，映射中的 DLL 更是刪不掉——刪得掉就
-      代表沒有人在用。失敗的話整個目錄跳過，什麼都沒動到。
+      映射中的 DLL 刪不掉——刪得掉就代表沒有人在用。失敗的話整個目錄跳過。
+
+    ⚠ **一定要試刪 Python 本體那支，不能隨便挑一個 DLL。** bootloader 一啟動就
+      載入它，活著的行程必定鎖著；其他 DLL 要等用到才載入。排第一個的
+      `libcrypto-3.dll` 在還沒連過網路的行程上沒有被鎖，刪得掉，於是正在跑的
+      那一份的腳本與模板整批被刪光。這一步排在防多開之前，所以再雙擊一次 EXE
+      就會觸發。
     """
     if not getattr(sys, "frozen", False):
         return 0
@@ -429,7 +434,7 @@ def sweep_temp() -> int:
                 continue
             if not (folder / "config.example.yaml").is_file():
                 continue                  # 別人的程式，不要碰
-            probe = next(folder.glob("*.dll"), None)
+            probe = next(folder.glob("python3[0-9]*.dll"), None)
             if probe is not None:
                 probe.unlink()             # 刪得掉就代表沒有行程在用
             shutil.rmtree(folder)

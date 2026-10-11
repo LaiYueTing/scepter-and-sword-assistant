@@ -283,7 +283,10 @@ def test_sweep_temp() -> None:
         busy = root / "_MEI333333"
         busy.mkdir()
         (busy / "config.example.yaml").touch()
-        held = (busy / "in_use.dll").open("wb")     # 假裝有行程正在用
+        # 正在跑的那一份：Python 本體一定鎖著，而排在它前面的 libcrypto 不一定
+        # （沒連過網路就還沒載入）。只看第一個 DLL 的話會判成沒人在用。
+        (busy / "libcrypto-3.dll").touch()
+        held = (busy / "python314.dll").open("wb")
 
         real = updater.tempfile.gettempdir
         updater.tempfile.gettempdir = lambda: str(root)

@@ -154,7 +154,10 @@ rules:
     #   餘裕夠大（≥0.96 對 ≤0.60），不需要靠連續成立來防抖。
     template: label_rift_zero
     region: [600, 400, 110, 40]
-    require: [label_rift_widget]
+    # 「在活動地圖上」＝小工具 ＋ 右下角「探索10次」兩個都在。家園右側也掛著同一顆
+    # 小工具（0.887），活動結束後的世界地圖有探索鈕而沒有小工具，各缺一個。
+    # 小工具只裁中央的水晶（新舊地圖 1.000／0.961），裁到背景的話換一張地圖就掉到 0.6。
+    require: &on_map [label_rift_widget, btn_explore_ten]
     do:
       - log: 10 場都打完了，離開地圖
       - set_flag: 打完了
@@ -168,7 +171,7 @@ rules:
     # ⚠ 門有時只露出一角在畫面底部（被表情按鈕蓋住），那時面積只有一百多像素，
     #   被 min_area 擋掉是對的——點下去會點到按鈕。
     # 找到門就把螺旋歸零，下一次找門從頭繞。
-    require: [label_rift_widget]
+    require: *on_map
     blob:
       hue: [120, 140]
       sat: [150, 255]
@@ -199,7 +202,7 @@ rules:
   #   都不成立。
 
   - name: 找門 → 鏡頭往右
-    require: [label_rift_widget]
+    require: *on_map
     blob: &no_door
       hue: [120, 140]
       sat: [150, 255]
@@ -215,7 +218,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭往上
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -224,7 +227,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭往左
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -233,7 +236,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭再往左
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -242,7 +245,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭往下
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -251,7 +254,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭再往下
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -260,7 +263,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭往右回頭
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -269,7 +272,7 @@ rules:
       - wait: 2
 
   - name: 找門 → 鏡頭再往右
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     max_fires: 1
@@ -280,7 +283,7 @@ rules:
   - name: 繞了一圈都沒有門 → 用小工具傳回傳送點
     # 八步都拖完還沒看到門：點右側小工具 → 活動頁「立即前往」→ 確定，遊戲把隊伍
     # 傳回傳送點、鏡頭回到角色身上，螺旋歸零再繞一圈。
-    require: [label_rift_widget]
+    require: *on_map
     blob: *no_door
     sustain: 12
     cooldown: 20

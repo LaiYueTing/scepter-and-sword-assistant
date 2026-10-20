@@ -528,10 +528,16 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
         #   「捐獻面板 → 花晨星捐贈」不符預期，看起來完全像是規則被改壞了。
         #   `tests/test_arena_retry.py` 是備份／清空／還原整個檔案；這裡只要在
         #   記憶體裡歸零就好，**不要去動使用者的 state.json**。
+        #
+        # `fired:` 列出「走到這張畫面之前已經用完」的規則名稱：每輪只做一次的
+        # 順手動作（公會島的累積獎勵）在每張島上都成立，不列的話它會蓋掉
+        # 這張樣本真正要驗的那條。
+        used = set(case.get("fired") or [])
         for rule in script.rules:
             rule._since = 0.0
             rule._disabled = False
             rule._today = 0
+            rule._fires = max(rule.max_fires, 1) if rule.name in used else 0
         apply_options(script.rules, {**SELFTEST_OPTIONS, **(case.get("options") or {})})
         hit = engine._match_rule(screen)
         actual = hit[0].name if hit else ""

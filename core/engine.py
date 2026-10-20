@@ -381,6 +381,9 @@ def resolve_vars(node: Any, options: dict[str, Any]) -> Any:
 # 的載入約十幾秒），不是用來等一場戰鬥——等不到就往下走，別把收尾卡住。
 WAIT_FOR_TIMEOUT = 25.0
 
+# `tap: [x, y, 次數]` 連點時每下之間隔多久。太快的話遊戲會吃掉幾下。
+TAP_REPEAT_GAP = 0.3
+
 
 def _as_index(pick: Any) -> int | None:
     """把 pick 讀成「由左數來第幾個」，不是數字就回 None（交給具名策略處理）。
@@ -1175,11 +1178,16 @@ class Engine:
                 log.warning("tap_match 沒有可用的比對結果")
 
         elif verb == "tap":
+            # 第三個數字是連點幾次（加減鈕那種），可以寫 ${設定:預設}；0 就是不點。
             x, y = _xy(arg)
             if x is None:
                 log.warning("tap 需要 [x, y] 兩個座標，收到：%s", arg)
             else:
-                d.tap(x, y)
+                times = int(arg[2]) if len(arg) >= 3 else 1
+                for i in range(times):
+                    if i and self._sleep(TAP_REPEAT_GAP):
+                        break
+                    d.tap(x, y)
 
         elif verb == "tap_template":
             # ⚠ 重新抓一張畫面。沿用規則觸發時的截圖會出事：動作清單裡的

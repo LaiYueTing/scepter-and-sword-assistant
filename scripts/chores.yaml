@@ -2,12 +2,13 @@
 #
 # 每天要做、但各自只有幾步的小事，合成一趟走完，省下各自導覽的開銷。
 #
-# 三段依序走：命運果實 → 羈絆冒險 → 公會捐獻，各由一條入口規則帶頭，各自掛一個
-# 開關（chores_fruit / chores_bond / chores_donate）。段與段之間不記步驟，靠入口
-# 規則的 max_fires: 1 換手——走過一次就用完，回到筆記頁自然輪到下一段。
+# 四段依序走：命運果實 → 羈絆冒險 → 素材祕境 → 公會捐獻，各由一條入口規則帶頭，
+# 各自掛一個開關（chores_fruit / chores_bond / chores_material / chores_donate）。
+# 段與段之間不記步驟，靠入口規則的 max_fires: 1 換手——走過一次就用完，回到
+# 筆記頁自然輪到下一段。
 #
 # ⚠ 順序就寫在規則的排列裡，改動順序前先確認「上一段做完會退回哪一頁」：
-#   果實與羈絆都退回筆記頁，而筆記頁上同時看得到公會頁籤。
+#   果實、羈絆、素材祕境都退回筆記頁，而筆記頁上同時看得到公會頁籤。
 #
 # 引擎的通則（順序即優先度、等待不必寫規則、從任何狀態啟動都能接上）、開機／
 # 公告／帳號衝突三條共用規則，以及兩條全域約束（tap_match 換頁要 cooldown、
@@ -215,6 +216,161 @@ rules:
     # 和地圖探索一樣用 max_fires 換手：這一趟走過一次就換下一件事。
     template: card_bond_adventure
     when_option: chores_bond
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  # ==================== 素材祕境：一鍵購買 ====================
+  # 筆記頁 →「素材祕境」→ 右下角「一鍵購買」→ 彈窗裡四列道具，由上而下是鐵鎚、
+  # 十字鎬、拳套、鏟子（對應鐵石、黃金、怪物、砂石四個洞），每列有「今日限購：N/20」
+  # 與組數加減鈕，最下面「購買 ✦總價」一次買齊。
+  #
+  # 組數遊戲會記住，但不讀它：先按「−」25 下歸零（最低就是 0），再按「+」設定的
+  # 次數。「+」最多到 20 減掉今天已買的，再按只會跳「今日的購買次數已達到上限」。
+  # 單價逐組遞增（每列 2 組 200、18 組 5050 晨星）。
+  #
+  # 防多買兩道：
+  #   1. 每列先看已買數是不是 0，是才調成設定的組數，不是就調成 0。
+  #   2. 按下購買用 max_fires_daily: 1，下午那輪或補跑都不會再買。
+  #
+  # ⚠ 已買數的判斷是「已買數那一格是 0」：模板是從「/20」的 0 裁的（同字型），
+  #   region 只框已買數那一格（x 552～574）。實測那格是 2 時 0.484、合成的 0 是 1.000。
+  #   字串是置中的，已買數變兩位數時整串左移約半個字，那一格裡就不是完整的 0，
+  #   判成「已買過」——方向是安全的。
+
+  - name: 一鍵購買：四列今天都買過了 → 取消
+    require: [label_material_buy_dialog]
+    absent: [label_material_limit_zero]
+    region: [552, 403, 22, 360]
+    cooldown: 3
+    do:
+      - log: 素材今天都買過了
+      - tap: [229, 900]
+      - wait: 2
+
+  - name: 一鍵購買：鐵鎚今天還沒買 → 調成設定的組數
+    template: label_material_limit_zero
+    require: [label_material_buy_dialog]
+    region: [552, 403, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 445, 25]
+      - tap: [593, 445, "${material_hammer_sets:2}"]
+      - wait: 0.5
+
+  - name: 一鍵購買：鐵鎚今天買過了 → 歸零
+    require: [label_material_buy_dialog]
+    absent: [label_material_limit_zero]
+    region: [552, 403, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 445, 25]
+      - wait: 0.5
+
+  - name: 一鍵購買：十字鎬今天還沒買 → 調成設定的組數
+    template: label_material_limit_zero
+    require: [label_material_buy_dialog]
+    region: [552, 515, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 557, 25]
+      - tap: [593, 557, "${material_pickaxe_sets:2}"]
+      - wait: 0.5
+
+  - name: 一鍵購買：十字鎬今天買過了 → 歸零
+    require: [label_material_buy_dialog]
+    absent: [label_material_limit_zero]
+    region: [552, 515, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 557, 25]
+      - wait: 0.5
+
+  - name: 一鍵購買：拳套今天還沒買 → 調成設定的組數
+    template: label_material_limit_zero
+    require: [label_material_buy_dialog]
+    region: [552, 627, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 669, 25]
+      - tap: [593, 669, "${material_glove_sets:2}"]
+      - wait: 0.5
+
+  - name: 一鍵購買：拳套今天買過了 → 歸零
+    require: [label_material_buy_dialog]
+    absent: [label_material_limit_zero]
+    region: [552, 627, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 669, 25]
+      - wait: 0.5
+
+  - name: 一鍵購買：鏟子今天還沒買 → 調成設定的組數
+    template: label_material_limit_zero
+    require: [label_material_buy_dialog]
+    region: [552, 739, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 781, 25]
+      - tap: [593, 781, "${material_shovel_sets:2}"]
+      - wait: 0.5
+
+  - name: 一鍵購買：鏟子今天買過了 → 歸零
+    require: [label_material_buy_dialog]
+    absent: [label_material_limit_zero]
+    region: [552, 739, 22, 24]
+    when_option: chores_material=true
+    max_fires: 1
+    do:
+      - tap: [472, 781, 25]
+      - wait: 0.5
+
+  - name: 一鍵購買：組數調好了 → 購買
+    # 上面八條每列各有一條成立，全部用完才輪到這裡。
+    # ⚠ 四列都設 0 的話總價是 0，按下去會怎樣還沒實機看過。
+    require: [label_material_buy_dialog]
+    when_option: chores_material=true
+    max_fires_daily: 1
+    do:
+      - tap: [490, 900]
+      - wait: 3
+
+  - name: 一鍵購買彈窗還開著 → 取消關掉
+    # 買完、或開關關著卻停在彈窗上時關掉它。
+    # ⚠ 用 sustain 不用 cooldown：按下購買之後若跳確認框或獎勵，標題列可能還露在
+    #   後面，立刻按取消會點到那個框上。
+    require: [label_material_buy_dialog]
+    sustain: 5
+    do:
+      - tap: [229, 900]
+      - wait: 2
+
+  - name: 素材祕境 → 開一鍵購買
+    # 買完（或今天已經買過）退出彈窗之後，這頁沒有規則成立，由兜底的
+    # 「誤入次要頁面」按返回退回筆記頁（返回鍵 1.000）。
+    # 模板實測本頁 1.000、其餘 ≤0.659。
+    template: btn_material_one_click
+    when_option: chores_material=true
+    max_fires: 1
+    cooldown: 4
+    do:
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 筆記頁 → 進素材祕境
+    # 模板只裁卡片上的「素材祕境」字，不裁插圖與角落的數字徽章。
+    # 實測筆記頁 1.000、其餘 ≤0.608。
+    template: card_material_realm
+    when_option: chores_material=true
     max_fires: 1
     cooldown: 5
     do:

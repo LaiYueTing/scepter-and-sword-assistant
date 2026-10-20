@@ -426,6 +426,16 @@ rules:
       - tap_match: []
       - wait: 2.5
 
+  - name: 公會島右下角的累積獎勵 → 順手領走
+    # 說明見 chores.yaml 的同名規則。
+    template: btn_guild_mine_reward
+    require: [label_nav_guild_on]
+    region: [500, 880, 220, 160]
+    max_fires: 1
+    do:
+      - tap_match: []
+      - wait: 2
+
   - name: 公會島看到遠征之門 → 點進去
     # 門的位置會隨視角左右浮動，所以一定要用 tap_match，不能寫死座標。
     #

@@ -392,9 +392,12 @@ rules:
     #   徽章，分數只有 0.85。
     # ⚠ 用 cooldown 不用 max_fires：一輪會打好幾場，中途可能把當前難度打到 S 而開放
     #   下一級。240 秒約是一場的時間。
+    # 已確認在最高難度（這一級是 S、更高的被戰力擋住）之後不再檢查，每場省下約 9 秒
+    # 的「跳過去再退回來」。打到 S 而開放下一級時，「下一難度可以解鎖」會清掉旗標。
     template: tab_lock
     require: [anchor_dungeon_detail]
     region: [140, 1180, 580, 80]
+    when_flag: ["!已在最高難度"]
     pick: first
     cooldown: 240
     do:

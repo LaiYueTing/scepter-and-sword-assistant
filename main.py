@@ -345,7 +345,7 @@ def cmd_scan(args) -> int:
     for p in files:
         img = vision.imread_unicode(p)
         try:
-            m = vision.find(img, args.template, args.threshold)
+            m = vision.find(img, args.template, args.threshold, hint=False)
         except FileNotFoundError as e:
             print(f"[失敗] {e}")
             return 1
@@ -675,7 +675,7 @@ def cmd_find(args) -> int:
         print(f"[失敗] {e}")
         return 1
 
-    matches = vision.find_all(screen, args.template, args.threshold)
+    matches = vision.find_all(screen, args.template, args.threshold, hint=False)
     print(f"最佳分數：{s:.3f}（門檻 {args.threshold}）")
     for m in matches:
         print(f"  {m.score:.3f}  中心 ({m.center[0]}, {m.center[1]})  左上 ({m.x}, {m.y})")

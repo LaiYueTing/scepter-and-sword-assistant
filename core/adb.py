@@ -9,6 +9,7 @@ from __future__ import annotations
 import random
 import shutil
 import re
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -114,6 +115,7 @@ class Device:
         self.height = cfg.device.height
         self.serial = cfg.device.target      # 可能是 auto，connect 時才定案
         self._spec_logged = False            # 裝置規格只報告一次，見 _verify_spec
+        self._raw_capture = True             # 原始格式截圖可用；解析失敗一次就改用 PNG
 
     # ---------- 底層指令 ----------
 
@@ -291,9 +293,37 @@ class Device:
     # ---------- 截圖 ----------
 
     def screencap(self) -> np.ndarray:
-        """抓取一張畫面，回傳 OpenCV BGR 影像。
+        """擷取一張畫面，回傳 OpenCV BGR 影像。
 
-        用 `exec-out` 直接取得 binary stdout，避開 shell 重導向會插入 BOM、
+        先用原始格式（不壓縮，約 0.3 秒）；格式不符時改用 PNG（模擬器端要先壓縮，
+        約 0.8 秒），之後這台裝置都用 PNG。兩種格式的像素完全相同。
+        """
+        if self._raw_capture:
+            img = self._screencap_raw()
+            if img is not None:
+                return img
+            self._raw_capture = False
+            log.debug("原始格式截圖無法解析，改用 PNG")
+        return self._screencap_png()
+
+    def _screencap_raw(self) -> np.ndarray | None:
+        """原始格式：檔頭（寬、高、像素格式，新版多一個色彩空間）＋ RGBA 像素。
+
+        像素格式不是 RGBA_8888（1）或長度對不上就回傳 None。
+        """
+        raw = self._run_device(["exec-out", "screencap"]).stdout
+        if len(raw) < 12:
+            return None
+        w, h, fmt = struct.unpack("<III", raw[:12])
+        size = w * h * 4
+        header = len(raw) - size
+        if fmt != 1 or header not in (12, 16):
+            return None
+        rgba = np.frombuffer(raw, np.uint8, count=size, offset=header).reshape(h, w, 4)
+        return cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+
+    def _screencap_png(self) -> np.ndarray:
+        """PNG 格式。用 `exec-out` 直接取得二進位輸出，避開 shell 重導向會插入 BOM、
         把 \\n 換成 \\r\\n 而破壞 PNG 的問題。
         """
         proc = self._run_device(["exec-out", "screencap", "-p"])

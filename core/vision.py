@@ -12,6 +12,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import yaml
 
 from . import logger
 from .config import resource_file
@@ -77,6 +78,28 @@ def load_template(name: str) -> np.ndarray:
     )
 
 
+@lru_cache(maxsize=1)
+def _search_regions() -> dict[str, Region]:
+    """固定 UI 元素的預設搜尋範圍（templates/search_regions.yaml），由
+    tools/gen_search_regions.py 從樣本產生。
+
+    全畫面彩色比對一次約 60ms，而導覽列、返回鍵這類元素永遠在同一塊區域；
+    只在那一塊找可以把每一輪的判斷時間降到幾分之一。沒列在表上的模板照舊掃全畫面。
+    """
+    path = resource_file("templates", "search_regions.yaml")
+    if not path.is_file():
+        return {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {name: tuple(r) for name, r in raw.items()}
+
+
+def search_region(template: str | np.ndarray, region: Region | None) -> Region | None:
+    """呼叫端沒指定 region 時，換成模板的預設搜尋範圍（沒有就是全畫面）。"""
+    if region or not isinstance(template, str):
+        return region
+    return _search_regions().get(Path(template).stem)
+
+
 def _crop(screen: np.ndarray, region: Region | None) -> tuple[np.ndarray, int, int]:
     """裁切搜尋區域，回傳 (影像, x 偏移, y 偏移)。"""
     if not region:
@@ -95,10 +118,16 @@ def find(
     template: str | np.ndarray,
     threshold: float = 0.85,
     region: Region | None = None,
+    hint: bool = True,
 ) -> Match | None:
-    """在畫面中尋找模板，回傳分數最高且超過門檻的結果。"""
+    """在畫面中尋找模板，回傳分數最高且超過門檻的結果。
+
+    `region` 省略時使用模板的預設搜尋範圍；`hint=False` 強制掃全畫面（除錯用）。
+    """
     name = template if isinstance(template, str) else "<array>"
     tmpl = load_template(template) if isinstance(template, str) else template
+    if hint:
+        region = search_region(template, region)
 
     area, ox, oy = _crop(screen, region)
     th, tw = tmpl.shape[:2]
@@ -119,10 +148,13 @@ def find_all(
     threshold: float = 0.85,
     region: Region | None = None,
     max_results: int = 20,
+    hint: bool = True,
 ) -> list[Match]:
-    """尋找所有符合的位置，重疊結果會被抑制。"""
+    """尋找所有符合的位置，重疊結果會被抑制。`region` 與 `hint` 同 find。"""
     name = template if isinstance(template, str) else "<array>"
     tmpl = load_template(template) if isinstance(template, str) else template
+    if hint:
+        region = search_region(template, region)
 
     area, ox, oy = _crop(screen, region)
     th, tw = tmpl.shape[:2]

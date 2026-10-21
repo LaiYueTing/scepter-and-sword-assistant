@@ -61,13 +61,18 @@ def _quiet_disposed(record: logging.LogRecord) -> bool:
       型別名稱。所以要問 `exc_info[0].__name__`。兩次修錯的症狀完全一樣：
       「明明加了過濾，traceback 還是每次都印」。
 
-    ⚠ 只擋這一種已知的雜訊，pywebview 其他的錯誤照樣留著。
+    另一則是結束時的「Failed to delete user data folder」：WebView2 的行程還沒結束，
+    暫存資料夾刪不掉，下次啟動照常使用，不影響功能。
+
+    ⚠ 只擋這兩種已知的雜訊，pywebview 其他的錯誤照樣留著。
     """
     exc = record.exc_info
     if exc and exc[0] is not None:
         if "ObjectDisposedException" in getattr(exc[0], "__name__", ""):
             return False
-    return "ObjectDisposedException" not in record.getMessage()
+    message = record.getMessage()
+    return ("ObjectDisposedException" not in message
+            and "Failed to delete user data folder" not in message)
 
 
 def _allow_taskbar_minimize(window) -> None:

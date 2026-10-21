@@ -117,7 +117,7 @@ rules:
       smooth: 15
       # 填人數即可，引擎依換算式轉成單位數。
       at_least_players: "${raid_join_players:10}"
-      log: 順序條單位數
+      log: 順序條
     when_option: wait_for_others
     sustain: 20          # 讓平滑視窗填滿，也避開順序條剛好排滿的瞬間值
     max_fires: 3

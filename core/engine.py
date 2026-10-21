@@ -630,9 +630,16 @@ class Engine:
         if self._options_logged:
             return
         self._options_logged = True
+        # 同一個開關停用的規則合成一行，關掉一整段功能時才不會連印十幾行。
+        groups: dict[str, list[str]] = {}
         for rule in disabled:
-            log.info("略過規則「%s」（需要設定 %s）", rule.name,
-                     _option_reason(rule.when_option))
+            groups.setdefault(_option_reason(rule.when_option), []).append(rule.name)
+        for reason, names in groups.items():
+            if len(names) == 1:
+                log.info("略過規則「%s」（需要設定 %s）", names[0], reason)
+            else:
+                log.info("略過 %d 條規則（需要設定 %s）：「%s」等", len(names), reason,
+                         names[0])
 
     def reset(self) -> None:
         """重置執行狀態，讓同一個引擎可以再跑一輪（每日排程用）。"""
@@ -1010,16 +1017,30 @@ class Engine:
                 #   長得一模一樣，真正在動的數值反而看不出來。
                 # 平滑值滯後於畫面，所以單幀讀數與視窗填了幾格要一起寫：兩者
                 # 差很多而視窗還沒填滿，就是「讀數還在追畫面」而不是量錯了。
-                trace = _measure_trace(raw, filled, window, rule.measure)
-                if first:
-                    log.info("%s：%s（%s門檻 %s，%s）", label,
-                             _measure_text(value, rule.measure), trace,
-                             describe_measure(rule.measure),
-                             "符合" if ok else "不符合")
+                spec = rule.measure
+                people = spec.get("at_least_players", spec.get("at_most_players"))
+                if people is not None:
+                    # 門檻用人數設定時，人數寫在最前面（設定檔填的就是人數），
+                    # 單位數與平滑的診斷資料放在後面。
+                    detail = f"量測：{value:.1f} 個單位"
+                    if window > 1:
+                        detail += f"，單幀 {raw:.1f}、樣本 {filled}/{window}"
+                    result = "已達到" if ok else "未達到"
+                    head = f"{label}估計約 {max(0.0, players_for_units(value)):.1f} 人"
+                    if first:
+                        log.info("%s（門檻 %g 人，%s）　%s", head, float(people), result, detail)
+                    else:
+                        log.info("%s（%s）　%s", head, result, detail)
                 else:
-                    log.info("%s：%s（%s%s）", label,
-                             _measure_text(value, rule.measure), trace,
-                             "符合" if ok else "不符合")
+                    trace = _measure_trace(raw, filled, window, spec)
+                    if first:
+                        log.info("%s：%s（%s門檻 %s，%s）", label,
+                                 _measure_text(value, spec), trace,
+                                 describe_measure(spec), "符合" if ok else "不符合")
+                    else:
+                        log.info("%s：%s（%s%s）", label,
+                                 _measure_text(value, spec), trace,
+                                 "符合" if ok else "不符合")
         return ok
 
     def _match_rule(self, screen: np.ndarray) -> tuple[Rule, Match | None] | None:

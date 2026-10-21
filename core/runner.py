@@ -469,8 +469,9 @@ class Runner:
             # ⚠ 子項目用「・」起頭，不要用全形空格縮排。那是等寬終端機的排版思維，
             #   而紀錄面板是比例字型，補出來的空白只會歪成一格突兀的空隙。
             for task in tasks:
-                log.info("・%s ── %s，完成 %s 次就換下一個腳本",
-                         self._title(task), task.describe(), task.repeat or "不限")
+                log.info("・%s ── %s，%s", self._title(task), task.describe(),
+                         f"完成 {task.repeat} 次就換下一個腳本" if task.repeat
+                         else "次數不限，由腳本判斷何時結束")
             if not any(t.times or t.weekly for t in tasks):
                 log.info("・沒有任何腳本設定執行時間，這一輪跑完就結束")
 

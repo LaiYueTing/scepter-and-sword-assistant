@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""`tap: [x, y, 次數]` 連點，以及素材祕境的組數照設定點。
+"""`tap: [x, y, 次數]` 連點，以及 `top_up` 把組數補到設定值。
 
     python tests/test_tap_repeat.py
 
-一鍵購買的組數是「先按 − 歸零、再按 + 設定的次數」，點錯次數就是多買或少買。
-這支守著：第三個數字就是點幾下、0 不點、沒寫就點一下，以及腳本裡的
-`${material_*_sets:2}` 真的換成設定檔的值。
+素材祕境的一鍵購買是「讀出今天已買幾組 → 按 − 歸零 → 按 + 補差額」，算錯就是
+多買或少買。這支守著：差額算對、已經買夠就不加也不設旗標、讀不到就不買，
+以及 OCR 尾巴多一個字（2/201）時仍然取對已買數。
 
-不碰模擬器：Device 換成假的，只記錄點了哪裡。
+不碰模擬器也不跑 OCR：Device 換成假的，ocr.read 換成固定回傳。
 """
 import os
 import sys
@@ -20,11 +20,9 @@ os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import numpy as np
 
-import core.engine as engine_mod
+from core import ocr
 from core.config import Config
-from core.engine import Engine, Script
-
-engine_mod.TAP_REPEAT_GAP = 0           # 測試不必真的等
+from core.engine import Engine, Script, TOP_UP_CLEAR
 
 ok = True
 
@@ -43,40 +41,57 @@ class FakeDevice:
     def tap(self, x, y, *a, **k):
         self.taps.append((x, y))
 
+    def tap_repeat(self, x, y, times):
+        self.taps += [(x, y)] * times
+
     def screencap(self):
         return np.zeros((1280, 720, 3), dtype=np.uint8)
 
 
-def taps_of(actions, options=None):
+def run(actions, read_text="", options=None):
+    ocr.read = lambda *a, **k: read_text
     dev = FakeDevice()
     eng = Engine(dev, Script.load("chores", options or {}))
     eng._execute(actions, dev.screencap(), None)
-    return dev.taps
+    return dev.taps, eng._flags
 
 
-check("沒寫次數：點一下", taps_of([{"tap": [10, 20]}]) == [(10, 20)])
-check("次數 3：點三下", taps_of([{"tap": [10, 20, 3]}]) == [(10, 20)] * 3)
-check("次數 0：不點", taps_of([{"tap": [10, 20, 0]}]) == [])
+check("沒寫次數：點一下", run([{"tap": [10, 20]}])[0] == [(10, 20)])
+check("次數 3：點三下", run([{"tap": [10, 20, 3]}])[0] == [(10, 20)] * 3)
+check("次數 0：不點", run([{"tap": [10, 20, 0]}])[0] == [])
 
-opts = {"chores_material": True, "material_hammer_sets": 5, "material_pickaxe_sets": 0}
+opts = {"chores_material": True, "material_hammer_sets": 5, "material_pickaxe_sets": 2}
 rules = {r.name: r for r in Script.load("chores", opts).rules}
+hammer = rules["一鍵購買：鐵鎚補到設定的組數"].actions
+pick = rules["一鍵購買：十字鎬補到設定的組數"].actions
+MINUS, PLUS = (472, 445), (593, 445)
 
-hammer = rules["一鍵購買：鐵鎚今天還沒買 → 調成設定的組數"]
-taps = taps_of(hammer.actions, opts)
-minus, plus = taps.count((472, 445)), taps.count((593, 445))
-check("鐵鎚設 5：先按 − 25 下歸零，再按 + 5 下", (minus, plus) == (25, 5), f"− {minus}、+ {plus}")
-check("歸零排在加之前", taps.index((593, 445)) > 24)
+taps, flags = run(hammer, "今日限購:0/20|", opts)
+check("鐵鎚設 5、今天 0：先歸零再加 5",
+      (taps.count(MINUS), taps.count(PLUS)) == (TOP_UP_CLEAR, 5) and taps.index(PLUS) == TOP_UP_CLEAR,
+      f"− {taps.count(MINUS)}、+ {taps.count(PLUS)}")
+check("要買就設旗標", "素材有要買的" in flags)
 
-pick = rules["一鍵購買：十字鎬今天還沒買 → 調成設定的組數"]
-taps = taps_of(pick.actions, opts)
-check("十字鎬設 0：只歸零不加", taps.count((593, 557)) == 0 and taps.count((472, 557)) == 25)
+taps, flags = run(hammer, "今日限購:3/20|", opts)
+check("鐵鎚設 5、今天已買 3：只補 2", taps.count(PLUS) == 2)
 
-glove = rules["一鍵購買：拳套今天還沒買 → 調成設定的組數"]
-taps = taps_of(glove.actions, opts)
-check("拳套沒設：用預設 2", taps.count((593, 669)) == 2, f"+ {taps.count((593, 669))}")
+taps, flags = run(pick, "今日限購:2/201", opts)
+check("十字鎬設 2、已買 2（尾巴多一個 1）：不加、不設旗標",
+      taps.count((593, 557)) == 0 and not flags)
+
+taps, flags = run(hammer, "今日限購:12/20", opts)
+check("已買兩位數 12：設 5 也不加", taps.count(PLUS) == 0 and not flags)
+
+taps, flags = run(hammer, "", opts)
+check("讀不到：只歸零、不加、不設旗標",
+      taps.count(MINUS) == TOP_UP_CLEAR and taps.count(PLUS) == 0 and not flags)
+
+glove = rules["一鍵購買：拳套補到設定的組數"].actions
+taps, _ = run(glove, "今日限購:0/20", opts)
+check("拳套沒設：用預設 2", taps.count((593, 669)) == 2)
 
 buy = rules["一鍵購買：組數調好了 → 購買"]
-check("購買一天只按一次（跨執行保留）", buy.max_fires_daily == 1)
+check("購買要有旗標、一天只按一次", buy.when_flag == ["素材有要買的"] and buy.max_fires_daily == 1)
 
 print()
 print("全部通過" if ok else "有項目失敗")

@@ -227,125 +227,81 @@ rules:
   # 十字鎬、拳套、鏟子（對應鐵石、黃金、怪物、砂石四個洞），每列有「今日限購：N/20」
   # 與組數加減鈕，最下面「購買 ✦總價」一次買齊。
   #
-  # 組數遊戲會記住，但不讀它：先按「−」25 下歸零（最低就是 0），再按「+」設定的
-  # 次數。「+」最多到 20 減掉今天已買的，再按只會跳「今日的購買次數已達到上限」。
-  # 單價逐組遞增（每列 2 組 200、18 組 5050 晨星）。
+  # 每列用 top_up 讀出今天已買幾組，把組數調成「設定 − 已買」：設定是「每天最多
+  # 買幾組」，手動先買過的也算進去。「−」最低到 0，「+」最多到 20 減掉今天已買的。
+  # 四列都不必買就不按購買，直接取消。購買另外綁 max_fires_daily: 1 當第二道保險。
   #
-  # 防多買兩道：
-  #   1. 每列先看已買數是不是 0，是才調成設定的組數，不是就調成 0。
-  #   2. 按下購買用 max_fires_daily: 1，下午那輪或補跑都不會再買。
-  #
-  # ⚠ 已買數的判斷是「已買數那一格是 0」：模板是從「/20」的 0 裁的（同字型），
-  #   region 只框已買數那一格（x 552～574）。實測那格是 2 時 0.484、合成的 0 是 1.000。
-  #   字串是置中的，已買數變兩位數時整串左移約半個字，那一格裡就不是完整的 0，
-  #   判成「已買過」——方向是安全的。
+  # ⚠ 四條 top_up 一定要排在購買前面：購買靠它們設的旗標決定要不要按。
 
-  - name: 一鍵購買：四列今天都買過了 → 取消
+  - name: 一鍵購買：鐵鎚補到設定的組數
     require: [label_material_buy_dialog]
-    absent: [label_material_limit_zero]
-    region: [552, 403, 22, 360]
-    cooldown: 3
-    do:
-      - log: 素材今天都買過了
-      - tap: [229, 900]
-      - wait: 2
-
-  - name: 一鍵購買：鐵鎚今天還沒買 → 調成設定的組數
-    template: label_material_limit_zero
-    require: [label_material_buy_dialog]
-    region: [552, 403, 22, 24]
     when_option: chores_material=true
     max_fires: 1
     do:
-      - tap: [472, 445, 25]
-      - tap: [593, 445, "${material_hammer_sets:2}"]
+      - top_up:
+          label: 鐵鎚
+          read: [466, 404, 132, 24]
+          minus: [472, 445]
+          plus: [593, 445]
+          target: "${material_hammer_sets:2}"
+          flag: 素材有要買的
       - wait: 0.5
 
-  - name: 一鍵購買：鐵鎚今天買過了 → 歸零
+  - name: 一鍵購買：十字鎬補到設定的組數
     require: [label_material_buy_dialog]
-    absent: [label_material_limit_zero]
-    region: [552, 403, 22, 24]
     when_option: chores_material=true
     max_fires: 1
     do:
-      - tap: [472, 445, 25]
+      - top_up:
+          label: 十字鎬
+          read: [466, 516, 132, 24]
+          minus: [472, 557]
+          plus: [593, 557]
+          target: "${material_pickaxe_sets:2}"
+          flag: 素材有要買的
       - wait: 0.5
 
-  - name: 一鍵購買：十字鎬今天還沒買 → 調成設定的組數
-    template: label_material_limit_zero
+  - name: 一鍵購買：拳套補到設定的組數
     require: [label_material_buy_dialog]
-    region: [552, 515, 22, 24]
     when_option: chores_material=true
     max_fires: 1
     do:
-      - tap: [472, 557, 25]
-      - tap: [593, 557, "${material_pickaxe_sets:2}"]
+      - top_up:
+          label: 拳套
+          read: [466, 628, 132, 24]
+          minus: [472, 669]
+          plus: [593, 669]
+          target: "${material_glove_sets:2}"
+          flag: 素材有要買的
       - wait: 0.5
 
-  - name: 一鍵購買：十字鎬今天買過了 → 歸零
+  - name: 一鍵購買：鏟子補到設定的組數
     require: [label_material_buy_dialog]
-    absent: [label_material_limit_zero]
-    region: [552, 515, 22, 24]
     when_option: chores_material=true
     max_fires: 1
     do:
-      - tap: [472, 557, 25]
-      - wait: 0.5
-
-  - name: 一鍵購買：拳套今天還沒買 → 調成設定的組數
-    template: label_material_limit_zero
-    require: [label_material_buy_dialog]
-    region: [552, 627, 22, 24]
-    when_option: chores_material=true
-    max_fires: 1
-    do:
-      - tap: [472, 669, 25]
-      - tap: [593, 669, "${material_glove_sets:2}"]
-      - wait: 0.5
-
-  - name: 一鍵購買：拳套今天買過了 → 歸零
-    require: [label_material_buy_dialog]
-    absent: [label_material_limit_zero]
-    region: [552, 627, 22, 24]
-    when_option: chores_material=true
-    max_fires: 1
-    do:
-      - tap: [472, 669, 25]
-      - wait: 0.5
-
-  - name: 一鍵購買：鏟子今天還沒買 → 調成設定的組數
-    template: label_material_limit_zero
-    require: [label_material_buy_dialog]
-    region: [552, 739, 22, 24]
-    when_option: chores_material=true
-    max_fires: 1
-    do:
-      - tap: [472, 781, 25]
-      - tap: [593, 781, "${material_shovel_sets:2}"]
-      - wait: 0.5
-
-  - name: 一鍵購買：鏟子今天買過了 → 歸零
-    require: [label_material_buy_dialog]
-    absent: [label_material_limit_zero]
-    region: [552, 739, 22, 24]
-    when_option: chores_material=true
-    max_fires: 1
-    do:
-      - tap: [472, 781, 25]
+      - top_up:
+          label: 鏟子
+          read: [466, 740, 132, 24]
+          minus: [472, 781]
+          plus: [593, 781]
+          target: "${material_shovel_sets:2}"
+          flag: 素材有要買的
       - wait: 0.5
 
   - name: 一鍵購買：組數調好了 → 購買
-    # 上面八條每列各有一條成立，全部用完才輪到這裡。
-    # ⚠ 四列都設 0 的話總價是 0，按下去會怎樣還沒實機看過。
+    # ⚠ 用 tap_template 不用固定座標：它會重新抓畫面，彈窗萬一已經關了就不點。
+    #   固定座標曾在彈窗被關掉之後點進砂石礦洞。
     require: [label_material_buy_dialog]
     when_option: chores_material=true
+    when_flag: 素材有要買的
     max_fires_daily: 1
     do:
-      - tap: [490, 900]
+      - tap_template: btn_material_buy
       - wait: 3
 
   - name: 一鍵購買彈窗還開著 → 取消關掉
-    # 買完、或開關關著卻停在彈窗上時關掉它。
+    # 不必買、已經買完、或開關關著卻停在彈窗上時關掉它。
     # ⚠ 用 sustain 不用 cooldown：按下購買之後若跳確認框或獎勵，標題列可能還露在
     #   後面，立刻按取消會點到那個框上。
     require: [label_material_buy_dialog]

@@ -312,6 +312,9 @@ class Script:
                     arg = action.get(verb)
                     if arg:
                         settable |= {arg} if isinstance(arg, str) else set(arg)
+                top_up = action.get("top_up")
+                if isinstance(top_up, dict) and top_up.get("flag"):
+                    settable.add(top_up["flag"])
         for rule in rules:
             missing = sorted({f.lstrip("!") for f in rule.when_flag} - settable)
             if missing:
@@ -381,8 +384,8 @@ def resolve_vars(node: Any, options: dict[str, Any]) -> Any:
 # 的載入約十幾秒），不是用來等一場戰鬥——等不到就往下走，別把收尾卡住。
 WAIT_FOR_TIMEOUT = 25.0
 
-# `tap: [x, y, 次數]` 連點時每下之間隔多久。太快的話遊戲會吃掉幾下。
-TAP_REPEAT_GAP = 0.3
+# `top_up` 先把組數按「−」歸零，按這麼多下。遊戲的組數上限是 20。
+TOP_UP_CLEAR = 25
 
 
 def _as_index(pick: Any) -> int | None:
@@ -1183,10 +1186,9 @@ class Engine:
             if x is None:
                 log.warning("tap 需要 [x, y] 兩個座標，收到：%s", arg)
             else:
-                times = int(arg[2]) if len(arg) >= 3 else 1
-                for i in range(times):
-                    if i and self._sleep(TAP_REPEAT_GAP):
-                        break
+                if len(arg) >= 3:
+                    d.tap_repeat(x, y, int(arg[2]))
+                else:
                     d.tap(x, y)
 
         elif verb == "tap_template":
@@ -1351,6 +1353,41 @@ class Engine:
             if line != self._last_log_text:
                 self._last_log_text = line
                 log.info("%s", line)
+
+        elif verb == "top_up":
+            # 讀出「今天已經買了幾組」，把加減鈕調成「設定 − 已買」，不會多買。
+            #
+            # 寫法：
+            #   top_up:
+            #     label: 鐵鎚
+            #     read: [466, 404, 132, 24]    「今日限購：N/20」那一行
+            #     minus: [472, 445]
+            #     plus: [593, 445]
+            #     target: "${material_hammer_sets:2}"
+            #     flag: 素材有要買的          真的要買時設這個旗標
+            #
+            # 先按「−」歸零（最低 0）再按「+」補差額，所以不必知道遊戲記住的組數。
+            # ⚠ 讀不到就歸零、這一列不買。OCR 只取冒號與斜線之間的數字：放大 4 倍時
+            #   會把右邊的按鈕邊緣讀成多一個「1」（2/201），倍率 3 八列全對。
+            from core import ocr
+
+            spec = dict(arg or {})
+            label = spec.get("label", "")
+            text = ocr.read(d.screencap(), tuple(spec["read"]), scale=3)
+            d.tap_repeat(*spec["minus"], TOP_UP_CLEAR)
+            m = re.search(r"[:：]\s*(\d{1,2})\s*/", text)
+            if not m:
+                log.warning("%s：讀不到今天已經買了幾組（讀到「%s」），這一列不買",
+                            label, text or "")
+                return
+            done, target = int(m.group(1)), int(spec["target"])
+            need = max(0, target - done)
+            if need:
+                d.tap_repeat(*spec["plus"], need)
+                if spec.get("flag"):
+                    self._flags.add(spec["flag"])
+            log.info("%s：今天已買 %d 組，設定 %d 組，%s", label, done, target,
+                     f"這次買 {need} 組" if need else "不必再買")
 
         elif verb == "log_match":
             # 把「畫面上是哪一種」寫進紀錄。給一組「顯示文字 → 模板」，挑分數

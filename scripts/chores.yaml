@@ -487,10 +487,29 @@ rules:
 
   - name: 標題畫面 → 點擊開始遊戲
     template: [label_title_menu, label_tap_to_start]
+    sustain: 3
     cooldown: 5
+    max_fires: 10
     do:
-      - tap: [360, 1050]
+      - tap: [360, 900]
       - wait: 3
+
+  - name: 標題畫面點了沒有反應 → 重新啟動遊戲
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    max_fires: 1
+    do:
+      - screenshot: title_stuck
+      - reset_fires: [標題畫面 → 點擊開始遊戲]
+      - restart_app: 45
+
+  - name: 重新啟動後仍停在標題畫面 → 結束本輪
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    do:
+      - log: 標題畫面點擊沒有反應，重新啟動遊戲後仍然一樣，結束本輪
+      - screenshot: title_stuck_after_restart
+      - finish: skip_cleanup
 
   - name: 遊戲啟動中 → 等開場動畫
     template: label_boot_logo

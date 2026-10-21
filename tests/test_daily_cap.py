@@ -38,14 +38,14 @@ def check(name: str, passed: bool) -> None:
 
 
 cfg = Config.load(ROOT / "dist" / "config.yaml")
-KEY = "arena/排位挑戰彈窗 → 按下入場鍵"
+KEY = "arena/排位挑戰對話框 → 按下入場鍵"
 BACKUP = dailystate.PATH.read_bytes() if dailystate.PATH.exists() else None
 
 
 def fresh(cap: int = 3):
     """載入一份新的 arena 腳本（模擬「重新執行程式」）。"""
     sc = Script.load("arena", {**cfg.options, "arena_max_battles": cap})
-    return [r for r in sc.rules if r.name.startswith("排位挑戰彈窗")][0]
+    return [r for r in sc.rules if r.name.startswith("排位挑戰對話框")][0]
 
 
 def fire(rule, n: int) -> int:
@@ -83,7 +83,7 @@ try:
     e._waiting_name, e._waiting_block_start = None, 0.0
     e._stop, e._finishing, e._last_log_text = False, False, ""
     e.reset()
-    r3 = [x for x in sc.rules if x.name.startswith("排位挑戰彈窗")][0]
+    r3 = [x for x in sc.rules if x.name.startswith("排位挑戰對話框")][0]
     check("reset 之後仍然是 3", r3._today == 3)
     check("其他規則的 max_fires 有被歸零",
           all(x._fires == 0 for x in sc.rules))

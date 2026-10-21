@@ -79,8 +79,8 @@ print(f"  [通過] 三次點在不同對手上：x = {x1} → {x2} → {x3}")
 
 # 第四次：三格都用完了，該收工。收工那條有 sustain，把計時往前撥當作已經等夠久
 # （selftest 對有 sustain 的規則也是這樣驗的）。
-name, _ = step(e, LIST_PAGE, sustained="連續三場都打不贏 → 收工")
-check(name, "連續三場都打不贏 → 收工", "三場都輸就收工")
+name, _ = step(e, LIST_PAGE, sustained="連續三場都落敗 → 結束本輪")
+check(name, "連續三場都落敗 → 結束本輪", "三場都輸就收工")
 
 print()
 print("=== 2. 贏了要回到第一順位 ===")
@@ -116,9 +116,9 @@ e = Engine.__new__(Engine); e.script, e.cfg, e.device = script, cfg, None
 POPUP = "samples/arena_rank_dialog.png"
 for i in (1, 2):
     name, _ = step(e, POPUP)
-    check(name, "排位挑戰彈窗 → 按下入場鍵", f"第 {i} 場照常入場")
+    check(name, "排位挑戰對話框 → 按下入場鍵", f"第 {i} 場照常入場")
 name, _ = step(e, POPUP)
-check(name, "今天打夠了 → 關掉彈窗收工", "第 3 場改成收工")
+check(name, "今日場次已達上限 → 關閉對話框並結束本輪", "第 3 場改成收工")
 
 print()
 print("=== 5. reset_fires 指到不存在的規則要在載入時就報錯 ===")

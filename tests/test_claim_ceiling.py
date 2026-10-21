@@ -108,7 +108,7 @@ e = new_engine()
 e._flags.add("明天開新副本")
 check(step(e, DETAIL_S, busy=[MATCHING]), "明天開新副本 → 先把領獎次數買滿",
       "詳情頁先去買次數")
-check(step(e, RESULT_S), "明天開新副本 → 今天不領獎，打完這一場就收工",
+check(step(e, RESULT_S), "明天開放新副本 → 今天不領獎，打完這一場就結束本輪",
       "結算頁不領獎")
 
 print()

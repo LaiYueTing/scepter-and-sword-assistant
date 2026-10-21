@@ -49,8 +49,8 @@ def fixed(day: datetime):
 cfg = Config.load(ROOT / "config.example.yaml")
 SAMPLE = ROOT / "samples" / "arena_rank_dialog.png"
 MON_RULE = "週一開新一期 → 有券就打，不受每日場次上限"
-CAP_RULE = "排位挑戰彈窗 → 按下入場鍵"
-DONE_RULE = "今天打夠了 → 關掉彈窗收工"
+CAP_RULE = "排位挑戰對話框 → 按下入場鍵"
+DONE_RULE = "今日場次已達上限 → 關閉對話框並結束本輪"
 
 
 def winner(day: datetime, battled_today: int, **opts) -> str:

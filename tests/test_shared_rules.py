@@ -1,6 +1,6 @@
-"""五份腳本共用的開機與兜底規則，每一份都要有。
+"""五份腳本共用的開機與後備規則，每一份都要有。
 
-漏掉一份完全不會現形：那份腳本只是在某張畫面上沒有人認得，於是掉進兜底空按
+漏掉一份完全不會現形：那份腳本只是在某張畫面上沒有人認得，於是掉進後備規則空按
 返回鍵——紀錄上看起來像「遊戲那邊怪怪的」。實測 arena 就這樣少了「帳號在其他
 用戶端登入」與「卡在未知畫面」兩條，直到把五份的規則名稱排在一起比對才發現。
 
@@ -42,7 +42,7 @@ SHARED = [
 ]
 
 # 這一條在該份腳本裡刻意不同：虛空裂縫要從使用者自己組好隊伍的活動地圖開始，
-# 停在家園代表沒得做，「回家園重來」對它沒有意義——它改成「家園 → 收工」兩條。
+# 停在家園代表沒得做，「回家園重來」對它沒有意義——它改成「家園 → 結束本輪」兩條。
 EXEMPT = {"rift": {"停在無法處理的畫面 → 回家園重新開始"}}
 
 ok = True
@@ -66,16 +66,16 @@ for shared in SHARED:
     if missing:
         print("       缺：" + "、".join(missing))
 
-# ⚠ 兜底鏈最後兩條的 absent 必須**完全一樣**。少列任何一個，重開遊戲那條就會在
-#   那個畫面上誤觸發——而重開一次要 152 秒。
+# ⚠ 後備規則鏈最後兩條的 absent 必須**完全一樣**。少列任何一個，重新啟動遊戲那條就會在
+#   那個畫面上誤觸發——而重新啟動一次要 152 秒。
 for name in SCRIPTS:
     back = rules[name]["完全無法辨識 → 按系統返回鍵"]
     restart = rules[name]["持續無法脫困 → 重新啟動遊戲"]
-    check(f"{name}：重開遊戲那條的 absent 和上一條一樣",
+    check(f"{name}：重新啟動遊戲那條的 absent 和上一條一樣",
           set(back.get("absent") or []) == set(restart.get("absent") or []))
-    # ⚠ 上一條一定要有 max_fires，否則它每輪都成立、永遠輪不到重開那條。
+    # ⚠ 上一條一定要有 max_fires，否則它每輪都成立、永遠輪不到重新啟動那條。
     check(f"{name}：按返回鍵那條有 max_fires", bool(back.get("max_fires")))
-    check(f"{name}：重開遊戲那條有 max_fires", bool(restart.get("max_fires")))
+    check(f"{name}：重新啟動遊戲那條有 max_fires", bool(restart.get("max_fires")))
 
 print()
 print("全部通過" if ok else "有項目失敗")

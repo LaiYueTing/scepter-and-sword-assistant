@@ -8,7 +8,7 @@
 
   1. 等待中被塞進來 → 立刻醒來跑它，跑完回去等原本的下一個時刻（不是結束）
   2. 正在跑別的腳本時塞進來 → 接在那一輪後面，不打斷正在打的那一場
-  3. 塞進來的那一輪**不讓位**（`until=None`）：那是使用者明確要求的，排定時刻在
+  3. 塞進來的那一輪**不讓出執行權**（`until=None`）：那是使用者明確要求的，排定時刻在
      中途到了也讓它打完
 
 ⚠ selftest 涵蓋不到（那支驗的是規則），這裡把 Engine 與 Device 換成假的。
@@ -114,7 +114,7 @@ def main() -> int:
     check("虛空裂縫真的跑了", "虛空裂縫" in names)
     check("跑完之後回到等待，排程沒有結束", back_waiting)
     until = dict(runs).get("虛空裂縫", "沒跑")
-    check("塞進來的那一輪不讓位（until=None）", until is None, f"until={until}")
+    check("塞進來的那一輪不讓出執行權（until=None）", until is None, f"until={until}")
 
     print("正在跑別的腳本時塞進來 → 接在那一輪後面")
     runs, was_waiting, _ = drive(hold=3.0, inject_after=0.8)

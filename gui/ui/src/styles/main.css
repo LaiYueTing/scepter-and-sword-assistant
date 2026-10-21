@@ -171,7 +171,7 @@ textarea,
 /*
  * ⚠ **按鈕和核取方塊用的是不同的機制**，一條規則蓋不住兩邊：核取方塊是
  *   `box-shadow`，而按鈕是套在 `.n-button__state-border` 上的 **border**。
- *   我第一次只寫了 box-shadow，按鈕上那圈紫色邊框完全沒消失——量出來才知道：
+ *   只寫 box-shadow 的話按鈕的焦點框不會消失，按鈕的值是：
  *
  *       .n-button__state-border  border: 1px solid rgb(124, 92, 255)
  *

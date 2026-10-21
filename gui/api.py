@@ -27,8 +27,8 @@ from .bridge import Channel
 
 log = logger.get("gui")
 
-# 關視窗時等收尾的上限。收尾要逐層退出頁面，每步之間有等待動畫的時間，
-# dungeon 那份是 2.5×3＋2 秒；留 30 秒有餘裕，卡住也不會讓視窗關不掉。
+# 關視窗時等結束程序的上限。結束程序要逐層退出頁面，每步之間有等待動畫的時間，
+# dungeon 那份是 2.5×3＋2 秒；留 30 秒有裕度，卡住也不會讓視窗關不掉。
 CLOSE_TIMEOUT = 30
 
 
@@ -87,8 +87,7 @@ class Api:
         nxt = t.next_run()
         return {
             "name": t.name,
-            # 中文名直接取自腳本的 `name:`，不另外維護對照表——維護兩份就會有
-            # 不一致的那天，這個專案在改名時已經現形過一次。
+            # 中文名直接取自腳本的 `name:`，不另外維護對照表。
             "title": optionmeta.task_label(t.name),
             "enabled": t.enabled,
             "repeat": t.repeat,
@@ -362,7 +361,7 @@ class Api:
           排程等待中 → 叫醒它先跑這個，跑完回去等原本的下一個時刻
           正在跑別的腳本 → 接在那一輪後面，不打斷正在打的副本或討伐
 
-        ⚠ 收尾中不收。停止要求已經送出去了，塞進去的那一輪沒有人會跑到，
+        ⚠ 結束程序執行中不收。停止要求已經送出去了，塞進去的那一輪沒有人會跑到，
           而介面上看起來會像「按了沒反應」。
         """
         name = str(params.get("task") or "")
@@ -379,7 +378,7 @@ class Api:
     def run_cancel(self, params: dict) -> dict:
         """中斷 run_now 塞進去的那一份（虛空裂縫），排程照常。
 
-        正在跑的立刻結束、不跑收尾；還在排隊的拿掉。整個排程要停用 `stop`。
+        正在跑的立刻結束、不跑結束程序；還在排隊的拿掉。整個排程要停用 `stop`。
         """
         name = str(params.get("task") or "")
         if not name or not self.is_running():
@@ -393,14 +392,14 @@ class Api:
         if not self.is_running():
             raise RuntimeError("沒有在執行")
         self._runner.request_stop()
-        # ⚠ 收尾期間的等待不能被打斷，所以這裡不等它。按下停止到真正結束實測
+        # ⚠ 結束程序期間的等待不能被打斷，所以這裡不等它。按下停止到真正結束實測
         #   14～18 秒，介面要出聲，否則看起來像當掉。這一句只是開頭，接下來
-        #   引擎會逐步把「收尾中　第 N 步」推上來蓋掉它。
-        self._channel.send("status", "停止中，正在執行收尾動作 ⋯")
+        #   引擎會逐步把「結束程序執行中　第 N 步」推上來蓋掉它。
+        self._channel.send("status", "停止中，正在執行結束程序 ⋯")
         return {}
 
     def join(self, params: dict) -> dict:
-        """等收尾跑完。關視窗時用，逾時就放棄。"""
+        """等結束程序跑完。關視窗時用，逾時就放棄。"""
         if self.is_running():
             self._runner.join(timeout=float(params.get("timeout") or 30))
         return {"running": self.is_running()}
@@ -662,7 +661,7 @@ class Api:
         """使用者按了自繪的 ✕。決定要問、要縮、還是要結束。
 
         ⚠ **不用系統原生的對話框問。** 那是強制回應的，會把整個視窗凍住——而按下
-          結束之後還要跑十幾秒的收尾，那段期間狀態列與紀錄面板都要繼續更新。
+          結束之後還要跑十幾秒的結束程序，那段期間狀態列與紀錄面板都要繼續更新。
           所以把問題丟回前端，由它自繪的對話框處理。
         """
         choice = uistate.get("on_close")
@@ -687,12 +686,12 @@ class Api:
         return self.win_quit({})
 
     def win_quit(self, _: dict) -> dict:
-        """真的要結束：先跑完收尾，再關視窗。
+        """真的要結束：先跑完結束程序，再關視窗。
 
-        ⚠ **收尾不能在這條呼叫裡等完。** 前端還在等這個 Promise，而收尾要逐層退回
+        ⚠ **結束程序不能在這條呼叫裡等完。** 前端還在等這個 Promise，而結束程序要逐層退回
           家園、每步之間有等動畫的時間（dungeon 那份是 2.5×3＋2 秒）。擋在這裡的話
           畫面整段不會更新，看起來就是當掉。
-          所以開執行緒做，前端立刻收到 `closing` 事件去顯示「正在執行收尾動作」。
+          所以開執行緒做，前端立刻收到 `closing` 事件去顯示「正在執行結束程序」。
         """
         self._channel.send("closing", None)
 
@@ -702,7 +701,7 @@ class Api:
                 self._runner.join(timeout=CLOSE_TIMEOUT)
             # ⚠ **拆視窗之前一定要先收掉通道。** `destroy()` 不會觸發 `closing`
             #   事件（那是給「使用者關視窗」用的），所以外殼那邊的 `channel.close()`
-            #   在這條路上不會跑到。少了這一行，收尾期間還會有紀錄往 `evaluate_js`
+            #   在這條路上不會跑到。少了這一行，結束程序期間還會有紀錄往 `evaluate_js`
             #   送，而 WebView2 已經被處置——pywebview **自己 log 完才吞掉**那個
             #   `ObjectDisposedException`，我們的 try/except 接不到，於是二十幾行
             #   .NET traceback 一路寫進 assistant.log 和使用者的終端機。
@@ -710,7 +709,7 @@ class Api:
             try:
                 self._win().destroy()
             except Exception:
-                pass        # 視窗已經沒了就算了，反正接下來就是收工
+                pass        # 視窗已經關閉就略過，接下來程式就要結束
 
         threading.Thread(target=work, daemon=True).start()
         return {}

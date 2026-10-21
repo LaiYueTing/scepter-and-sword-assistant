@@ -24,7 +24,7 @@ export const useHostStore = defineStore('host', {
     daily: { date: '', rows: [], path: '' },
 
     running: false,
-    closing: false, // 正在收尾，按鈕全部要停用
+    closing: false, // 正在執行結束程序，按鈕全部要停用
     // 「虛空裂縫」按下去之後、還沒跑完之前為 true（排隊中或執行中），中斷鈕看它
     riftPending: false,
     status: '待命中',
@@ -135,11 +135,11 @@ export const useHostStore = defineStore('host', {
             this.ready = false
             // ⚠ **已經有說明就不要蓋掉。** `busy`（拿不到防多開的鎖）之後後端會
             //   正常結束，緊接著就來一則 exit——先寫的那句「助手已經在執行中」
-            //   才是使用者要看的，而 exit 只知道「代碼 0」。照順序覆寫的話，
+            //   才是使用者要看的，而 exit 只知道「結束碼 0」。照順序覆寫的話，
             //   唯一講得出原因的那句話會被最沒有資訊的那句取代。
             if (!this.closing && !this.fatal) {
               this.fatal =
-                data.text || `後端結束了（代碼 ${data.code}）。詳細原因請看紀錄檔。`
+                data.text || `後端已結束（結束碼 ${data.code}），詳細原因請看紀錄檔。`
             }
             break
         }
@@ -147,7 +147,7 @@ export const useHostStore = defineStore('host', {
 
       api.app.onClosing(() => {
         this.closing = true
-        this.status = '停止中，正在執行收尾動作 ⋯'
+        this.status = '停止中，正在執行結束程序 ⋯'
       })
 
       // ⚠ **主動拉一次，不要只等 `ready` 事件。** 拉得到就代表後端活著，拉不到

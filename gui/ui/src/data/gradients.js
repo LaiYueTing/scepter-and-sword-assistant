@@ -234,7 +234,7 @@ const SCRIM_ALPHA_LIGHT = 0.58
  */
 const CARD_ALPHA = 0.84
 
-/** 小字的門檻，多留一點餘裕給四捨五入。 */
+/** 小字的門檻，多留一點裕度給四捨五入。 */
 const TARGET = 4.6
 void TARGET
 
@@ -328,7 +328,7 @@ export function appearanceFor(id, isDark = true) {
  * 把外觀套到 `<html>` 上。
  *
  * ⚠ **一定要 inline 設在根節點。** CSS 變數是繼承下去的，設在 `<html>` 才會一路傳到
- *   還沒建立出來的元件（naive-ui 的彈窗是後來才 mount 到 body 的）。
+ *   還沒建立出來的元件（naive-ui 的對話框是後來才 mount 到 body 的）。
  *
  * ⚠ **深淺模式切換時要整個重套。** 明度階梯與遮罩在兩種模式下是反的，只換
  *   `data-theme` 而不重算會得到「淺色的底配深色的字」。

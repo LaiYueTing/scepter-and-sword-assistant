@@ -2,7 +2,7 @@
 
 運作方式是「看到什麼就做什麼」，而不是寫死一串固定操作：
 每一輪抓一張畫面，由上而下檢查規則的觸發條件，執行第一條成立的規則。
-這種寫法對彈窗、掉線、載入延遲等意外狀況天生有抵抗力。
+這種寫法能應付突然跳出的對話框、斷線、載入延遲等意外狀況。
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ class Rule:
     # 重置，拿它當每日上限的話，補跑或手動重跑就會重新計數（設 3 場跑兩輪＝6 場）。
     # ⚠ 只在「那個數字畫面上看不到」時才用，細節見 core/dailystate.py。
     max_fires_daily: int = 0
-    # 條件必須「持續成立」這麼多秒才真的觸發。兜底規則一定要設，否則畫面轉場
+    # 條件必須「持續成立」這麼多秒才真的觸發。後備規則一定要設，否則畫面轉場
     # 那一瞬間就會被當成「卡住了」而誤動作。
     sustain: float = 0.0
 
@@ -164,17 +164,17 @@ class Rule:
 
 @dataclass
 class Script:
-    """一份腳本：規則表，加上收尾動作與脫困門檻。"""
+    """一份腳本：規則表，加上結束程序與脫困門檻。"""
 
     name: str
     package: str | None
     rules: list[Rule]
-    # 整輪跑完（收工或達到次數）後無條件執行的收尾動作，例如回到家園待命。
+    # 一輪結束（腳本結束或達到次數）後無條件執行的動作，例如回到家園待命。
     # 無條件執行代表沒有 template 守著畫面是什麼，所以裡面只能用 tap_template。
     on_finish: list[dict[str, Any]] = field(default_factory=list)
     # 畫面靜止這麼多秒就按返回鍵脫困
     stuck_timeout: float = 90.0
-    # 一輪最多跑幾分鐘，0 表示不限。這是「規則彼此打架而無限循環」的安全網——
+    # 一輪最多跑幾分鐘，0 表示不限。這是「規則互相觸發而無限循環」的安全網——
     # 那種情況畫面一直在變，stuck_timeout 永遠不會成立，排程會被整個擋住。
     # ⚠ 只給「一輪本來就該很短」的腳本設。副本要打十幾分鐘、討伐等人要半小時，
     #   設了會在戰鬥中途被切斷。
@@ -290,8 +290,8 @@ class Script:
                         f"規則「{rule.name}」的 reset_fires 指到不存在的規則："
                         + "、".join(missing))
 
-        # finish 只收兩種寫法：空的（跑收尾）與 skip_cleanup（不跑）。打錯字的話
-        # 收尾照跑，而那正是「看起來沒事」的那種錯——在載入時就擋下來。
+        # finish 只收兩種寫法：空的（跑結束程序）與 skip_cleanup（不跑）。打錯字的話
+        # 結束程序照跑，而那正是「看起來沒事」的那種錯——在載入時就擋下來。
         for rule in rules:
             for action in rule.actions:
                 if "finish" not in action:
@@ -381,7 +381,7 @@ def resolve_vars(node: Any, options: dict[str, Any]) -> Any:
 
 
 # `wait_for` 最多等幾秒。這個動作是用來跨過換頁與載入的空檔（實測討伐加入戰鬥後
-# 的載入約十幾秒），不是用來等一場戰鬥——等不到就往下走，別把收尾卡住。
+# 的載入約十幾秒），不是用來等一場戰鬥——等不到就往下走，別把結束程序卡住。
 WAIT_FOR_TIMEOUT = 25.0
 
 # `top_up` 先把組數按「−」歸零，按這麼多下。遊戲的組數上限是 20。
@@ -590,10 +590,10 @@ class Engine:
         self.dry_run = dry_run          # 只判斷不操作，用來驗證規則
         self.completed = 0
         self.cfg = device.cfg
-        # 兩層停止旗標，語意不同：_stop 是「這一輪跑完了」（次數到、腳本收工），
+        # 兩層停止旗標，語意不同：_stop 是「這一輪跑完了」（次數到或腳本結束），
         # stop_event 是外部要求整個程式結束（GUI 按下停止、視窗關閉）。
         # 分開才不會在 reset() 準備下一輪時，把使用者剛按下的停止清掉。
-        self.yielded = False        # 上一輪是不是「讓位」而不是自己收工
+        self.yielded = False        # 上一輪是讓出執行權，而不是腳本自己結束
         self._stop = False
         self._stop_event = stop_event or threading.Event()
         self._finishing = False         # 正在跑 on_finish，此時等待不可被打斷
@@ -603,8 +603,8 @@ class Engine:
         self._status_hook = status_hook
         self._last_change = time.time()
         self._prev_frame: np.ndarray | None = None
-        self._until: datetime | None = None      # 到這個時刻就讓位給下一個腳本
-        self._yielded_now = False                # yield_if_due 剛讓位，_execute 要中斷
+        self._until: datetime | None = None      # 到這個時刻就讓出執行權給下一個腳本
+        self._yielded_now = False                # yield_if_due 剛讓出執行權，_execute 要中斷
         self._waiting_name: str | None = None
         self._waiting_block_start = 0.0  # 這一整段「沒有動作」是何時開始的
         self._waiting_logged = 0.0       # 上次寫心跳到紀錄檔的時間
@@ -663,13 +663,13 @@ class Engine:
     # ---------- 主迴圈 ----------
 
     def run(self, until: datetime | None = None) -> int:
-        """跑到腳本收工。`until` 是「下一個排程時刻」，到了就讓位。
+        """執行到這一輪結束。`until` 是「下一個排程時刻」，到了就讓出執行權。
 
-        ⚠ 沒有 `until` 的話，永不收工的腳本會把排程整個擋住，而紀錄上看起來
+        ⚠ 沒有 `until` 的話，永遠不會結束的腳本會把排程整個擋住，而紀錄上看起來
           一切正常。
 
-        ⚠ 讓位的檢查點是 `count` 動作與 `yield_if_due` 動作，不是每一輪。時間到
-          就當場停的話很可能停在戰鬥中途，收尾會把人退出戰鬥、那次次數就白費了。
+        ⚠ 讓出執行權的檢查點是 `count` 動作與 `yield_if_due` 動作，不是每一輪。時間到
+          就當場停的話很可能停在戰鬥中途，結束程序會把人退出戰鬥、那次次數就白費了。
           只靠 `count` 不夠：副本「未達 S → 退出重打」那條路不經過 `count`，
           連打幾十場都拿不到 S 的日子，時刻過了幾小時它都不知道。所以腳本要在
           「下一場還沒開始」的位置（按下配對之前）放 `yield_if_due`。
@@ -688,7 +688,7 @@ class Engine:
 
                 over = self.script.max_minutes * 60
                 if over and time.time() - started > over:
-                    log.warning("已經跑了 %.0f 分鐘還沒收工，先收尾讓位給下一個腳本",
+                    log.warning("已執行 %.0f 分鐘仍未結束，執行結束程序並讓出執行權給下一個腳本",
                                 self.script.max_minutes)
                     break
 
@@ -737,10 +737,10 @@ class Engine:
         self._stop = True
 
     def abort(self) -> None:
-        """使用者中斷這一輪：立刻結束，而且不跑收尾。
+        """使用者中斷這一輪：立刻結束，而且不跑結束程序。
 
         給「只中斷這一份、排程照常」的按鈕用（虛空裂縫）。中斷是人在旁邊按的，
-        畫面留在哪裡他看得到；收尾反而會在地圖上空等 25 秒找家園。
+        畫面留在哪裡他看得到；結束程序反而會在地圖上空等 25 秒找家園。
         """
         self._skip_cleanup = True
         self._stop = True
@@ -749,8 +749,8 @@ class Engine:
         """可被中斷的等待，回傳「是否被要求停止」。GUI 沒有 Ctrl+C 可送，
         所以等待本身要醒得過來。
 
-        ⚠ 收尾期間例外，一律睡好睡滿。停止的當下 stop_event 已經是 set 的，
-          若收尾的等待跟著立刻返回，逐層退場的每一步就會擠在一起送出——那些
+        ⚠ 結束程序期間例外，一律睡好睡滿。停止的當下 stop_event 已經是 set 的，
+          若結束程序的等待跟著立刻返回，逐層退場的每一步就會擠在一起送出——那些
           等待正是在讓換頁動畫跑完，少了它會把上一頁的座標點在新頁上。
         """
         if self._finishing:
@@ -759,12 +759,12 @@ class Engine:
         return self._stop_event.wait(seconds)
 
     def _run_on_finish(self) -> None:
-        """跑完一輪後的收尾，例如回到家園待命，方便下一輪或人工接手。
+        """跑完一輪後的結束程序，例如回到家園待命，方便下一輪或人工接手。
 
-        不另外寫「執行收尾動作」：on_finish 的第一個動作就是自己的 log。
+        不另外寫「執行結束程序」：on_finish 的第一個動作就是自己的 log。
 
-        ⚠ **逐步回報進度給狀態列。** 收尾實測要 14～18 秒（那些 `wait` 是在讓
-          換頁動畫跑完，省不掉），而狀態列若停在一句不動的「正在執行收尾動作」，
+        ⚠ **逐步回報進度給狀態列。** 結束程序實測要 14～18 秒（那些 `wait` 是在讓
+          換頁動畫跑完，省不掉），而狀態列若停在一句不動的「正在執行結束程序」，
           使用者看到的就是「按下停止之後當掉了」——回報就是這樣來的。
           只要那行字一直在變，同樣的 15 秒就不會被當成當機。
         """
@@ -775,10 +775,10 @@ class Engine:
             screen = self.device.screencap()
             steps = self.script.on_finish
             for i, action in enumerate(steps, 1):
-                self._emit_status(f"收尾中　第 {i} 步，共 {len(steps)} 步")
+                self._emit_status(f"結束程序執行中　第 {i} 步，共 {len(steps)} 步")
                 self._execute([action], screen, None)
-        except Exception as e:                      # 收尾失敗不該影響主要結果
-            log.warning("收尾動作未完成：%s", e)
+        except Exception as e:                      # 結束程序失敗不該影響主要結果
+            log.warning("結束程序未完成：%s", e)
         finally:
             self._finishing = False
 
@@ -910,7 +910,7 @@ class Engine:
         # 旗標排在最前面：不成立時連 sustain 的計時都不該累加。
         # ⚠ selftest 借用這個函式（Engine.__new__，沒跑 __init__），那種引擎沒有
         #   旗標可查。那支是一張畫面一張畫面地驗規則，本來就沒有「上一頁看到
-        #   什麼」，所以一律當成成立，不要讓它把好規則判成落空。
+        #   什麼」，所以一律當成成立，不要讓它把好規則判成不成立。
         flags = getattr(self, "_flags", None)
         # 星期幾同理：selftest 的結果不能跟著跑測試那天是星期幾變。
         if (rule.when_weekday and flags is not None
@@ -1112,8 +1112,8 @@ class Engine:
         # 數字＝由左數來第幾個（1 起算）。橫排的同類元素（競技場的四個對手）
         # 用 first / last 只表達得了兩端，而中間那幾個也是有意義的選擇。
         #
-        # ⚠ 超出範圍時取最靠近的那一端，不要落空。畫面上有幾個是遊戲決定的，
-        #   而規則落空會讓後面的兜底搶著動作。
+        # ⚠ 超出範圍時取最靠近的那一端，避免規則不成立。畫面上有幾個是遊戲決定的，
+        #   而規則不成立會讓後面的後備規則搶先動作。
         nth = _as_index(rule.pick)
         if nth is not None:
             ordered = sorted(found, key=lambda m: m.x)
@@ -1142,14 +1142,14 @@ class Engine:
             self._last_change = time.time()
 
     def _yield_if_due(self) -> bool:
-        """排定時刻到了就讓位（回傳 True），沒到什麼都不做。"""
+        """排定時刻到了就讓出執行權（回傳 True），沒到什麼都不做。"""
         if not (self._until and datetime.now() >= self._until):
             return False
-        log.info("已到下一個排程時刻，這一輪先收工讓位")
+        log.info("已到下一個排程時刻，先結束這一輪並讓出執行權")
         self._stop = True
-        # ⚠ 讓位和「自己收工」要分得出來。讓位代表**該做的還沒做完**
+        # ⚠ 讓出執行權和腳本自己結束要分得出來。讓出執行權代表**該做的還沒做完**
         #   （次數還有、獎勵還沒領），排程那邊要把它排回去，等這一波
-        #   排定時刻與補跑清完再接著跑。少了這個記號，副本讓位一次就
+        #   排定時刻與補跑清完再接著跑。少了這個記號，副本讓出執行權一次就
         #   等於整天只打到一半——而紀錄上每一行都正常。
         self.yielded = True
         return True
@@ -1164,7 +1164,7 @@ class Engine:
                     continue
                 self._do(verb, arg, screen, match)
                 if self._yielded_now:
-                    # yield_if_due 讓位了：這條規則剩下的動作（多半是按配對）不做
+                    # yield_if_due 讓出執行權了：這條規則剩下的動作（多半是按配對）不做
                     self._yielded_now = False
                     return
 
@@ -1239,32 +1239,30 @@ class Engine:
         elif verb == "restart_app":
             # 最後手段：關掉遊戲再開起來，讓畫面回到「開機 → 家園」這條認得的路。
             #
-            # 兜底按系統返回鍵解決不了兩種畫面：**返回鍵無效的結算頁**（只能點
+            # 後備規則按系統返回鍵解決不了兩種畫面：**返回鍵無效的結算頁**（只能點
             # 空白處），以及**按返回鍵反而會叫出來的確認框**——後者會變成開開關關
             # 的死循環（實測有使用者卡在「要退出觀戰狀態嗎?」17 分鐘、空按 26 次）。
             # 不認得的畫面永遠會有新的，所以要有一條不靠模板的退路。
             #
-            # ⚠ 只掛在兜底鏈的**最後一條**，而且前面那條要先用掉 max_fires。
-            #   重開遊戲要 152 秒，不該在「其實再等一下就會好」的時候動用。
+            # ⚠ 只掛在後備規則鏈的**最後一條**，而且前面那條要先用掉 max_fires。
+            #   重新啟動遊戲要 152 秒，不該在「其實再等一下就會好」的時候動用。
             pkg = self.script.package
             if not pkg:
-                log.warning("腳本沒有指定 package，無法重開遊戲")
+                log.warning("腳本沒有指定 package，無法重新啟動遊戲")
             else:
-                # ⚠ 訊息要中性。這個動作有兩個用途（兜底脫困、遊戲要求更新後
-                #   重開），寫死其中一個的話另一條路上的紀錄就是假的；為什麼要
-                #   重開，觸發的規則名稱那一行已經說了。
+                # ⚠ 訊息要中性。這個動作有兩個用途（後備規則脫困、遊戲要求更新後
+                #   重新啟動），寫死其中一個的話另一條路上的紀錄就是假的；為什麼要
+                #   重新啟動，觸發的規則名稱那一行已經說了。
                 log.warning("重新啟動遊戲")
                 d.stop_app(pkg)
                 self._sleep(3)
                 d.launch_app(pkg)
-                # ⚠ 這裡要等到**過得了全黑那段**。遊戲重開後前 35 秒是全黑，
-                #   什麼模板都認不到——而兜底的條件（那些模板全都不在）在黑畫面
-                #   上一直成立。等太短就會在還沒開起來時又觸發一次重開，
-                #   而且永遠escape不了：實測有使用者 08:03 卡進去，每 30 秒重開
-                #   一次，跑了一個多小時還在原地。
+                # ⚠ 這裡要等到**過得了全黑那段**。遊戲重新啟動後前 35 秒是全黑，
+                #   什麼模板都認不到——而後備規則的條件（那些模板全都不在）在黑畫面
+                #   上一直成立。等太短就會在還沒開起來時又觸發一次重新啟動，形成迴圈。
                 self._sleep(float(arg) if arg else 45)
-                # ⚠ 畫面已經被我們自己換掉了，所有 sustain 的計時都要歸零。
-                #   `sustain` 累加的依據是「條件連續成立多久」，而黑畫面讓兜底
+                # ⚠ 畫面是這個動作自己換掉的，所有 sustain 的計時都要歸零。
+                #   `sustain` 累加的依據是「條件連續成立多久」，而黑畫面讓後備規則
                 #   的條件持續為真——不歸零的話下一輪就又滿了。
                 for rule in self.script.rules:
                     rule._since = 0.0
@@ -1275,7 +1273,7 @@ class Engine:
             #
             # `on_finish` 是無條件清單，沒辦法用規則去等一個畫面，而換頁前後常有
             # 幾秒的載入——固定 `wait:` 只能猜：猜短了整串動作全部空點，猜長了
-            # 每一次收尾都白等。這個動作在畫面認得出來的那一刻就返回。
+            # 每一次結束程序都白等。這個動作在畫面認得出來的那一刻就返回。
             #
             # ⚠ 這不是拿來等一場戰鬥或一次配對的。逾時就直接往下走，不報錯——
             #   後面的 tap_template 本來就是「找不到就不點」。
@@ -1308,11 +1306,11 @@ class Engine:
         elif verb == "count":
             self.completed += 1
             log.info("完成第 %d 次", self.completed)
-            # 打完一場是最安全的讓位時機（見 run 的說明）
+            # 打完一場是最安全的讓出執行權時機（見 run 的說明）
             self._yield_if_due()
 
         elif verb == "yield_if_due":
-            # 腳本標出來的安全讓位點（見 run 的說明）。讓位了就不再執行這條規則
+            # 腳本標出來的安全讓出執行權的位置（見 run 的說明）。讓出執行權了就不再執行這條規則
             # 剩下的動作，由 _execute 看這個旗標中斷。
             self._yielded_now = self._yield_if_due()
 
@@ -1402,7 +1400,7 @@ class Engine:
             # 規則該做的事照做，少一張模板不會讓流程卡住。
             #
             # ⚠ region 幾乎一定要給。單一個字母不框住的話，畫面別處的深色圖形
-            #   也可能比中。
+            #   也可能比對成功。
             screen = d.screencap()
             parts = []
             for label, spec in (arg or {}).items():
@@ -1429,7 +1427,7 @@ class Engine:
             # 把指定規則的 max_fires 計數歸零，讓它可以再觸發一次。
             #
             # max_fires 本身就是引擎唯一的「這一輪發生過什麼」的記憶（daily 的
-            # 聖獸／雙影換手就是靠它）。少了歸零的手段，那份記憶只能單向消耗，
+            # 聖獸／雙影交接就是靠它）。少了歸零的手段，那份記憶只能單向消耗，
             # 表達不了「條件變了，重來一次」——競技場的「贏了就回頭挑最強的」
             # 正是這種形狀。
             #
@@ -1453,11 +1451,11 @@ class Engine:
                 self._flags -= names
 
         elif verb == "finish":
-            # 不寫紀錄：觸發的規則名稱（「…→ 收工」）已經說了為什麼要結束，
+            # 不寫紀錄：觸發的規則名稱（「…→ 結束本輪」）已經說了為什麼要結束，
             # 緊接著 on_finish 的第一行還會再說一次「本輪結束」。
             #
-            # `finish: skip_cleanup` 給「連遊戲都進不去」的收工用（伺服器維護中）。
-            # 收尾是逐層退回家園，而那條路上的每一步都先 `wait_for` 25 秒——
+            # `finish: skip_cleanup` 給「連遊戲都進不去」時結束本輪用（伺服器維護中）。
+            # 結束程序是逐層退回家園，而那條路上的每一步都先 `wait_for` 25 秒——
             # 畫面上根本沒有導覽列與返回鍵時，那是純粹的空等，還會留下三行
             # 「畫面上找不到任何模板」看起來像出了事。
             if arg == "skip_cleanup":

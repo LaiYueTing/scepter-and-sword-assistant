@@ -23,7 +23,7 @@ const startDisabled = computed(() => !host.canStart || starting.value)
  *   原因，看起來就是壞了——而使用者不會知道要去按標題列那顆更新。
  */
 const whyDisabled = computed(() => {
-  if (host.closing) return '收尾中：正在逐層退回家園，結束前不能開始新的一輪'
+  if (host.closing) return '結束程序執行中：正在逐層退回家園，結束前不能開始新的一輪'
   if (host.running) return '執行中：已經有一輪在跑了'
   if (host.updateRequired) return `有待安裝的更新：要先更新到 v${host.update.version} 才能開始執行`
   if (!host.ready) return '後端尚未就緒：還在啟動，稍候再試'
@@ -43,14 +43,14 @@ async function run(once) {
 
 /**
  * 虛空裂縫不排程，由這顆按鈕手動觸發。**執行中也按得動**：排程等待期間會叫醒它
- * 先跑這一輪，正在跑別的腳本時就接在那一輪後面。只有收尾中與待更新時鎖住。
+ * 先跑這一輪，正在跑別的腳本時就接在那一輪後面。只有結束程序執行中與待更新時鎖住。
  */
 const riftDisabled = computed(
   () => !host.ready || host.closing || host.updateRequired || riftStarting.value
 )
 
 const riftHint = computed(() => {
-  if (host.closing) return '收尾中：結束前不能開始新的一輪'
+  if (host.closing) return '結束程序執行中：結束前不能開始新的一輪'
   if (host.updateRequired) return `有待安裝的更新：要先更新到 v${host.update.version} 才能開始執行`
   if (!host.ready) return '後端尚未就緒：還在啟動，稍候再試'
   return '把虛空裂縫剩下的場次打完，打完自動離開地圖。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
@@ -85,9 +85,9 @@ async function rift() {
 async function stop() {
   try {
     await host.stop()
-    // 按下停止到真正結束實測 14～18 秒（收尾要逐層退回家園）。這句話一定要說，
+    // 按下停止到真正結束實測 14～18 秒（結束程序要逐層退回家園）。這句話一定要說，
     // 否則看起來像當掉。
-    message.info('已要求停止，正在執行收尾動作（約 15 秒）⋯')
+    message.info('已要求停止，正在執行結束程序（約 15 秒）⋯')
   } catch (e) {
     message.error(e.message)
   }
@@ -135,7 +135,7 @@ async function stop() {
           <CircleX :size="15" /> 中斷裂縫
         </button>
       </template>
-      只中斷虛空裂縫這一份，排程照常。正在跑的立刻結束、不做收尾，人會留在當時的畫面
+      只中斷虛空裂縫這一份，排程照常。正在跑的立刻結束、不做結束程序，人會留在當時的畫面
     </NTooltip>
 
     <div class="flex-1"></div>

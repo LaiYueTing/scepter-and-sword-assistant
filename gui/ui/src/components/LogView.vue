@@ -85,7 +85,7 @@ async function copy(text) {
     } else {
       const ta = document.createElement('textarea')
       ta.value = text
-      // 放在畫面外，否則捲動位置會被搶走
+      // 放在畫面外，否則捲動位置會被改變
       ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'
       document.body.appendChild(ta)
       ta.select()

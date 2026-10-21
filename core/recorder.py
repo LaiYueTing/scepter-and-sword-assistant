@@ -119,7 +119,7 @@ def load_frames(
     """從已存檔的錄製資料夾讀回關鍵幀（錄製被中斷時用來補做總覽圖）。
 
     先抽樣再讀檔，避免把幾百張全解碼進記憶體。抽樣會濾掉只出現一瞬間的畫面
-    （提示、彈窗），要逐張看完時用 start/count 分批取。
+    （提示、對話框），要逐張看完時用 start/count 分批取。
     """
     files = sorted(folder.glob("*.png"), key=lambda p: int(p.stem.split("_")[0]))
     if not files:

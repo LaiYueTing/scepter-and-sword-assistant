@@ -69,7 +69,7 @@ def check(got, want, what):
     assert got == want, f"預期 {want}，實際 {got}"
 
 
-# 配對那條排在天花板判斷前面（刻意的：不要搶走配對那一輪），所以要把它當成
+# 配對那條排在天花板判斷前面（刻意的：不要搶在配對那一輪前面），所以要把它當成
 # 剛觸發過，才輪得到底下那幾條。
 MATCHING = "副本詳情頁 → 確認副本後配對"
 
@@ -90,7 +90,7 @@ e = new_engine()
 # 配對那條當成剛觸發過，所以會一路落到純攔截——那正好證明三條天花板規則
 # 一條都沒成立（詳情頁上除了它們就只剩攔截了）。
 check(step(e, DETAIL_A, busy=[MATCHING]), "配對中 → 留在原地等待",
-      "只有 A 級：天花板規則全部落空")
+      "只有 A 級：天花板規則全部不成立")
 assert not e._flags, e._flags
 
 print()
@@ -103,7 +103,7 @@ assert not e._flags, f"解鎖後旗標沒清乾淨：{e._flags}"
 print("  [通過] 解鎖後旗標歸零")
 
 print()
-print("=== 5. 新副本明天開放：不領獎、先買次數、打完就收工 ===")
+print("=== 5. 新副本明天開放：不領獎、先買次數、打完就結束本輪 ===")
 e = new_engine()
 e._flags.add("明天開新副本")
 check(step(e, DETAIL_S, busy=[MATCHING]), "明天開新副本 → 先把領獎次數買滿",

@@ -1,10 +1,10 @@
 """`finish: skip_cleanup` 要真的跳過 on_finish，而且只跳這一輪。
 
-伺服器維護中時遊戲根本進不去，而收尾是「逐層退回家園」——每一步都先 wait_for
+伺服器維護中時遊戲根本進不去，而結束程序是「逐層退回家園」——每一步都先 wait_for
 25 秒，在一張沒有導覽列也沒有返回鍵的畫面上那是純粹的空等，還會留下三行
 「畫面上找不到任何模板」看起來像出了事。
 
-selftest 驗不到這條：它一張畫面一張畫面地判斷規則，不會跑到收尾。
+selftest 驗不到這條：它一張畫面一張畫面地判斷規則，不會跑到結束程序。
 """
 import os
 import tempfile
@@ -26,7 +26,7 @@ def check(label, cond):
 
 
 class FakeDevice:
-    """收尾只要一張畫面就跑得起來，內容不重要——這裡驗的是「有沒有跑」。"""
+    """結束程序只要一張畫面就跑得起來，內容不重要——這裡驗的是「有沒有跑」。"""
 
     def __init__(self):
         self.calls = 0
@@ -49,21 +49,21 @@ def new_engine(steps):
     return e
 
 
-# ---------- 一般的 finish：收尾照跑 ----------
+# ---------- 一般的 finish：結束程序照跑 ----------
 e = new_engine([{"log": "本輪結束"}])
 e._do("finish", None, None, None)
 check("一般的 finish 不會設 skip_cleanup", e._skip_cleanup is False)
 check("一般的 finish 會停下這一輪", e._stop is True)
 e._run_on_finish()
-check("一般的 finish 仍然跑收尾", e.device.calls == 1)
+check("一般的 finish 仍然跑結束程序", e.device.calls == 1)
 
-# ---------- finish: skip_cleanup：收尾整段跳過 ----------
+# ---------- finish: skip_cleanup：結束程序整段跳過 ----------
 e = new_engine([{"log": "本輪結束"}])
 e._do("finish", "skip_cleanup", None, None)
 check("skip_cleanup 會設旗標", e._skip_cleanup is True)
 check("skip_cleanup 一樣會停下這一輪", e._stop is True)
 e._run_on_finish()
-check("skip_cleanup 不會去抓畫面，也就不會跑收尾", e.device.calls == 0)
+check("skip_cleanup 不會去抓畫面，也就不會跑結束程序", e.device.calls == 0)
 
 # ---------- 只跳這一輪 ----------
 # ⚠ 排程會拿同一個引擎跑下一輪（Engine.reset()）。旗標沒歸零的話，之後每一輪
@@ -96,7 +96,7 @@ import yaml as _yaml
 
 bad = {
     "name": "測試",
-    "rules": [{"name": "打錯字 → 收工", "template": "nav_home",
+    "rules": [{"name": "打錯字 → 結束本輪", "template": "nav_home",
                "do": [{"finish": "skip-cleanup"}]}],
 }
 orig = engine_mod.resource_file

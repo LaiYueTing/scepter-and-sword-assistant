@@ -110,7 +110,7 @@
    一直播的那兩種：由元件直接掛 class，不經過 hover
    ══════════════════════════════════════════════════════════════════════ */
 
-/* 收尾中的轉圈。`.running` 是「一直轉」，給狀態列那種持續狀態用。 */
+/* 結束程序執行中的轉圈。`.running` 是「一直轉」，給狀態列那種持續狀態用。 */
 .icon-spin {
   animation: ic-spin 0.9s linear infinite;
   animation-play-state: paused;

@@ -5,7 +5,7 @@
 
 這條路 selftest 驗不到——那支是一張畫面判一次規則，而 `wait_for` 只出現在
 `on_finish`（無條件執行的清單，沒有規則會經過它）。要守住的是三件事：
-**看到就立刻往下走**、**看不到會等而不是直接跳過**、**逾時要放行不要卡住收尾**。
+**看到就立刻往下走**、**看不到會等而不是直接跳過**、**逾時要放行不要卡住結束程序**。
 """
 import os
 import sys
@@ -78,7 +78,7 @@ try:
     waited = time.time() - t0
     check(f"等到它出現才返回（{waited:.1f} 秒）", 1.3 <= waited <= 3.0)
 
-    print("=== 3. 逾時要放行，不能把收尾卡住 ===")
+    print("=== 3. 逾時要放行，不能把結束程序卡住 ===")
     old_timeout = eng.WAIT_FOR_TIMEOUT
     eng.WAIT_FOR_TIMEOUT = 1.5
     try:

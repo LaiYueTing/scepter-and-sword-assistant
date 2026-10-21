@@ -131,7 +131,7 @@ export function contrast(a, b) {
  * @param {boolean} lighten true＝往亮的方向找（深色主題的文字）
  */
 /*
- * ⚠ **目標要加一點餘裕。** `hslToCss` 會把 L 四捨五入到小數一位，而二分找到的是
+ * ⚠ **目標要加一點裕度。** `hslToCss` 會把 L 四捨五入到小數一位，而二分找到的是
  *   「剛好 4.50」的那個點——輸出時被捨掉一點，量回來就變成 4.45 而不合格。
  */
 const MARGIN = 0.15

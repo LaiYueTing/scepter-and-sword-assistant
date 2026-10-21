@@ -39,7 +39,7 @@ def check(name: str, passed: bool, detail: str = "") -> None:
 
 
 class ExplodingEngine:
-    """第一輪丟出例外，之後正常收工。"""
+    """第一輪丟出例外，之後正常結束本輪。"""
 
     runs: list[str] = []
 
@@ -58,7 +58,7 @@ class ExplodingEngine:
         if len(ExplodingEngine.runs) == 1:
             raise RuntimeError("假裝這一輪炸了")
         if self._stop_event is not None:
-            self._stop_event.set()      # 第二輪跑完就收工，不要停在等下一個時刻
+            self._stop_event.set()      # 第二輪跑完就結束本輪，不要停在等下一個時刻
         return 0
 
 
@@ -123,7 +123,7 @@ def main() -> int:
     print("任務卡要轉紅，而且不能被「這一輪沒有完成」蓋回去")
     dungeon = [s for n, s in states if n == "dungeon"]
     check("出錯時轉紅", "error" in dungeon)
-    # ⚠ 「這一輪沒有完成」和「次數用盡就收工」長得一模一樣，蓋回去等於把出過事
+    # ⚠ 「這一輪沒有完成」和「次數用盡就結束本輪」長得一模一樣，蓋回去等於把出過事
     #   這件事從畫面上抹掉。
     check("最後停在 error 而不是 done", dungeon[-1] == "error", f"實際：{dungeon}")
     print("介面那一層：失敗訊息不能被「待命中」蓋掉")

@@ -21,7 +21,7 @@ const tone = computed(() => {
     <span class="flex items-center gap-1.5" :class="tone">
       <!--
         ⚠ **執行中用會呼吸的燈號，不要再配一顆圖示。** 兩個都放的話是同一件事講兩次，
-          而狀態列只有 28px 高。其餘狀態是「一次性的結果」（壞了／收尾中／閒著），
+          而狀態列只有 28px 高。其餘狀態是「一次性的結果」（壞了／結束程序執行中／閒著），
           圖示的形狀本身就說得完，不需要一直發光去搶注意力。
       -->
       <span v-if="tone === 'run'" class="nc-dot live" style="--glow: var(--green)"></span>

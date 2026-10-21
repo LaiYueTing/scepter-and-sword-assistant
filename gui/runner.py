@@ -51,11 +51,11 @@ class RunnerThread(threading.Thread):
             error = str(e)
         self.channel.send("running", False)
         # ⚠ **順序不能反。** 介面收到 `running=False` 會把狀態列寫回「待命中」，
-        #   所以先送 `failed` 的那句話活不過幾毫秒——實測使用者的畫面上是
-        #   「待命中」，任務卡卻還停在「執行中」，完全看不出出過事。
+        #   先送 `failed` 的話那句訊息只會停留幾毫秒：狀態列顯示「待命中」、
+        #   任務卡停在「執行中」，看不出發生了錯誤。
         if error:
             self.channel.send("failed", error)
 
     def request_stop(self) -> None:
-        """要求結束。引擎會在一個 tick 內醒來，收尾動作照常跑完。"""
+        """要求結束。引擎會在一個 tick 內醒來，結束程序照常跑完。"""
         self.stop_event.set()

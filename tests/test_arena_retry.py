@@ -66,7 +66,7 @@ def check(got, want, what):
     assert got == want, f"預期 {want}，實際 {got}"
 
 
-print("=== 1. 連輸三場：第一順位 → 退一格 → 再退一格 → 收工 ===")
+print("=== 1. 連輸三場：第一順位 → 退一格 → 再退一格 → 結束本輪 ===")
 e = new_engine()
 name, x1 = step(e, LIST_PAGE); check(name, "競技場頁 → 挑對手", "第一場挑第 1 個")
 step(e, LOSE_PAGE)
@@ -77,10 +77,10 @@ step(e, LOSE_PAGE)
 assert x1 < x2 < x3, f"點擊位置沒有往右移：{x1} {x2} {x3}"
 print(f"  [通過] 三次點在不同對手上：x = {x1} → {x2} → {x3}")
 
-# 第四次：三格都用完了，該收工。收工那條有 sustain，把計時往前撥當作已經等夠久
+# 第四次：三格都用完了，該結束本輪。結束本輪那條有 sustain，把計時往前撥當作已經等夠久
 # （selftest 對有 sustain 的規則也是這樣驗的）。
 name, _ = step(e, LIST_PAGE, sustained="連續三場都落敗 → 結束本輪")
-check(name, "連續三場都落敗 → 結束本輪", "三場都輸就收工")
+check(name, "連續三場都落敗 → 結束本輪", "三場都輸就結束本輪")
 
 print()
 print("=== 2. 贏了要回到第一順位 ===")
@@ -107,8 +107,8 @@ assert x1 == x2, f"應該挑同一格：{x1} vs {x2}"
 print(f"  [通過] 兩場都點在同一個對手上：x = {x1}")
 
 print()
-print("=== 4. 打滿設定的場次就收工 ===")
-# 上限設 2：第三次開彈窗時應該換成「今天打夠了」那條，而且**還沒按下入場鍵**
+print("=== 4. 打滿設定的場次就結束本輪 ===")
+# 上限設 2：第三次開對話框時應該換成「今日場次已達上限」那條，而且**還沒按下入場鍵**
 two = {**OPTIONS, "arena_max_battles": 2}
 script = Script.load("arena", two)
 apply_options(script.rules, two)
@@ -118,7 +118,7 @@ for i in (1, 2):
     name, _ = step(e, POPUP)
     check(name, "排位挑戰對話框 → 按下入場鍵", f"第 {i} 場照常入場")
 name, _ = step(e, POPUP)
-check(name, "今日場次已達上限 → 關閉對話框並結束本輪", "第 3 場改成收工")
+check(name, "今日場次已達上限 → 關閉對話框並結束本輪", "第 3 場改成結束本輪")
 
 print()
 print("=== 5. reset_fires 指到不存在的規則要在載入時就報錯 ===")

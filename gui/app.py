@@ -36,7 +36,7 @@ def web_dir() -> Path:
     return packed if packed.exists() else Path(__file__).parent / "web"
 
 
-# 「已經在執行中」的說明正開著嗎。系統彈窗是阻塞的，連按好幾次會在關掉一個之後
+# 「已經在執行中」的說明正開著嗎。系統對話框是阻塞的，連按好幾次會在關掉一個之後
 # 又跳一個；多的那幾次只把視窗叫到前面就好，那本來就是使用者要的。
 _explaining = threading.Event()
 
@@ -121,7 +121,7 @@ def _wake(window) -> None:
         return
     _explaining.set()
     try:
-        # 理由寫在 core/singleton.py，不放進每次都會跳的彈窗裡。
+        # 理由寫在 core/singleton.py，不放進每次都會跳的對話框裡。
         logger.message_box("杖劍傳說助手",
                            "助手已經在執行中，已切換到原本那個視窗。",
                            logger.MB_INFO)
@@ -143,8 +143,8 @@ def dismiss_tray_hint(channel) -> None:
     """使用者點了那則通知：以後就不再跳。
 
     ⚠ **只寫檔案不夠，畫面也要跟著換。** 「介面設定」那一列讀的是前端載入時抓下來
-      的值，不推事件的話它會一直停在「提醒」，要重開助手才對得上——使用者回報過，
-      而那看起來就像「點了沒有記住」。
+      的值，不推事件的話它會一直停在「提醒」，要重新啟動助手才會更新，
+      看起來就像「點了沒有記住」。
     """
     uistate.set("tray_hint", False)
     channel.send("ui_pref", {"key": "tray_hint", "value": False})
@@ -254,7 +254,7 @@ def main() -> int:
     #
     # 為什麼值得留著：外觀這一類問題「用看的」判斷不了（顏色到底套上去沒有、
     # 對比夠不夠、某個元素的 computed style 是什麼），而猜錯一次的成本是重編、
-    # 重開、再看一眼。
+    # 重新啟動、再看一眼。
     if os.environ.get("SSA_EVAL"):
         def _eval() -> None:
             """跑一段 JS，把結果印到 stderr。
@@ -282,7 +282,7 @@ def main() -> int:
         window.events.loaded += lambda: threading.Timer(3.0, _eval).start()
 
     def on_closing() -> bool:
-        """視窗被關掉（系統的關閉、Alt+F4）時，不要把正在收尾的腳本一起帶走。
+        """視窗被關掉（系統的關閉、Alt+F4）時，不要把正在執行結束程序的腳本一起帶走。
 
         ⚠ 自繪的 ✕ 走的是 `Api.win_close`，不會經過這裡——那條路要先問使用者。
           這裡接的是「繞過介面的關閉」，所以就地把停止要求送出去。

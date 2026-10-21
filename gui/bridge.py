@@ -83,7 +83,7 @@ class Channel:
                 self._window.evaluate_js(f"window.__recv({to_js(events)})")
             except Exception:
                 # 視窗關閉的瞬間仍可能有事件在路上。介面掛掉不該把腳本一起帶走
-                # ——收尾動作還在跑，那才是不能中斷的部分。
+                # ——結束程序還在跑，那才是不能中斷的部分。
                 #
                 # ⚠ **失敗一次就不要再試。** WebView2 被處置之後每一發
                 #   `evaluate_js` 都會丟 .NET 的 `ObjectDisposedException`，而那是

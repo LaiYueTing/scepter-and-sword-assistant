@@ -361,7 +361,7 @@ async function onUpdate() {
 /*
  * 主題圖示靜止在 45°，hover 再轉到 60°。
  * ⚠ **這顆刻意不走 `iconAnim.js` 的那套 hover 動畫。** 那套是「播一輪就停」，
- *   而這裡要的是「停在另一個角度」——兩種動畫疊在同一顆圖示上會互相打架。
+ *   而這裡要的是「停在另一個角度」——兩種動畫疊在同一顆圖示上會互相衝突。
  */
 .theme-i {
   color: var(--accent-text);
@@ -374,7 +374,7 @@ async function onUpdate() {
 /*
  * ⚠ **幅度要看得出來。** 45° → -15° 是 60 度的差距；只差十幾度的話，旁邊那顆
  *   上下彈 3px 的圖示一比就會顯得「這顆沒有效果」。它仍然是**停在另一個角度**
- *   （不是循環動畫），所以不會和 `iconAnim.js` 那套打架。
+ *   （不是循環動畫），所以不會和 `iconAnim.js` 那套互相衝突。
  */
 .iconbtn:hover .theme-i {
   transform: rotate(-15deg) scale(1.08);

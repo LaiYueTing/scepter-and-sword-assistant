@@ -768,7 +768,7 @@ def cmd_tap(args) -> int:
 def _claim_single_instance(gui: bool) -> bool:
     """確認沒有另一個助手在跑。已經有的話把那個視窗叫回前景，並回報 False。
 
-    `gui` 有兩個作用：決定訊息去彈窗還是終端機，以及**要不要開門讓別人叫**——
+    `gui` 有兩個作用：決定訊息去對話框還是終端機，以及**要不要開門讓別人叫**——
     命令列的 run 沒有視窗可叫回，第二個實例要敲不到才知道該自己說明。
 
     ⚠ 只給**會操作裝置**的命令用（兩種介面與 run）。doctor、explain、find、
@@ -799,7 +799,7 @@ def cmd_gui(args) -> int:
     """開圖形介面。不帶任何參數執行時走的也是這裡。
 
     ⚠ 前端資源要先建置：`cd gui/ui && npm run build`。沒建的話這裡會跳一個講清楚
-      該打什麼指令的彈窗，而不是開一個空白視窗。
+      該打什麼指令的對話框，而不是開一個空白視窗。
     """
     splash.close()
     if not _claim_single_instance(gui=True):

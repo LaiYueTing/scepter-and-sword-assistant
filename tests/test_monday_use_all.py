@@ -6,7 +6,7 @@
 ⚠ selftest 驗不到——它的引擎沒有旗標，`when_weekday` 一律當成立（否則結果會
 跟著跑測試那天是星期幾變），而這裡要驗的正是「週一和其他天走不同條規則」。
 
-把 `core.engine.datetime` 換成固定日期的版本，同一張排位挑戰彈窗在週一／週二、
+把 `core.engine.datetime` 換成固定日期的版本，同一張排位挑戰對話框在週一／週二、
 開關開／關、今天已經打滿／還沒打之下，各自該由哪條規則接手。
 """
 import os
@@ -54,7 +54,7 @@ DONE_RULE = "今日場次已達上限 → 關閉對話框並結束本輪"
 
 
 def winner(day: datetime, battled_today: int, **opts) -> str:
-    """在 day 那天、今天已經打了 battled_today 場時，彈窗由哪條規則接手。"""
+    """在 day 那天、今天已經打了 battled_today 場時，對話框由哪條規則接手。"""
     options = {**cfg.options, "arena_max_battles": 3, **opts}
     sc = Script.load("arena", options)
     for rule in sc.rules:
@@ -81,14 +81,14 @@ check("週一、還沒打 → 也是週一那條（不吃每日計數）",
       winner(MONDAY, 0, arena_monday_use_all=True) == MON_RULE)
 
 print("=== 2. 其他天照每日上限 ===")
-check("週二、已打 3 場 → 收工", winner(TUESDAY, 3, arena_monday_use_all=True) == DONE_RULE)
+check("週二、已打 3 場 → 結束本輪", winner(TUESDAY, 3, arena_monday_use_all=True) == DONE_RULE)
 check("週二、還沒打 → 一般那條", winner(TUESDAY, 0, arena_monday_use_all=True) == CAP_RULE)
 
 print("=== 3. 開關沒開（或設定檔沒有這個鍵）就和原本一樣 ===")
-check("週一、開關 false → 收工", winner(MONDAY, 3, arena_monday_use_all=False) == DONE_RULE)
+check("週一、開關 false → 結束本輪", winner(MONDAY, 3, arena_monday_use_all=False) == DONE_RULE)
 opts = {k: v for k, v in cfg.options.items() if k != "arena_monday_use_all"}
 cfg.options = opts
-check("週一、設定檔缺鍵 → 收工", winner(MONDAY, 3) == DONE_RULE)
+check("週一、設定檔缺鍵 → 結束本輪", winner(MONDAY, 3) == DONE_RULE)
 
 print("=== 4. 不打排位時，週一的開關不會自己開打 ===")
 check("crush_arena 關掉 → 週一那條不啟用",

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""`yield_if_due` 動作：時刻到了就讓位，而且不再執行後面的動作。
+"""`yield_if_due` 動作：時刻到了就讓出執行權，而且不再執行後面的動作。
 
     python tests/test_yield_if_due.py
 
 引擎原本只在 `count:` 檢查「排定時刻到了沒」，而副本「未達 S → 退出重打」那條路
 不經過 `count`。實測 2026-09-20 煉獄連打 38 場都沒 S，12:30 的討伐被擋到 13:06
-才讓位。這支守著：時刻已到 → `yielded` 設起來、後面的動作（按配對）不執行；
+才讓出執行權。這支守著：時刻已到 → `yielded` 設起來、後面的動作（按配對）不執行；
 時刻未到 → 照常往下做。
 
 不碰模擬器：Device 換成假的，只記錄被點了幾次。
@@ -55,11 +55,11 @@ def run_actions(until):
 
 
 eng, dev = run_actions(datetime.now() - timedelta(seconds=1))
-check("時刻已到：讓位記號設起來", eng.yielded and eng._stop)
+check("時刻已到：讓出執行權記號設起來", eng.yielded and eng._stop)
 check("時刻已到：後面的動作不執行", dev.taps == 0, f"點了 {dev.taps} 次")
 
 eng, dev = run_actions(datetime.now() + timedelta(hours=1))
-check("時刻未到：不讓位", not eng.yielded and not eng._stop)
+check("時刻未到：不讓出執行權", not eng.yielded and not eng._stop)
 check("時刻未到：後面的動作照常", dev.taps == 1, f"點了 {dev.taps} 次")
 
 eng, dev = run_actions(None)

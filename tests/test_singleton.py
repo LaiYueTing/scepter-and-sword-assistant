@@ -127,7 +127,7 @@ try:
 
     print("=== 7. 連續雙擊：對方還在建視窗時就敲得到門 ===")
     # 這是門要在「取得鎖的當下」開、而不是等視窗建好的理由。晚開的話第二個行程會
-    # 敲不到，誤判成「那一個沒有視窗」而跳出一則說錯原因、還要人按確定的彈窗。
+    # 敲不到，誤判成「那一個沒有視窗」而跳出一則說錯原因、還要人按確定的對話框。
     holder = start_holder(listen=True, delay=2.5)
     started = time.monotonic()
     check("回呼還沒接上就敲得到", singleton.wake_existing() is True)

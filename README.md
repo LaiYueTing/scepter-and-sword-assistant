@@ -89,7 +89,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph D[自動副本 08:00]
+    subgraph D[自動副本 08:05]
         D1[家園] --> D2[筆記] --> D3[日常副本]
         D3 --> D4[選最下面<br/>有評級的副本]
         D4 --> D5{下一難度<br/>可以解鎖？}
@@ -124,7 +124,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph A[自動每日活動 09:30 ／ 自動競技場 每日 08:00]
+    subgraph A[自動每日活動 09:30 ／ 自動競技場 每日 08:05]
         A1[筆記] --> A2[每日活動]
         A2 --> A3[聖獸試煉<br/>配對 → 打完 → 領獎]
         A3 --> A4[雙影幻境<br/>配對 → 準備 → 打完 → 領獎]
@@ -305,7 +305,7 @@ python main.py tap x y                   # 手動點擊，驗證座標
 tasks:
   - name: dungeon              # 自動副本
     enabled: true
-    daily_at: "08:00"          # 次數每天早上 08:00 重置
+    daily_at: "08:05"          # 次數每天早上 08:00 重置；排在 08:00 整會看到昨天的次數
     repeat: 0                  # 0 = 不限次數，打到腳本自己的結束條件
 
   - name: raid                 # 自動公會討伐
@@ -320,8 +320,8 @@ tasks:
 
   - name: arena                # 自動競技場
     enabled: true
-    daily_at: "08:00"          # 每天把券用掉（券每 5 小時回一張，上限 20）
-    weekly_at: "週一 08:00"     # 新一期在週一開始，早點按排名較前面
+    daily_at: "08:05"          # 每天把券用掉（券每 5 小時回一張，上限 20）
+    weekly_at: "週一 08:05"     # 新一期在週一開始，早點按排名較前面
     repeat: 1
 ```
 
@@ -337,8 +337,8 @@ tasks:
 睡到那時候再跑對應的腳本。照上面的設定，從早上七點啟動會是：
 
 ```
-08:00 dungeon → 09:30 daily → 12:30 raid → 21:00 raid → 隔天 08:00 dungeon → ...
-（週一還會多一個 08:00 arena）
+08:05 dungeon → 09:30 daily → 12:30 raid → 21:00 raid → 隔天 08:05 dungeon → ...
+（週一還會多一個 08:05 arena）
 ```
 
 **錯過的時刻會補跑**（`runtime.catch_up`，預設開）。兩種情況：晚上才開程式時，

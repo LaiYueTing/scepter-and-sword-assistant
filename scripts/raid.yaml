@@ -449,6 +449,14 @@ rules:
       - tap_template: btn_confirm
       - wait: 2
 
+  - name: 退出確認對話框 → 確定退出
+    # 副本那一輪中途中斷時留下的結算頁，說明見 dungeon.yaml 的同名規則。
+    template: label_exit_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2.5
+
   - name: 點空白處無法關閉的頁面 → 重新啟動遊戲
     # ⚠ 一定要排在點空白處那條前面。
     template: label_tap_blank_close

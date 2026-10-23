@@ -379,6 +379,14 @@ rules:
       - tap_template: btn_confirm
       - wait: 2
 
+  - name: 退出確認對話框 → 確定退出
+    # 副本那一輪中途中斷時留下的結算頁，說明見 dungeon.yaml 的同名規則。
+    template: label_exit_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2.5
+
   - name: 誤入次要頁面 → 點返回退出
     # ⚠ 用 require ＋ absent 而不是 template：競技頁與競技場頁都有返回鍵，用 template
     #   的話 sustain 會跨頁累積，進到競技場頁時已經累積滿，比「沒有待辦項目」先觸發

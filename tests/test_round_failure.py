@@ -99,7 +99,11 @@ def main() -> int:
     rec = Recorder()
     ExplodingEngine.runs = []
     real_engine, real_device = runner_mod.Engine, runner_mod.Device
+    real_limit = runner_mod.RETRY_LIMIT
     runner_mod.Engine, runner_mod.Device = ExplodingEngine, FakeDevice
+    # 這裡驗的是「放掉這一輪之後」：重試關掉，第二輪才會輪到雜務。重試本身見
+    # test_retry_after_failure.py。
+    runner_mod.RETRY_LIMIT = 0
     logging.getLogger().addHandler(rec)
     try:
         runner_mod.Runner(
@@ -109,6 +113,7 @@ def main() -> int:
     finally:
         logging.getLogger().removeHandler(rec)
         runner_mod.Engine, runner_mod.Device = real_engine, real_device
+        runner_mod.RETRY_LIMIT = real_limit
 
     print("炸掉的那一輪之後，排程還跑不跑得下去")
     print(f"    實際跑的順序：{ExplodingEngine.runs}")

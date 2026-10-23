@@ -133,7 +133,16 @@ class Device:
         )
 
     def _run_device(self, args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
-        return self._run(["-s", self.serial, *args], timeout=timeout)
+        """對裝置下指令。逾時轉成 AdbError，讓排程當成連線中斷處理（重新連線、重試這一輪）。
+
+        ⚠ 不要讓 `subprocess.TimeoutExpired` 往上冒：排程把它當成程式錯誤，紀錄上是一長串
+          英文命令列與 traceback，看不出是模擬器沒有回應。
+        """
+        try:
+            return self._run(["-s", self.serial, *args], timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise AdbError(f"模擬器沒有回應：adb {' '.join(args[:2])} 超過 "
+                           f"{timeout or self.timeout} 秒") from None
 
     def shell(self, command: str, timeout: int | None = None) -> str:
         proc = self._run_device(["shell", command], timeout=timeout)

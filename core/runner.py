@@ -17,6 +17,11 @@ from .engine import Engine, Script
 
 log = logger.get("main")
 
+# 一輪中途出錯（模擬器沒有回應、斷線、未預期的例外）之後，等這麼多秒、重新連線再跑一次，
+# 最多連續重試這麼多次。
+RETRY_LIMIT = 2
+RETRY_DELAY = 30
+
 
 def next_scheduled(
     tasks: list[TaskConfig], now: datetime | None = None
@@ -142,6 +147,8 @@ class Runner:
                 log.info("補跑今天已過排定時刻的腳本：%s",
                          "、".join(self._title(t) for t in queue[1:]))
         current: TaskConfig | None = None
+        # 每個腳本連續失敗了幾次（成功跑完一輪就歸零），見 _retry_after_failure
+        failures: dict[str, int] = {}
         try:
             while not self.stop_event.is_set():
                 if current is None:
@@ -187,14 +194,13 @@ class Runner:
                     engine.run(until=nxt[0] if nxt and not injected else None)
                 except AdbError as e:
                     # ⚠ 一輪跑到一半斷線（模擬器被關掉、網路斷了）不該讓整個排程
-                    #   結束，否則當天剩下的腳本全部不會執行。這一輪放掉，
-                    #   下一個排定時刻再試。
+                    #   結束，否則當天剩下的腳本全部不會執行。重新連線後重試這一輪。
                     log.error("執行「%s」時中斷：%s", script.name, e)
                     failed = "連線中斷"
                     if self.one_shot:
                         raise
                 except Exception as e:
-                    # ⚠ **沒預料到的例外也只能放掉這一輪**，理由和上面相同。少了
+                    # ⚠ **沒預料到的例外也不能讓排程結束**，理由和上面相同。少了
                     #   這一段，一輪炸掉會把當天剩下的腳本全部帶走，而紀錄上只有
                     #   一段空白。
                     # ⚠ 一定要用 log.exception。訊息本身多半看不出是哪裡壞的，而
@@ -250,6 +256,18 @@ class Runner:
                              self._title(current))
                     queue.append(current)
 
+                # 出錯的那一輪重新連線後排到最前面重試。
+                # ⚠ 排在剛過去的那幾格（late）前面：中途斷掉的腳本可能把遊戲留在只有
+                #   它自己認得的畫面上（副本沒領的結算頁會在重開遊戲後再跳出來），
+                #   先讓它自己收拾，後面的腳本才不會卡在那裡。
+                if failed:
+                    if self._retry_after_failure(dev, current, failures):
+                        if current in queue:
+                            queue.remove(current)
+                        queue.insert(0, current)
+                else:
+                    failures.pop(current.name, None)
+
                 current = None      # 下一輪跑誰交給 _take_next 決定
         except KeyboardInterrupt:
             log.info("使用者中斷，結束排程")
@@ -266,6 +284,36 @@ class Runner:
         `name:`，不另外維護一份對照表。
         """
         return self._titles.get(task.name, task.name)
+
+    def _retry_after_failure(
+        self, dev: Device, task: TaskConfig, failures: dict[str, int]
+    ) -> bool:
+        """一輪中途出錯之後要不要重試。等 RETRY_DELAY 秒、重新連線，連得上就回 True。
+
+        ⚠ 連續失敗 RETRY_LIMIT 次就放掉這一格，等下一個排定時刻。每次都失敗代表問題
+          不在一時的連線，重試只會一直重開遊戲。
+        ⚠ 連不上也放掉，不忙碌重試：下一個排定時刻 _wait_for_next 會再連一次。
+        """
+        tries = failures.get(task.name, 0) + 1
+        failures[task.name] = tries
+        if tries > RETRY_LIMIT:
+            log.warning("「%s」連續 %d 輪中途出錯，這一格放棄，等下一個排定時刻",
+                        self._title(task), tries)
+            failures.pop(task.name, None)
+            return False
+        log.info("「%s」%d 秒後重新連線再跑一次（第 %d 次重試，最多 %d 次）",
+                 self._title(task), RETRY_DELAY, tries, RETRY_LIMIT)
+        self._status(f"「{self._title(task)}」中途出錯，等候重試")
+        if self.stop_event.wait(RETRY_DELAY):
+            return False
+        self._status("重新連線")
+        try:
+            dev.connect()
+        except AdbError as e:
+            log.error("重新連線失敗，「%s」這一格放棄：%s", self._title(task), e)
+            failures.pop(task.name, None)
+            return False
+        return True
 
     def _missed_today(self, now: datetime | None = None) -> list[TaskConfig]:
         """今天已經過了排定時刻、而且今天不會再輪到的腳本，依原本的時刻排序。

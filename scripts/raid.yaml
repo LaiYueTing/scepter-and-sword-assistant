@@ -309,6 +309,14 @@ rules:
       - tap_match: []
       - wait: 2.5
 
+  - name: 放置詳情對話框 → 按系統返回鍵關閉
+    # 說明見 chores.yaml 的同名規則。
+    template: label_idle_detail
+    cooldown: 3
+    do:
+      - back:
+      - wait: 1.5
+
   - name: 公會島放置獎勵 → 領取
     # 說明見 chores.yaml 的同名規則。
     template: btn_guild_mine_reward

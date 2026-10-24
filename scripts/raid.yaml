@@ -54,7 +54,7 @@ on_finish:
 rules:
   # ==================== 最上層的畫面優先 ====================
 
-  - name: 獲得獎勵動畫 → 點掉繼續
+  - name: 獲得獎勵動畫 → 點擊關閉
     # 領取討伐獎勵、公會島累積獎勵後的「獲得獎勵」橫幅，點空白處關閉。
     # 排在最前面，避免橫幅蓋住底下的按鈕造成誤判。
     template: label_reward_got
@@ -62,7 +62,7 @@ rules:
       - tap: [360, 250]
       - wait: 1.5
 
-  - name: 討伐結算頁 → 點掉繼續
+  - name: 討伐結算頁 → 點擊關閉
     # 「戰鬥結束／造成傷害 N 億／參與討伐獎勵」。
     # ⚠ 系統返回鍵無效，只能點空白處（y=900 附近沒有按鈕）。
     # 模板取「參與討伐獎勵」那行，不含每層不同的獎勵物品：1.00、其他畫面 ≤0.54。
@@ -309,7 +309,7 @@ rules:
       - tap_match: []
       - wait: 2.5
 
-  - name: 公會島右下角的累積獎勵 → 順手領走
+  - name: 公會島放置獎勵 → 領取
     # 說明見 chores.yaml 的同名規則。
     template: btn_guild_mine_reward
     require: [label_nav_guild_on]
@@ -474,7 +474,7 @@ rules:
       - screenshot: blank_page_stuck_after_restart
       - finish: skip_cleanup
 
-  - name: 點擊空白處關閉的頁面 → 點掉
+  - name: 點擊空白處關閉的頁面 → 點擊關閉
     template: label_tap_blank_close
     cooldown: 3
     do:

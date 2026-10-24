@@ -52,7 +52,7 @@ rules:
       - tap_template: btn_confirm
       - wait: 3
 
-  - name: 解散隊伍確認框 → 還沒打完，取消
+  - name: 解散隊伍確認框 → 場次未完成，取消
     # 不是因為次數用完而出現時（後備規則按了返回鍵）按取消，留在地圖上。
     template: label_leave_team_confirm
     cooldown: 3
@@ -286,7 +286,7 @@ rules:
       - tap_match: []
       - wait: 2
 
-  - name: 家園 → 場次已打完，結束本輪
+  - name: 家園 → 場次已用完，結束本輪
     # 解散隊伍後遊戲自動回到家園，結束程序不必再退。
     template: nav_home
     when_flag: [打完了]

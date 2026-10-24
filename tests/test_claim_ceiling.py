@@ -75,7 +75,7 @@ MATCHING = "副本詳情頁 → 確認副本後配對"
 
 print("=== 1. 還沒確認天花板時，拿到 S 也不領獎 ===")
 e = new_engine()
-check(step(e, RESULT_S), "還能解鎖更高的難度 → 拿到 S 也先不領獎", "旗標沒設就不領")
+check(step(e, RESULT_S), "尚可解鎖更高難度 → 取得 S 級仍不領獎", "旗標沒設就不領")
 
 print()
 print("=== 2. 詳情頁確認過天花板之後才領 ===")
@@ -108,7 +108,7 @@ e = new_engine()
 e._flags.add("明天開新副本")
 check(step(e, DETAIL_S, busy=[MATCHING]), "明天開新副本 → 先把領獎次數買滿",
       "詳情頁先去買次數")
-check(step(e, RESULT_S), "明天開放新副本 → 今天不領獎，打完這一場就結束本輪",
+check(step(e, RESULT_S), "明天開放新副本 → 本日不領獎，本場結束後結束本輪",
       "結算頁不領獎")
 
 print()

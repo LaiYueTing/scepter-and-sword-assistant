@@ -38,6 +38,8 @@ EXCLUDE = {
     "mark_bond_node", "mark_bond_ready", "label_fruit_ready",
     "label_unlock_countdown", "label_max_rank_text", "label_no_rank_text",
     "label_countdown_days", "card_daily_dungeon",
+    # 右側圖示列：上方多一個「限時禮包」之類的圖示就整排往下推
+    "label_rift_widget", "label_rift_zero",
     # 一列中的多個位置，靠 pick 或 tap_all 選
     "tab_lock", "tab_selected", "tab_inferno_on", "btn_arena_fight", "btn_like",
     "slot_empty", "reward_dot", "reward_claimed", "reward_available",

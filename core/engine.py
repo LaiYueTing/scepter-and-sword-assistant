@@ -1354,6 +1354,9 @@ class Engine:
             # 欄位名稱自己當標籤，會寫成「選擇副本：月之宮殿　難度：惡夢」。
             # 只影響紀錄不影響判斷，讀不到就寫「讀不到」帶過。
             #
+            # `match` 給一個正規表示式時只取第一段符合的文字（去掉空白），對不上就算讀不到。
+            # 給「前綴＋數字」這種欄位用：前綴常被讀掉一兩個字，strip 刪不乾淨。
+            #
             # ⚠ 讀出來和上一次一樣就不重讀也不重寫。這條規則會在等配對的期間
             #   反覆觸發，而每次 OCR 要開一個 PowerShell（約 1 秒）——同一場
             #   副本重覆讀十幾次，紀錄上也是十幾行一模一樣的字。
@@ -1364,9 +1367,13 @@ class Engine:
             for label, spec in (arg or {}).items():
                 spec = {"region": spec} if isinstance(spec, list) else dict(spec)
                 strip = spec.pop("strip", None)
+                pattern = spec.pop("match", None)
                 text = ocr.read(screen, **spec)
                 for junk in ([strip] if isinstance(strip, str) else (strip or [])):
                     text = text.replace(junk, "")
+                if pattern:
+                    found = re.search(pattern, text)
+                    text = re.sub(r"\s+", "", found.group(0)) if found else ""
                 parts.append(f"{label}：{text.strip() or '（讀不到）'}")
             line = "　".join(parts)
             if line != self._last_log_text:

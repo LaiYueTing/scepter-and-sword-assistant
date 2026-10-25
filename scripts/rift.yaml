@@ -115,7 +115,7 @@ rules:
     cooldown: 3
     do:
       - log_text:
-          剩餘場次: {region: [500, 806, 170, 30], scale: 4, strip: ["收益次數:", "收益次數："]}
+          剩餘場次: {region: [500, 806, 170, 30], scale: 4, match: '\d[\d\s]*/\s*10'}
       - tap_match: []
       - wait: 3
 

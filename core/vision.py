@@ -274,7 +274,8 @@ def queue_units(
     return filled / pitch
 
 
-def find_blob(screen: np.ndarray, spec: dict) -> Match | None:
+def find_blob(screen: np.ndarray, spec: dict,
+              avoid: list[tuple[int, int]] | None = None) -> Match | None:
     """找畫面上最大的一塊指定顏色，回傳它的外框；不夠大就回 None。
 
     模板認的是圖案，而有些東西沒有固定的圖案——虛空裂縫的門是一團會動的紫色
@@ -293,6 +294,9 @@ def find_blob(screen: np.ndarray, spec: dict) -> Match | None:
 
     ⚠ 回傳的是最大的那一塊，不是全部。要的是「門在哪」，而畫面上同色的小碎片
       （粒子、遠處的植物）本來就該被面積門檻擋掉。
+
+    `avoid` 是要跳過的位置：中心落在任一點 AVOID_RADIUS 像素內的色塊不算，改取次大的
+    （其他隊伍正在使用、點了無法互動的門）。
     """
     x0, y0 = 0, 0
     region = spec.get("region")
@@ -309,15 +313,24 @@ def find_blob(screen: np.ndarray, spec: dict) -> Match | None:
     # 開運算去掉一兩個像素的雜點，免得它們把兩塊不相干的東西連成一塊
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
-    if count <= 1:
-        return None
-    i = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-    size = int(stats[i, cv2.CC_STAT_AREA])
-    if size < int(spec.get("min_area", 1000)):
-        return None
-    bx, by, bw, bh = (int(stats[i, k]) for k in (
-        cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
-    return Match("blob", float(size), bx + x0, by + y0, bw, bh)
+    min_area = int(spec.get("min_area", 1000))
+    for i in sorted(range(1, count), key=lambda k: -stats[k, cv2.CC_STAT_AREA]):
+        size = int(stats[i, cv2.CC_STAT_AREA])
+        if size < min_area:
+            return None
+        bx, by, bw, bh = (int(stats[i, k]) for k in (
+            cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+        found = Match("blob", float(size), bx + x0, by + y0, bw, bh)
+        cx, cy = found.center
+        if any((cx - ax) ** 2 + (cy - ay) ** 2 <= AVOID_RADIUS ** 2
+               for ax, ay in avoid or ()):
+            continue
+        return found
+    return None
+
+
+# find_blob 的 avoid 半徑：門的寬度約 100px，兩扇門相距遠大於此。
+AVOID_RADIUS = 90
 
 
 def annotate(screen: np.ndarray, matches: list[Match]) -> np.ndarray:

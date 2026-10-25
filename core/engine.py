@@ -619,6 +619,10 @@ class Engine:
         # 這一輪已經成立的旗標。和 max_fires 一樣是「這一輪發生過什麼」的記憶，
         # 差別是它記的是**看到的事實**而不是**觸發過幾次**。
         self._flags: set[str] = set()
+        # 色塊規則要跳過的位置 [(到期時刻, x, y)]，見 avoid_last_blob；以及上一次
+        # tap_match 點到的色塊中心。
+        self._blob_avoid: list[tuple[float, int, int]] = []
+        self._last_blob_tap: tuple[int, int] | None = None
         self._apply_options(self.cfg.options)
 
     def _apply_options(self, options: dict[str, bool]) -> None:
@@ -657,6 +661,8 @@ class Engine:
         # 用指派而不是 clear()：測試常常拿 Engine.__new__ 造一個沒跑過 __init__
         # 的引擎，那種引擎沒有這個欄位。
         self._flags = set()
+        self._blob_avoid = []
+        self._last_blob_tap = None
         for rule in self.script.rules:
             rule._fires = 0
             rule._last_fired = 0.0
@@ -938,7 +944,10 @@ class Engine:
 
         found = None
         if rule.blob:
-            found = vision.find_blob(screen, rule.blob)
+            now = time.time()
+            avoid = [(x, y) for until, x, y in getattr(self, "_blob_avoid", ())
+                     if until > now]
+            found = vision.find_blob(screen, rule.blob, avoid)
             if bool(found) == bool(rule.blob.get("absent")):
                 return False, None
 
@@ -1198,6 +1207,8 @@ class Engine:
                 dx, dy = _xy(arg, default=(0, 0))
                 cx, cy = match.center
                 d.tap(cx + dx, cy + dy)
+                if match.name == "blob":
+                    self._last_blob_tap = (cx, cy)
             else:
                 log.warning("tap_match 沒有可用的比對結果")
 
@@ -1250,6 +1261,16 @@ class Engine:
             x1, y1, x2, y2 = (int(v) for v in arg[:4])
             dur = int(arg[4]) if len(arg) > 4 else 300
             d.swipe(x1, y1, x2, y2, dur)
+            # 鏡頭移動之後畫面上的位置全部錯開，avoid_last_blob 記下的點不再對應同一扇門
+            self._blob_avoid = []
+
+        elif verb == "avoid_last_blob":
+            # 上一次 tap_match 點的色塊這段時間內不算（秒數，預設 60）。給「點了跳出
+            # 無法互動」的門用：其他隊伍正在裡面打，改點別扇，沒有別扇就照常移動鏡頭找。
+            if self._last_blob_tap is not None:
+                x, y = self._last_blob_tap
+                self._blob_avoid.append((time.time() + float(arg or 60), x, y))
+                self._last_blob_tap = None
 
         elif verb == "back":
             d.back()

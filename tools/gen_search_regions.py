@@ -40,6 +40,8 @@ EXCLUDE = {
     "label_countdown_days", "card_daily_dungeon",
     # 右側圖示列：上方多一個「限時禮包」之類的圖示就整排往下推
     "label_rift_widget", "label_rift_zero",
+    "label_chaos_widget", "label_chaos_full",
+    "mob_chaos_a", "mob_chaos_b", "mob_chaos_c", "mob_chaos_d",
     # 一列中的多個位置，靠 pick 或 tap_all 選
     "tab_lock", "tab_selected", "tab_inferno_on", "btn_arena_fight", "btn_like",
     "slot_empty", "reward_dot", "reward_claimed", "reward_available",

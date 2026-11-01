@@ -16,7 +16,7 @@ os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import yaml
 
-SCRIPTS = ("dungeon", "raid", "daily", "arena", "chores", "rift")
+SCRIPTS = ("dungeon", "raid", "daily", "arena", "chores", "rift", "chaos")
 
 # 這些規則和腳本要做什麼完全無關——它們處理的是「進不進得去遊戲」與「卡住了
 # 怎麼辦」，所以每一份都要有。腳本各自的流程規則（配對、領獎、導覽）不在此列。

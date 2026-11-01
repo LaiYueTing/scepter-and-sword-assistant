@@ -1,0 +1,673 @@
+# 混沌侵襲
+#
+# 隔週週日開放的限時活動（與虛空裂縫輪替），單人從家園開始、一輪約 9 分鐘，BOSS 收益只有
+# 1 次。活動沒開放的那一週家園沒有入口，看一眼就結束本輪。
+#
+# 流程：家園右側「混沌侵襲」→ 活動頁領累積獎勵 →「前往」→ 世界地圖找灰色小怪
+#      → 點小怪 →「開始戰鬥」→ 自動打完回地圖，碎晶 +5 → 再點小怪，到 100/100
+#      → 地圖找傳送門 → 面板「進入裂縫」→ BOSS 房往上走 → 單人模式確認
+#      →「開始戰鬥」→ 打到結算頁 → 點空白處 → 重傷框「返回家園」→ 家園
+#
+# 畫面性質：
+# 1. 小怪有呼吸動畫，整隻的模板只在相近的相位才高（同相位 0.77～1.00，其他相位 ≤0.59），
+#    所以掛四個相位、門檻 0.72。其他怪與空地圖 ≤0.59。
+# 2. 打贏回到地圖時鏡頭停在同一個位置，新的小怪每次都在畫面 (340, 597) 重生（20 場全部
+#    相同）。重生動畫中模板認不出來，所以找到第一隻之後改點固定座標。
+# 3. 傳送門是一大塊深紫色：色塊約 30000 像素，其他地圖（含虛空裂縫的地圖）都不到 15000。
+# 4. 本期打過與否：活動頁「目前排名：未上榜」（打過 0.486）；面板的收益次數只裁第一個字元。
+#
+# ⚠ 重傷框一律按「返回家園」：收益次數只有一次，打完之後治療只是多花料理。
+# ⚠ 打完之後碎晶仍是 100/100，所以「打完了」旗標之後不可以再點傳送門。
+#
+# 共通約束與共用規則的說明見 dungeon.yaml 檔頭。
+
+name: 混沌侵襲
+package: com.m88.idleXX
+
+stuck_timeout: 300
+
+# 正常一輪約 9 分鐘（小怪 20 場約 5 分鐘、BOSS 約 2 分鐘）。
+max_minutes: 25
+
+# 結束程序：世界地圖與 BOSS 房按返回回到家園；打完的路徑已經在家園，不經過這裡。
+on_finish:
+  - log: 本輪結束，返回家園待命
+  - wait: 2
+  - wait_for: [nav_home, btn_back_arrow]
+  - tap_template: [nav_home, btn_back_arrow]
+  - wait: 2.5
+  - wait_for: [nav_home, btn_back_arrow]
+  - tap_template: [nav_home, btn_back_arrow]
+
+rules:
+  # ==================== 確認框與結算 ====================
+
+  - name: BOSS 結算頁 → 點空白處，本期完成
+    # 標題「混沌君主討伐戰」：本頁 1.000，其餘 ≤0.32。
+    # ⚠ count 放在這裡：這一頁每期恰好出現一次。
+    template: label_chaos_result
+    cooldown: 5
+    do:
+      - set_flag: 打完了
+      - log_text:
+          造成傷害: {region: [280, 660, 160, 34], scale: 4}
+      - count:
+      - tap: [360, 1200]
+      - wait: 2.5
+
+  - name: 角色重傷確認框 → 返回家園
+    # 「返回家園」1.000（與虛空裂縫同一個框），其餘 ≤0.68。不花料理。
+    template: label_heal_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_heal_home
+      - wait: 3
+
+  - name: 單人模式確認框 → 已打完，取消
+    template: label_chaos_solo
+    when_flag: [打完了]
+    cooldown: 3
+    do:
+      - tap_template: btn_cancel
+      - wait: 2
+
+  - name: 單人模式確認框 → 確定
+    # 「確定要以單人模式進入挑戰嗎?」：本頁 1.000，其他確認框 ≤0.50。
+    template: label_chaos_solo
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 3
+
+  - name: 前往地圖確認框 → 確定
+    template: label_goto_map_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 5
+
+  - name: 對話 → 點擊繼續
+    # 第一隻小怪與碎晶集滿時各跳一段對話。模板取說話者的名牌（兩段都 1.000，其餘 ≤0.64）。
+    template: label_dialog_feile
+    cooldown: 2
+    do:
+      - tap: [360, 1180]
+      - wait: 1
+
+  # ==================== 傳送門面板 ====================
+
+  - name: 傳送門面板 → 本期已打完，關閉
+    template: btn_chaos_enter
+    when_flag: [打完了]
+    cooldown: 3
+    do:
+      - tap: [360, 1200]
+      - wait: 2
+
+  - name: 傳送門面板 → 進入裂縫
+    # 收益次數「1/1」只裁第一個字元。⚠ 這場一期只有一次收益，沒有收益就不進去。
+    template: btn_chaos_enter
+    require: [label_chaos_attempt_left]
+    threshold: 0.9
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 傳送門面板 → 沒有收益次數，關閉
+    require: [btn_chaos_enter]
+    absent: [label_chaos_attempt_left]
+    threshold: 0.9
+    sustain: 2
+    cooldown: 3
+    do:
+      - log: 本期的收益次數已用完，不進入裂縫
+      - set_flag: 打完了
+      - tap: [360, 1200]
+      - wait: 2
+
+  # ==================== 戰鬥 ====================
+
+  - name: 戰鬥準備 → 開始戰鬥
+    # 小怪與 BOSS 共用（1.000）。按下之後自動打，不必再操作。
+    template: btn_start_battle
+    cooldown: 3
+    do:
+      - set_flag: 找到小怪
+      - reset_fires: [小怪重生位置 → 點擊]
+      - tap_match: []
+      - wait: 2
+
+  - name: 戰鬥中 → 等
+    # 回合條：小怪 0/15、BOSS 0/25，0.959～0.975；地圖 ≤0.64。
+    template: label_round
+    do: []
+
+  # ==================== 活動頁 ====================
+
+  - name: 活動頁 → 領取累積獎勵
+    # 點任一個節點就一次領完。region 框住進度條，「前往」與頁籤上也有紅點。
+    template: label_chaos_reward_dot
+    region: [200, 750, 500, 50]
+    require: [label_chaos_page]
+    max_fires: 1
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 活動頁 → 前往地圖
+    # ⚠ 要有「未上榜」才前往：打過之後排名有數字，再進去也沒有收益。
+    template: btn_chaos_go
+    require: [label_chaos_page, label_chaos_unranked]
+    when_flag: ["!打完了"]
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 活動頁 → 本期已打過，回家園
+    # sustain 避開換頁動畫的中間幀。
+    require: [label_chaos_page]
+    absent: [label_chaos_unranked]
+    sustain: 3
+    cooldown: 3
+    do:
+      - log: 本期已經打過混沌侵襲
+      - set_flag: 打完了
+      - tap_template: btn_back_arrow
+      - wait: 3
+
+  # ==================== 打完之後 ====================
+
+  - name: 打完後仍在地圖或 BOSS 房 → 按返回回家園
+    # 沒有倒下時不會跳重傷框，結算頁關掉後留在 BOSS 房。
+    require: [label_chaos_widget, btn_back_arrow]
+    when_flag: [打完了]
+    cooldown: 4
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 3
+
+  - name: 家園 → 本期已完成，結束本輪
+    template: nav_home
+    when_flag: [打完了]
+    sustain: 2
+    do:
+      - finish: skip_cleanup
+
+  # ==================== BOSS 房 ====================
+
+  - name: BOSS 房 → 往上走到 BOSS 面前
+    # 有小工具、有返回鍵、沒有「探索10次」：不是世界地圖。走廊置中，點上方就往上走，
+    # 走到 BOSS 面前跳單人模式確認框。
+    require: [label_chaos_widget, btn_back_arrow]
+    absent: [btn_explore_ten, label_round, btn_start_battle]
+    cooldown: 3
+    do:
+      - tap: [360, 250]
+      - wait: 1
+
+  # ==================== 世界地圖：碎晶已滿 → 找傳送門 ====================
+  # 「在世界地圖上」＝小工具與右下角「探索10次」都在。小工具只裁中央的圖示（1.000，其他
+  # 畫面 ≤0.52）。
+  # ⚠ 小工具上方可能多出別的圖示把整排往下推，小工具與 100/100 都不可以寫進 search_regions。
+
+  - name: 碎晶集滿 → 改找傳送門
+    # 「100/100」只裁前半：滿 1.000，其他次數 ≤0.76。
+    # ⚠ 要用旗標記住：打小怪那幾條的門檻是 0.72，寫進它們的 absent 會把 0/100 也當成滿。
+    require: [label_chaos_widget, btn_explore_ten, label_chaos_full]
+    when_flag: ["!碎晶已滿"]
+    do:
+      - set_flag: 碎晶已滿
+
+  - name: 碎晶已滿，地圖上有傳送門 → 點傳送門
+    # ⚠ blob 參數要和底下的 no_portal 完全一樣。
+    require: &on_map [label_chaos_widget, btn_explore_ten]
+    when_flag: [碎晶已滿]
+    blob:
+      hue: [120, 132]
+      sat: [60, 170]
+      val: [20, 110]
+      region: [0, 110, 720, 900]
+      min_area: 15000
+    cooldown: 4
+    do:
+      - reset_fires: [找傳送門 → 鏡頭往左, 找傳送門 → 鏡頭往上, 找傳送門 → 鏡頭往右,
+                      找傳送門 → 鏡頭再往右, 找傳送門 → 鏡頭往下, 找傳送門 → 鏡頭再往下,
+                      找傳送門 → 鏡頭往左回頭, 找傳送門 → 鏡頭再往左]
+      - tap_match: []
+      - wait: 2.5
+
+  - name: 找傳送門 → 鏡頭往左
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: &no_portal
+      hue: [120, 132]
+      sat: [60, 170]
+      val: [20, 110]
+      region: [0, 110, 720, 900]
+      min_area: 15000
+      absent: true
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭往上
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 300, 360, 800, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭往右
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭再往右
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭往下
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 800, 360, 300, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭再往下
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 800, 360, 300, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭往左回頭
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找傳送門 → 鏡頭再往左
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 繞了一圈沒有傳送門 → 從活動頁回到起點
+    require: *on_map
+    when_flag: [碎晶已滿]
+    blob: *no_portal
+    sustain: 8
+    cooldown: 20
+    do:
+      - log: 附近沒有傳送門，從活動頁回到起點再找
+      - reset_fires: [找傳送門 → 鏡頭往左, 找傳送門 → 鏡頭往上, 找傳送門 → 鏡頭往右,
+                      找傳送門 → 鏡頭再往右, 找傳送門 → 鏡頭往下, 找傳送門 → 鏡頭再往下,
+                      找傳送門 → 鏡頭往左回頭, 找傳送門 → 鏡頭再往左]
+      - tap_template: label_chaos_widget
+      - wait: 3
+
+  # ==================== 世界地圖：打小怪 ====================
+
+  - name: 地圖上有小怪 → 點小怪
+    # 四個相位，門檻 0.72。角色會自己走過去，走到就進戰鬥。
+    template: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    region: [0, 110, 720, 900]
+    require: *on_map
+    when_flag: ["!碎晶已滿"]
+    cooldown: 4
+    do:
+      - reset_fires: [找小怪 → 鏡頭往右, 找小怪 → 鏡頭往下, 找小怪 → 鏡頭往左,
+                      找小怪 → 鏡頭再往左, 找小怪 → 鏡頭往上, 找小怪 → 鏡頭再往上,
+                      找小怪 → 鏡頭往右回頭, 找小怪 → 鏡頭再往右]
+      - tap_match: []
+      - wait: 2
+
+  - name: 小怪重生位置 → 點擊
+    # 打過第一場之後小怪在固定位置重生。五次都沒有進戰鬥就回頭用模板找（鏡頭被移動過）。
+    # ⚠ 「開始戰鬥」那條把次數歸零。
+    require: *on_map
+    when_flag: [找到小怪, "!碎晶已滿"]
+    max_fires: 5
+    cooldown: 4
+    do:
+      - tap: [340, 597]
+      - wait: 2
+
+  - name: 重生位置點了沒有反應 → 重新找小怪
+    require: *on_map
+    when_flag: [找到小怪, "!碎晶已滿"]
+    do:
+      - clear_flag: 找到小怪
+      - reset_fires: [小怪重生位置 → 點擊]
+
+  - name: 找小怪 → 鏡頭往右
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭往下
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 800, 360, 300, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭往左
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭再往左
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [110, 600, 610, 600, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭往上
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 300, 360, 800, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭再往上
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [360, 300, 360, 800, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭往右回頭
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 找小怪 → 鏡頭再往右
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    max_fires: 1
+    do:
+      - swipe: [610, 600, 110, 600, 600]
+      - wait: 2
+
+  - name: 繞了一圈沒有小怪 → 從活動頁回到起點
+    require: *on_map
+    absent: [mob_chaos_a, mob_chaos_b, mob_chaos_c, mob_chaos_d]
+    threshold: 0.72
+    when_flag: ["!碎晶已滿", "!找到小怪"]
+    sustain: 8
+    cooldown: 20
+    do:
+      - log: 附近沒有小怪，從活動頁回到起點再找
+      - reset_fires: [找小怪 → 鏡頭往右, 找小怪 → 鏡頭往下, 找小怪 → 鏡頭往左,
+                      找小怪 → 鏡頭再往左, 找小怪 → 鏡頭往上, 找小怪 → 鏡頭再往上,
+                      找小怪 → 鏡頭往右回頭, 找小怪 → 鏡頭再往右]
+      - tap_template: label_chaos_widget
+      - wait: 3
+
+  # ==================== 家園 ====================
+
+  - name: 家園 → 打開混沌侵襲
+    # 入口的位置會被上方的圖示往下推，不寫死座標。⚠ 虛空裂縫那一週沒有這個入口。
+    template: label_chaos_widget
+    region: [590, 150, 130, 600]
+    require: [nav_home]
+    when_flag: ["!打完了"]
+    max_fires: 3
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 家園 → 活動沒有開放，結束本輪
+    # 沒有入口（或點了三次都進不去）。sustain 要比「回家園」那條長：從筆記頁這類有導覽列
+    # 的頁面開始時，先回到家園才看得到入口。
+    template: nav_home
+    sustain: 20
+    do:
+      - log: 家園沒有可進入的混沌侵襲活動，結束本輪
+      - finish: skip_cleanup
+
+  - name: 停在無法處理的畫面 → 回家園重新開始
+    template: nav_home
+    sustain: 8
+    cooldown: 30
+    do:
+      - tap_match: []
+      - wait: 3
+
+  # ==================== 換頁 ====================
+
+  - name: 載入中 → 等畫面切換
+    template: label_loading_bg
+    region: [0, 300, 720, 600]
+    do: []
+
+  # ==================== 遊戲冷啟動（共用規則，說明見 dungeon.yaml） ====================
+
+  - name: 伺服器維護中 → 結束本輪，下一輪再試
+    template: label_server_maintenance
+    do:
+      - finish: skip_cleanup
+
+  - name: 遊戲要求重新進入 → 重新啟動遊戲
+    template: [label_restart_to_update, label_world_changed]
+    max_fires: 2
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+      - restart_app:
+
+  - name: 重新啟動後仍要求重新進入 → 結束本輪，下一輪再試
+    template: [label_restart_to_update, label_world_changed]
+    do:
+      - finish: skip_cleanup
+
+  - name: 帳號在其他用戶端登入 → 按確定回到登入畫面
+    template: label_login_conflict
+    cooldown: 5
+    do:
+      - tap_template: btn_confirm
+      - wait: 3
+
+  - name: 公告 → 勾選今日不再提醒後關閉
+    template: label_notice_dont_remind
+    cooldown: 5
+    do:
+      - tap_match: [-73, -1]
+      - wait: 0.8
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 標題畫面 → 點擊開始遊戲
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    cooldown: 5
+    max_fires: 10
+    do:
+      - tap: [360, 900]
+      - wait: 3
+
+  - name: 標題畫面點了沒有反應 → 重新啟動遊戲
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    max_fires: 1
+    do:
+      - screenshot: title_stuck
+      - reset_fires: [標題畫面 → 點擊開始遊戲]
+      - restart_app: 45
+
+  - name: 重新啟動後仍停在標題畫面 → 結束本輪
+    template: [label_title_menu, label_tap_to_start]
+    sustain: 3
+    do:
+      - log: 標題畫面點擊沒有反應，重新啟動遊戲後仍然一樣，結束本輪
+      - screenshot: title_stuck_after_restart
+      - finish: skip_cleanup
+
+  - name: 遊戲啟動中 → 等開場動畫
+    template: label_boot_logo
+    do: []
+
+  - name: 遊戲啟動中 → 等載入完成
+    template: label_boot_network
+    do: []
+
+  # ==================== 後備規則（共用規則，說明見 dungeon.yaml） ====================
+
+  - name: 觀戰確認框 → 確定退出
+    template: label_leave_spectate
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2
+
+  - name: 退出確認對話框 → 確定退出
+    # 副本那一輪中途中斷時留下的結算頁，說明見 dungeon.yaml 的同名規則。
+    template: label_exit_confirm
+    cooldown: 3
+    do:
+      - tap_template: btn_confirm
+      - wait: 2.5
+
+  - name: 點空白處無法關閉的頁面 → 重新啟動遊戲
+    template: label_tap_blank_close
+    sustain: 90
+    max_fires: 1
+    do:
+      - screenshot: blank_page_stuck
+      - restart_app: 45
+
+  - name: 重新啟動後仍無法關閉 → 結束本輪
+    template: label_tap_blank_close
+    sustain: 90
+    do:
+      - log: 點空白處無法關閉這張頁面，重新啟動遊戲後仍然存在，結束本輪
+      - screenshot: blank_page_stuck_after_restart
+      - finish: skip_cleanup
+
+  - name: 誤入次要頁面 → 點返回退出
+    # ⚠ 世界地圖、BOSS 房與活動頁都有返回鍵，一定要列進 absent。
+    require: [btn_back_arrow]
+    absent: [label_chaos_widget, label_chaos_page, label_round, btn_start_battle,
+             btn_chaos_enter, label_chaos_result]
+    sustain: 4
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 完全無法辨識 → 按系統返回鍵
+    # ⚠ absent 要列出這份腳本的每一種畫面，少列的畫面上計時會一直累積。
+    absent: [nav_home, btn_back_arrow, label_chaos_widget, label_round,
+             label_loading_bg, btn_chaos_enter, label_chaos_result, label_chaos_page,
+             label_heal_confirm, label_chaos_solo, label_dialog_feile,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 5
+    do:
+      - screenshot: chaos_unknown
+      - back:
+      - wait: 3
+
+  - name: 持續無法脫困 → 重新啟動遊戲
+    # ⚠ absent 要和上一條完全一樣。
+    absent: [nav_home, btn_back_arrow, label_chaos_widget, label_round,
+             label_loading_bg, btn_chaos_enter, label_chaos_result, label_chaos_page,
+             label_heal_confirm, label_chaos_solo, label_dialog_feile,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    max_fires: 3
+    do:
+      - restart_app: 45
+
+  - name: 重新啟動遊戲也無法恢復 → 結束本輪
+    absent: [nav_home, btn_back_arrow, label_chaos_widget, label_round,
+             label_loading_bg, btn_chaos_enter, label_chaos_result, label_chaos_page,
+             label_heal_confirm, label_chaos_solo, label_dialog_feile,
+             label_goto_map_confirm,
+             label_title_menu, label_tap_to_start, label_boot_logo,
+             label_boot_network, label_loading, label_loading_b,
+             label_loading_c, label_notice_dont_remind]
+    sustain: 45
+    do:
+      - log: 重新啟動遊戲三次仍無法辨識畫面，結束本輪
+      - screenshot: stuck_after_restart
+      - finish:

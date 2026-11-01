@@ -532,6 +532,10 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
         # `fired:` 列出「走到這張畫面之前已經用完」的規則名稱：每輪只做一次的
         # 順手動作（公會島的累積獎勵）在每張島上都成立，不列的話它會蓋掉
         # 這張樣本真正要驗的那條。
+        #
+        # `flags:` 指定走到這張畫面時已經設好的旗標，用來驗旗標的分岔；
+        # 沒寫就維持「旗標一律當成立」。
+        engine._flags = set(case["flags"]) if "flags" in case else None
         used = set(case.get("fired") or [])
         for rule in script.rules:
             rule._since = 0.0

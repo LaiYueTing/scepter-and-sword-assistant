@@ -23,6 +23,9 @@
   上的「虛空裂縫」按鈕手動觸發（排程等待中也按得動）。自己組好隊伍、停在活動地圖
   上再按：腳本會找到門進去、打完領獎、門不見了就從活動頁傳送過去，10 場打完自動
   離開地圖回家園。
+- **混沌侵襲**（`chaos`）——隔週週日的限時活動。排在週日 21:30：領累積獎勵、打小怪
+  集滿碎晶、單人挑戰 BOSS 一次，打完回家園。重傷時一律返回家園，不花料理。虛空裂縫
+  那一週沒有入口，看一眼就結束。
 
 兩種操作方式，底下是同一套引擎、同一份設定檔：
 
@@ -766,7 +769,7 @@ core/           adb 連線、影像比對、規則引擎、排程、流程錄製
 gui/            圖形介面（pywebview 外殼 ＋ Vue 前端），雙擊執行檔開的就是它
 gui/ui/         前端原始碼（Vue 3 + naive-ui + Tailwind）
 gui/web/        `npm run build` 的產物，會被打包進 EXE（不進版控）
-scripts/        YAML 腳本（dungeon / raid / daily / arena / chores / rift）
+scripts/        YAML 腳本（dungeon / raid / daily / arena / chores / rift / chaos）
 templates/      模板圖片（五份腳本共用同一個資料夾）
 samples/        回歸測試樣本與期望值（含遊戲截圖，不隨原始碼發布）
 tests/          selftest 涵蓋不到的單元測試，各自可以直接執行

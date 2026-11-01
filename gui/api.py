@@ -95,7 +95,8 @@ class Api:
             # 每週與每日是**兩個不同的鍵**，寫錯地方會讓腳本從「每週一」變成
             # 「每天」（或反過來整個不排程）。所以模式在後端就決定好，前端只編
             # 它該編的那一個。
-            "mode": "weekly" if t.weekly else "daily",
+            # ⚠ 兩種都有時算每日：實際每天都會跑，顯示星期會被看成只有那天才跑。
+            "mode": "weekly" if t.weekly and not t.times else "daily",
             "daily_at": [f"{h:02d}:{m:02d}" for h, m in t.times],
             "weekly_at": [f"{WEEKDAY_NAMES[d]} {h:02d}:{m:02d}"
                           for d, h, m in t.weekly],
@@ -108,13 +109,11 @@ class Api:
     def _template_options() -> dict[str, Any]:
         """設定範本裡的預設值。
 
-        ⚠ **使用者的 `config.yaml` 不一定有全部的鍵。** 開關是一路加上去的，而舊的
-          設定檔不會自己長出新的那幾行——只列 `cfg.options` 的話，介面上就會**少掉
-          一整批選項**（實測使用者那份只有 15 個，程式其實認得 30 個，缺的全是競技場
-          與討伐的調整項）。而且**沒有任何徵兆**：畫面看起來正常，只是短了一截。
+        ⚠ **使用者的 `config.yaml` 不一定有全部的鍵。** 舊的設定檔不會自己
+          長出新的鍵，只列 `cfg.options` 的話介面上會少掉一批選項，而且沒有任何徵兆。
 
         ⚠ 拿範本當預設是安全的：`config.example.yaml` 的值和腳本裡 `${鍵:預設}` 的
-          預設是同一組（跑一次比對確認過），所以顯示出來的就是「不填的話會怎樣」。
+          預設是同一組（`tests/test_options_complete.py` 守著），所以顯示出來的就是「不填的話會怎樣」。
         """
         try:
             import yaml
@@ -130,7 +129,7 @@ class Api:
         """開關與數值，附上標籤、說明、範圍與所屬腳本。
 
         ⚠ 對照表在 `core/optionmeta.py`，**前端不要自己抄一份**。漏掉的鍵會掉進
-          「其他」分頁並顯示原始鍵名——`guild_donate_free` 就是這樣被使用者抓到的。
+          「其他」分頁並顯示原始鍵名。
         """
         # 範本補底、使用者的設定覆蓋上去。順序照範本走，新舊設定檔看到的排列才一致。
         merged = {**Api._template_options(), **cfg.options}
@@ -392,7 +391,7 @@ class Api:
         if not self.is_running():
             raise RuntimeError("沒有在執行")
         self._runner.request_stop()
-        # ⚠ 結束程序期間的等待不能被打斷，所以這裡不等它。按下停止到真正結束實測
+        # ⚠ 結束程序期間的等待不能被打斷，所以這裡不等它。按下停止到真正結束要
         #   14～18 秒，介面要出聲，否則看起來像當掉。這一句只是開頭，接下來
         #   引擎會逐步把「結束程序執行中　第 N 步」推上來蓋掉它。
         self._channel.send("status", "停止中，正在執行結束程序 ⋯")
@@ -545,10 +544,8 @@ class Api:
                 if not ok:
                     raise RuntimeError(why)
                 # ⚠ **不要在這裡就 restart()。** 它排的是一個「等這個行程結束
-                #   就啟動新版」的背景 PowerShell，而使用者不一定當場重啟——
-                #   那個 PowerShell 會一直潛伏著，等他哪天關掉程式，新版就自己
-                #   跳出來，還可能和他自己雙擊的那次撞成「助手已經在執行中」。
-                #   改由 update_restart() 觸發，那才是明確的意思表示。
+                #   就啟動新版」的背景 PowerShell，使用者不一定當場重新啟動，
+                #   它會等到下次關閉程式時自己啟動新版。由 update_restart() 觸發。
                 self._channel.send("update_done",
                                   {"ok": True, "version": rel.version})
             except Exception as e:
@@ -611,8 +608,7 @@ class Api:
 
         ⚠ **不要問 `window.state`。** 那個名字很像視窗狀態，實際上是 pywebview 給 JS
           用的**共享資料字典**（`class State(dict)`），和最大化毫無關係。
-          `str(window.state) == "maximized"` **永遠是 False**，症狀是「最大化之後
-          按不回原本的大小」，而看程式碼完全看不出問題。
+          `str(window.state) == "maximized"` **永遠是 False**。
 
         ⚠ 要問的是底層的 WinForms Form（`window.native.WindowState`）。**不要自己記
           一個旗標**：使用者可以雙擊標題列、拖到螢幕頂端、用 Win+↑ 最大化，那些都

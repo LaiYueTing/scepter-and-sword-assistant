@@ -115,7 +115,7 @@ export const useHostStore = defineStore('host', {
             this.testResult = data
             break
           case 'ui_pref':
-            // 後端自己改掉了某個介面偏好——點掉那則系統匣通知就是一次。
+            // 後端自己改掉了某個介面偏好——點擊系統匣通知就是一次。
             // ⚠ 少了這一段，開關會停在舊值直到下次啟動，看起來像「沒有記住」。
             if (data.key === 'tray_hint') useUiStore().trayHint = !!data.value
             break
@@ -229,8 +229,8 @@ export const useHostStore = defineStore('host', {
      * 探索可用的模擬器。
      *
      * ⚠ `auto` 是「開視窗時自動跑的那一次」。它**不做多埠掃描**——對同一台遠端
-     *   主機連敲十幾個埠會被防毒判定成連接埠掃描而封鎖整台機器（實測被擋過
-     *   5 小時），而開視窗是隨手就會做很多次的動作。
+     *   主機連敲十幾個埠會被防毒判定成連接埠掃描而封鎖整台機器，而開視窗是
+     *   會反覆發生的動作。
      */
     async discover(auto = false) {
       this.discovering = true

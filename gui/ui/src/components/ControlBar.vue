@@ -85,7 +85,7 @@ async function rift() {
 async function stop() {
   try {
     await host.stop()
-    // 按下停止到真正結束實測 14～18 秒（結束程序要逐層退回家園）。這句話一定要說，
+    // 按下停止到真正結束要 14～18 秒（結束程序要逐層退回家園）。這句話一定要說，
     // 否則看起來像當掉。
     message.info('已要求停止，正在執行結束程序（約 15 秒）⋯')
   } catch (e) {

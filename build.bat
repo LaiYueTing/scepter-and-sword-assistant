@@ -48,12 +48,8 @@ if %ERRORLEVEL% neq 0 (
 )
 
 rem 網頁介面的前端要先建置。
-rem ※ 這一步**失敗就必須中止**，不能只印個警告帶過：.spec 會把 gui\web
-rem    整個內嵌進 EXE，而那是 npm 的產物、不在版本控制裡。漏跑的那天，打包出來
-rem    的會是上一版的介面（或根本沒有介面）而且完全沒有徵兆——這正是當初拒絕
-rem    加 build step 的理由，加一道硬中止就解掉了。
-rem ※ 沒裝 Node 的人：拿掉這一段，並在 .spec 的 BUNDLE 裡移除 gui\web，
-rem    就會編出一顆只有 Qt 介面的 EXE。
+rem ※ 這一步**失敗就必須中止**：.spec 會把 gui\web 整個內嵌進 EXE，而那是 npm 的
+rem    產物、不在版本控制裡。漏跑的話打包出來的是上一版的介面或沒有介面。
 where npm >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [錯誤] 找不到 npm。網頁介面的前端需要 Node.js 才能建置。

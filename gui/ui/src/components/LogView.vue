@@ -44,8 +44,7 @@ const menu = ref({ show: false, x: 0, y: 0, row: null, sel: '' })
 /**
  * ⚠ **選取的文字要在按下右鍵的那一刻就抄下來，不能等按了選單才去讀。**
  *   點選單項目時瀏覽器會把整份文件的選取範圍收掉——等 `onSelect` 跑起來，
- *   `window.getSelection()` 已經是空的了。症狀就是使用者說的「按了沒有用」：
- *   選單看得到、項目也不是灰的（那時選取還在），按下去卻什麼都沒複製到。
+ *   `window.getSelection()` 已經是空的了。而選單打開時選取還在，項目不會是灰的。
  */
 function onContextMenu(e, row) {
   e.preventDefault()
@@ -226,8 +225,7 @@ function onSelect(key) {
 
     <!--
       ⚠ **空狀態要放在同一層裡置中，不能接在捲動區後面。** 接在後面的話它是「內容
-        之後的一段文字」，會貼在面板上緣底下一點的位置——使用者看到的是「偏下」而
-        不是「置中」（其實是偏上）。用 `position: absolute` 蓋滿同一格才置得中。
+        之後的一段文字」，會貼在面板上緣底下一點的位置。用 `position: absolute` 蓋滿同一格才置得中。
     -->
     <div
       ref="body"
@@ -383,8 +381,7 @@ function onSelect(key) {
 /*
  * ⚠ **多行訊息要用懸掛縮排，不能補空白字元。** 連線失敗那段有七行提示，補
  *   `&nbsp;` 在比例字型下永遠對不齊——那是等寬字型的排版思維。負的 text-indent
- *   配同寬的 padding-left 才會讓第二行以後對齊到訊息欄的左緣，而且**順帶把自動
- *   折行也一起修好**：長訊息折到第二行時本來也會跑回最左邊。
+ *   配同寬的 padding-left 才會讓第二行以後（含自動折行）對齊到訊息欄的左緣。
  */
 .msg {
   white-space: pre-wrap;

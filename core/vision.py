@@ -62,8 +62,8 @@ def imwrite_unicode(path: Path, img: np.ndarray) -> None:
 def load_template(name: str) -> np.ndarray:
     """依名稱載入模板，結果會快取。
 
-    ⚠ 不設上限。模板有 129 個而舊的上限是 128——差一個，於是每輪都會把最久沒
-      用到的那張擠掉，下次用到再重新解一次 PNG。全部留著也只有幾 MB。
+    ⚠ 不設上限。上限小於模板數時，每輪都會把最久沒用到的那張擠掉，下次再重新解
+      一次 PNG。全部留著也只有幾 MB。
 
     模板打包在 EXE 裡，但 EXE 旁邊放同名檔案可以覆蓋——詳見 config.resource_file。
     """
@@ -268,7 +268,7 @@ def queue_units(
     if ac[0] <= 0:
         return 0.0
     ac /= ac[0]
-    # 間距的合理範圍：實測最寬 48px（沒人擠）、最窄 14px（塞滿）
+    # 間距的合理範圍：最寬 48px（沒人擠）、最窄 14px（塞滿）
     lo, hi = 12, 60
     pitch = lo + int(np.argmax(ac[lo:hi]))
     return filled / pitch

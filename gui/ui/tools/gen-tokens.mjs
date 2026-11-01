@@ -32,7 +32,7 @@ const out = `/*
  * ⚠ **這個檔案是產生出來的，不要手改。**
  *   來源：\`src/data/palette.js\` ＋ \`tools/gen-tokens.mjs\`（\`node tools/gen-tokens.mjs\`）
  *
- * 這裡放的是「JS 還沒跑之前」的預設配色，色相 ${BASE_HUE}（Telegram-RMA 那套藏藍）。
+ * 這裡放的是「JS 還沒跑之前」的預設配色，色相 ${BASE_HUE}（藏藍）。
  * 選了背景主題之後，\`applyAppearance()\` 會用 inline 變數把整套蓋掉——面板、卡片、
  * 框線、文字全部跟著那個主題的色相走，不是只換背景。
  *

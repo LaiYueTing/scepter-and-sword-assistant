@@ -75,7 +75,7 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
     </div>
 
     <!-- ⚠ 直向內距比別的面板小一級（`py-2`）：這一塊和上面的模擬器面板共用一欄，
-           而**多出來的高度應該留給模擬器**（它有下拉、三個欄位和三顆按鈕）。實測
+           而**多出來的高度應該留給模擬器**（它有下拉、三個欄位和三顆按鈕）。
            用 `p-3` 時兩塊加起來比欄高多 4px，於是兩邊各自冒出一條 2px 的捲軸。 -->
     <div class="flex flex-col gap-1 px-3 py-2" style="overflow: auto; min-height: 0">
       <!--

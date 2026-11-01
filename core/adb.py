@@ -379,12 +379,12 @@ class Device:
     def tap_repeat(self, x: int, y: int, times: int) -> None:
         """同一點連點，給加減鈕用。
 
-        ⚠ 全部塞進一個 shell 指令：一下一個 adb 呼叫的話每下要 1 秒（實測 27 下
+        ⚠ 全部塞進一個 shell 指令：一下一個 adb 呼叫的話每下要 1 秒（27 下
           28 秒），引擎會把那段靜止的畫面當成卡住而按返回鍵。不帶抖動，按鈕夠大。
         """
         if times <= 0:
             return
-        # 每下之間停 0.2 秒：一下接一下地送，實測 2 下會被吃掉 1 下。
+        # 每下之間停 0.2 秒：不間隔地送，2 下會被吃掉 1 下。
         self.shell("; sleep 0.2; ".join([f"input tap {x} {y}"] * times),
                    timeout=max(20, times * 2))
         log.debug("tap (%d, %d) ×%d", x, y, times)

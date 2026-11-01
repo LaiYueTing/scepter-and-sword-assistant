@@ -178,7 +178,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
   color: var(--text-2);
 }
 
-/* `QFrame::HLine` 那個坑的網頁版：分隔線用 1px 高的 div，不要 border 疊 border */
+/* 分隔線用 1px 高的 div，不要 border 疊 border */
 .rule {
   height: 1px;
   background: var(--border);

@@ -415,8 +415,7 @@ def cmd_explain(args) -> int:
                 ok = False
 
         if rule.measure:
-            # 刻意不模擬 smooth（滑動中位數）：只有一張畫面可看，平滑沒有意義。
-            # 實機跑起來時數值會比這裡穩。
+            # 不模擬 smooth（滑動中位數）：只有一張畫面可看，平滑沒有意義。
             from core.engine import (_measure_text, describe_measure,
                                      measure_ok, measure_raw)
             value = measure_raw(screen, rule.measure)
@@ -530,7 +529,7 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
         #   記憶體裡歸零就好，**不要去動使用者的 state.json**。
         #
         # `fired:` 列出「走到這張畫面之前已經用完」的規則名稱：每輪只做一次的
-        # 順手動作（公會島的累積獎勵）在每張島上都成立，不列的話它會蓋掉
+        # 附帶動作（公會島的累積獎勵）在每張島上都成立，不列的話它會蓋掉
         # 這張樣本真正要驗的那條。
         #
         # `flags:` 指定走到這張畫面時已經設好的旗標，用來驗旗標的分岔；
@@ -995,9 +994,7 @@ def main() -> int:
     try:
         from core import updater
         updater.cleanup()
-        # 順手清掉上次被強制結束時留下的解壓殘骸。實測開發機累積了 33 個、
-        # 8.3 GB——而使用者只會看到 bootloader 那句「Failed to remove
-        # temporary directory」，不會知道那是什麼。
+        # 清掉上次被強制結束時留下的解壓殘骸。
         updater.sweep_temp()
     except Exception:
         pass                    # 清不掉不影響任何功能，不值得讓程式起不來

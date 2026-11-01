@@ -6,8 +6,7 @@
 
 ⚠ **這支工具需要 PySide6，而它不是助手的執行相依。** 中文字要用系統字型畫，
   而 OpenCV 的 `putText` 畫不出中文（會變成問號），所以文字是用 Qt 的 QPainter
-  畫進去的。助手本身早就不用 Qt 了，但這裡的輸出是一張圖、跑完就結束，
-  為了它去換一套繪圖工具不划算。缺的話裝：
+  畫進去的。缺的話安裝：
 
       python -m pip install PySide6-Essentials
 

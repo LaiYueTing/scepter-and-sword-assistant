@@ -51,10 +51,10 @@ _HEADERS = {
 CHECK_TIMEOUT = 10.0        # 查版本：使用者在等，逾時就當成沒有更新
 DOWNLOAD_TIMEOUT = 60.0     # 下載：EXE 有一百多 MB，慢的網路要留裕度
 
-# 分成幾段同時抓。4 是實測與保守之間的取捨——再多對 CDN 幫助有限，
+# 分成幾段同時抓。超過 4 段對 CDN 幫助有限，
 # 而且連線數愈多，防毒的連線監控愈可能介入。
 DOWNLOAD_THREADS = 4
-# 單一分段失敗時重抓幾次。網路不穩的使用者正是這個功能要救的人。
+# 單一分段失敗時重抓幾次，只重抓失敗的那一段。
 DOWNLOAD_RETRIES = 3
 
 
@@ -91,8 +91,7 @@ def latest_status() -> tuple["Release | None", str]:
     """問 GitHub 最新的 Release。回傳（Release 或 None, 查不到的原因）。
 
     ⚠ **「查不到」和「已經是最新」不是同一件事。** `latest()` 把兩種都變成 None，
-      而介面要據此決定說哪一句話——沒網路的時候跳「已經是最新版本」就是在說謊，
-      而使用者正是靠那句話決定要不要繼續用舊版跑整晚。
+      而沒網路時不能告訴使用者「已經是最新版本」，所以另外回傳原因。
     """
     try:
         req = urllib.request.Request(API, headers=_HEADERS)
@@ -157,13 +156,12 @@ def _target_exe() -> Path:
 def _spare_backup(cur: Path) -> Path:
     """挑一個搬得動的備份路徑，回傳要用的那個。
 
-    ⚠ 舊的 `.old` 常常還被佔著：上一版的行程沒真的關掉（縮在系統匣就是這樣，
-      使用者看到的是「處理程序有兩個」）、防毒正在掃、或者檔案是唯讀的。而
+    ⚠ `.old` 可能還被佔著：上一版的行程還沒結束（例如縮在系統匣）、防毒正在掃、
+      或者檔案是唯讀的。而
       `os.replace` 的**目標**被佔用時丟的是 **[WinError 5] 存取被拒**——訊息
       指著新舊兩個路徑，完全看不出真正卡住的是那個 `.old`。
 
-    實測兩種情況都會踩到（被別的行程開著、唯讀屬性），所以刪不掉就換一個帶
-    時間戳的名字，不要在同一個路徑上硬碰硬。
+    所以刪不掉就換一個帶時間戳的名字。
     """
     first = cur.with_name(cur.name + ".old")
     try:
@@ -395,8 +393,7 @@ def sweep_temp() -> int:
 
     單檔打包的程式每次執行都會把自己解壓到 `%TEMP%\\_MEI******`，正常結束時
     bootloader 會刪掉。但**行程被強制結束就不會**（工作管理員、Stop-Process、
-    當機），而那一份有一百多 MB——實測開發機上累積了 **33 個、8.3 GB**。
-    使用者也會看到 bootloader 自己的警告：
+    當機），而每一份都有一百多 MB。bootloader 也會跳出警告：
 
         Failed to remove temporary directory: ...\\_MEI576122
 
@@ -408,15 +405,12 @@ def sweep_temp() -> int:
       刪下去會把它**刪成半殘**而當場炸掉。
 
     ⚠ **探測方式是「試著刪掉 python3XX.dll」，不是「試著開啟」。** 開啟沒有用——
-      Windows 的預設共用模式允許再開一次，實測 `open("ab")` 對正被使用的檔案
-      **會成功**，於是 `rmtree` 照樣開刪，把目錄刪成半殘才卡住。而刪除不一樣：
-      映射中的 DLL 刪不掉——刪得掉就代表沒有人在用。失敗的話整個目錄跳過。
+      Windows 的預設共用模式允許再開一次，`open("ab")` 對正被使用的檔案也會成功。
+      映射中的 DLL 刪不掉，所以刪得掉才代表沒有人在用。失敗的話整個目錄跳過。
 
     ⚠ **一定要試刪 Python 本體那支，不能隨便挑一個 DLL。** bootloader 一啟動就
-      載入它，活著的行程必定鎖著；其他 DLL 要等用到才載入。排第一個的
-      `libcrypto-3.dll` 在還沒連過網路的行程上沒有被鎖，刪得掉，於是正在跑的
-      那一份的腳本與模板整批被刪光。這一步排在防多開之前，所以再雙擊一次 EXE
-      就會觸發。
+      載入它，活著的行程必定鎖著；其他 DLL 要等用到才載入（`libcrypto-3.dll` 在
+      還沒連過網路的行程上刪得掉）。這一步排在防多開之前，再雙擊一次 EXE 就會跑到。
     """
     if not getattr(sys, "frozen", False):
         return 0
@@ -460,10 +454,9 @@ def _clean_env() -> dict[str, str]:
           Failed to load Python DLL '...\\_MEI155122\\python314.dll'.
           LoadLibrary: 找不到指定的模組。
 
-      A／B 實測：同一顆 EXE，帶著這些變數啟動必定卡在這個對話框，清乾淨則正常。
-      雙擊不會有事（Explorer 沒有這些變數），所以只有更新後的重新啟動會炸。
+      雙擊不會有事（Explorer 沒有這些變數），所以只有更新後的重新啟動會遇到。
 
-    ⚠ `_MEIPASS2` 是 PyInstaller 5 以前的名字，一併清掉——換版本時不必回頭想。
+    ⚠ `_MEIPASS2` 是 PyInstaller 5 以前的名字，一併清掉。
     """
     return {k: v for k, v in os.environ.items()
             if not k.startswith("_PYI_") and k != "_MEIPASS2"}
@@ -478,8 +471,7 @@ def restart() -> bool:
 
     ⚠ **旗標只能給 `CREATE_NO_WINDOW`。** 量出來的：`DETACHED_PROCESS`（單獨給
       或跟 CREATE_NO_WINDOW 一起給）會讓那個 PowerShell 當場死掉——`Popen` 本身
-      不報錯、PID 也拿得到，但它什麼都沒做完，症狀是「更新完就再也開不起來」。
-      三種組合的實測見 tests/test_updater.py。
+      不報錯、PID 也拿得到，但它什麼都沒做完。tests/test_updater.py 守著這條。
 
     ⚠ **環境變數一定要走 `_clean_env()`。** 少了它，新版會跳過解壓去載入舊版
       那個已經被刪掉的目錄，開不起來——理由見 `_clean_env` 的說明。

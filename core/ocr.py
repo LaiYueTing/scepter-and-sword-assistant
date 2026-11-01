@@ -88,7 +88,7 @@ def _prepare(
 ) -> np.ndarray:
     """裁切、（必要時）從右端修掉一段、二值化、放大。
 
-    三個前處理都是必須的，參數也都是實測調出來的：
+    三個前處理都是必須的，參數是量出來的：
 
       scale       720x1280 上的字太小，原尺寸幾乎讀不到（x2 讀成「亞本獎勵」、
                   x4 才讀對「惡夢副本獎勵」）。
@@ -133,7 +133,7 @@ def read(
 ) -> str:
     """讀出區域內的文字，多行會用空白接起來。讀不到就回傳空字串。
 
-    讀不到一律回空字串而不是拋錯：這是「順手記一筆」的功能，
+    讀不到一律回空字串而不是拋錯：這是附帶記錄的功能，
     不該因為它失敗就中斷整個流程。
     """
     global _unavailable
@@ -151,9 +151,7 @@ def read(
              "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
             capture_output=True, timeout=timeout,
             # ⚠ 打包版是 --windowed、沒有主控台，所以每呼叫一次就會**新開一個**
-            #   PowerShell 視窗，畫面上閃一下黑框。副本詳情頁每進去一次就讀一次
-            #   副本名稱與難度，於是使用者看到的是「跑一跑就跳出視窗又跳掉」。
-            #   adb.py / discover.py / updater.py 早就都帶了這個旗標，只有這裡漏掉。
+            #   PowerShell 視窗，畫面上閃一下黑框。
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if proc.returncode == 2:

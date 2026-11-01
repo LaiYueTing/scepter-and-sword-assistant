@@ -1,9 +1,7 @@
 """每一個模組都要 import 得起來。直接 `python tests/test_imports.py` 跑。
 
-⚠ **這支守的是「刪掉一個模組之後，還有誰在 import 它」。** 實測踩過一次：
-  `gui/protocol.py` 移除之後 `gui/runner.py` 的 `from .protocol import Channel`
-  沒改到，而**視窗照樣開得起來**——`runner.py` 要按下「開始執行」才會被載入，
-  於是使用者按下去看到的是 `No module named 'gui.protocol'`。
+⚠ **這支守的是「刪掉一個模組之後，還有誰在 import 它」。** 延後載入的模組
+  （例如 `gui/runner.py` 要按下「開始執行」才載入）寫錯 import 時，視窗照樣開得起來。
 
 ⚠ 用 grep 找漏網之魚是不夠的：漏掉的那一個正是你沒想到的那一個。這支直接把每個
   模組都 import 一次，答案是確定的。

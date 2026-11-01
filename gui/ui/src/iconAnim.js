@@ -71,7 +71,7 @@ export function mountIconAnim() {
   /*
    * ⚠ **要用 `pointerover` / `pointerout`，不能用 `pointerenter` / `pointerleave`。**
    *   後兩者不冒泡，委派收不到——掛在 document 上只會在滑鼠進出整個視窗時各觸發
-   *   一次。這個坑很安靜：程式碼看起來完全正確，動畫就是不播。
+   *   一次，而且不會有任何錯誤訊息。
    */
   document.addEventListener(
     'pointerover',

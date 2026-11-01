@@ -13,8 +13,7 @@
  * ⚠ **驗的是 `appearanceFor()` 本尊**，不是在這裡重算一次。兩邊的公式只要差一點，
  *   量出來的數字就和使用者看到的畫面對不起來，而那種落差極難察覺。
  *
- * ⚠ 出現任何 FAIL 就不要出貨。使用者連續三次回報「字看不清楚」，那幾輪的成果全部
- *   壓在這些數字上。
+ * ⚠ 出現任何 FAIL 就不要出貨。
  */
 import { BG_THEMES, appearanceFor } from '../src/data/gradients.js'
 import { luminance, rgbToHsl } from '../src/data/palette.js'

@@ -104,8 +104,7 @@ function editTimes(text) {
     <!--
       ⚠ 名稱與狀態徽章**拆成兩行**。擠在同一行時，最小視窗下卡片只剩 151px 可用，
         而勾選框要 114px、徽章要 61px——被切掉的正好是名稱最後一個字
-        （使用者看過「自動每日活重」）。往下長不必跟任何人搶，寬度每多一份腳本
-        就少一截。
+        往下長不必跟任何人搶，寬度每多一份腳本就少一截。
     -->
     <label class="flex items-center gap-2 cursor-pointer" style="min-width: 0">
       <NCheckbox
@@ -134,7 +133,7 @@ function editTimes(text) {
     </div>
 
     <!-- 時間與次數也拆成兩行（grid 讓兩行的標籤對齊成一欄）。擠在同一行時
-         時間欄只剩 56px 可畫字，而「08:00」要 35px——就是使用者看到的「)8:00」。 -->
+         時間欄只剩 56px 可畫字，而「08:00」要 35px。 -->
     <div class="grid gap-y-1.5 gap-x-1" style="grid-template-columns: auto 1fr; align-items: center">
       <span class="lab" title="時間"><Clock :size="12" /><span class="lab-text">時間</span></span>
       <!-- ⚠ 用會長高的多行欄：三個時刻在一排六張的卡片上放不下一行，而被切掉的

@@ -5,10 +5,9 @@
     python tools/release_check.py                                 # 只驗原始碼
     python tools/release_check.py --exe "dist/杖劍傳說助手.exe"    # 連打包產物一起驗
 
-⚠ **要在 gh release create 之前跑，而且要全綠才發。** 這支存在的理由是
-  v1.0.6～v1.0.8 連續三版帶著問題出去：截斷的下載被當成完成、重新啟動時
-  PyInstaller 的私有環境變數沒清掉、以及一個只有按下「開始執行」才碰得到的
-  import 錯誤。每一個都在打包之後、發布之前跑一次就會現形。
+⚠ **要在 gh release create 之前跑，而且要全綠才發。** 截斷的下載、繼承下去的
+  PyInstaller 環境變數、只有按下「開始執行」才碰得到的 import 錯誤，都要打包之後
+  實際執行才看得出來。
 
 各項檢查對應的失敗形狀：
 
@@ -116,8 +115,7 @@ def check_tests(skip_selftest: bool) -> None:
 def check_exe(exe: Path, ver: str) -> None:
     print(f"\n打包產物　{exe.name}　{exe.stat().st_size / 1048576:.0f} MB")
 
-    # ⚠ 打包鏈接好了不等於打包過了。實測拿過一顆「TOC 裡 webview / gui 全部是 0」
-    #   的 EXE——它是在那些改動之前編的，而從原始碼上完全看不出來。
+    # ⚠ dist 裡的 EXE 可能比原始碼舊，而這從原始碼上看不出來。
     sources = [ROOT / "main.py", ROOT / "杖劍傳說助手.spec"]
     for d in ("core", "gui", "scripts", "assets"):
         sources += [p for p in (ROOT / d).rglob("*")
@@ -153,8 +151,7 @@ def check_exe(exe: Path, ver: str) -> None:
           "、".join(missing) if missing
           else f"腳本 {has('scripts/')} 份、模板 {has('templates/')} 張")
 
-    # ⚠ 這一項是為 v1.0.8.0 那次加的：gui/runner.py 要按下「開始執行」才會被載入，
-    #   原始碼層的 import 掃描抓得到寫錯的 import，卻抓不到「PyInstaller 根本沒把
+    # ⚠ gui/runner.py 要按下「開始執行」才會被載入。原始碼層的 import 掃描抓得到寫錯的 import，卻抓不到「PyInstaller 根本沒把
     #   這個模組收進去」——那要去看 EXE 裡的 PYZ 才知道。
     blob = reader.extract("PYZ.pyz")
     if isinstance(blob, tuple):

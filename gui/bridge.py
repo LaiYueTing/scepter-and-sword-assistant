@@ -4,7 +4,7 @@
 走的是另一條路（pywebview 的 `js_api`，見 `gui/api.py`）。
 
 ⚠ **紀錄一定要批次推送。** 每來一行就 `evaluate_js` 一次的話，一次呼叫要跨
-   Python → CLR → WebView2 三層，實測單次約 1～2 毫秒；副本開場那種一秒好幾行的
+   Python → CLR → WebView2 三層，單次約 1～2 毫秒；副本開場那種一秒好幾行的
    時候會把工作執行緒拖住，而那條執行緒正在跑規則引擎。所以紀錄先進佇列，由
    `_pump` 每 `FLUSH` 秒送一批。狀態與任務卡不批次——它們本來就低頻，而且要即時。
 """
@@ -127,8 +127,7 @@ class WebLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         # ⚠ 只放行專案自己的模組。掛在 root logger 上收得到所有人的紀錄，而
-        #   pywebview 自己就用 logging——`debug=True` 時它每個事件都寫一行
-        #   （「loaded event fired」那種），實測 15 行的執行紀錄被灌成 22 行。
+        #   pywebview 自己就用 logging——`debug=True` 時它每個事件都寫一行。
         #   判斷交給 `logger.is_known_module`，和「取 logger 一定要用對照表裡的
         #   鍵」是同一份來源，不另外維護第二份清單。
         if not logger.is_known_module(record.name):

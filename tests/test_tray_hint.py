@@ -72,7 +72,7 @@ try:
 
     # ---------- 點通知之後，畫面也要跟著換 ----------
     # ⚠ 只寫 ui.json 的話，「介面設定」那一列會停在「提醒」直到下次啟動——
-    #   使用者回報過，而那看起來就像「點了沒有記住」。
+    #   看起來就像「點了沒有記住」。
     from gui.app import TRAY_HINT_TEXT, dismiss_tray_hint
 
     class FakeChannel:
@@ -89,7 +89,7 @@ try:
     check("點通知會推事件給前端",
           ch.sent == [("ui_pref", {"key": "tray_hint", "value": False})])
 
-    # ⚠ 一整串跑完會在 toast 上擠成一團，而換行字元實測是有效的（三行都畫得出來）。
+    # ⚠ 一整串跑完會在 toast 上擠成一團，換行字元在 toast 上有效。
     check("通知文字有自己斷行", TRAY_HINT_TEXT.count("\n") == 2)
     check("通知有講「點下去會怎樣」", "不再提醒" in TRAY_HINT_TEXT)
 

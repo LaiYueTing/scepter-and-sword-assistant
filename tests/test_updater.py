@@ -168,7 +168,7 @@ def test_restart_flags() -> None:
 def test_restart_env_scrubbed() -> None:
     """重新啟動時傳出去的環境變數不能帶著 PyInstaller 的私有那幾個。
 
-    ⚠ 這是實機炸出來的，而且**每次都炸**：bootloader 靠
+    ⚠ bootloader 靠
       `_PYI_PARENT_PROCESS_LEVEL` / `_PYI_APPLICATION_HOME_DIR` 認出「我是已經
       解壓好的子行程」，繼承下去的話新版會跳過解壓、去載入舊版早就刪掉的目錄，
       使用者看到 `Failed to load Python DLL ... LoadLibrary: 找不到指定的模組`。
@@ -239,7 +239,7 @@ def _download_with(body: bytes, declared: int, tmp: Path):
 def test_download_verification() -> None:
     """截斷的下載不能被當成完成。
 
-    ⚠ 這是實機炸出來的，而且後果是永久的：`resp.read()` 在連線半途斷掉時回傳
+    ⚠ 後果是永久的：`resp.read()` 在連線半途斷掉時回傳
       空字串，`while` 迴圈就正常結束——沒有例外。少了驗證，一個截斷的 EXE 會被
       換上去，使用者從此每次啟動都看到「Failed to load Python DLL」。
     """
@@ -309,12 +309,8 @@ def test_sweep_temp() -> None:
 def test_backup_path_when_old_is_stuck() -> None:
     """`.old` 還被佔著的時候，備份要換一個名字，不要在同一個路徑上硬碰硬。
 
-    這是 2026-08-30 使用者回報的 [WinError 5]：更新按下去只說「換不掉舊版：
-    存取被拒」，而真正卡住的是那個誰都看不到的 `.old`——上一版的行程還開著
-    （工作管理員裡是兩個處理程序），或者防毒正握著它。
-
-    ⚠ 兩種成因都要驗：**被別的行程開著**與**唯讀屬性**，實測都是同一個
-      WinError 5。
+    ⚠ 兩種成因都要驗：**被別的行程開著**與**唯讀屬性**，都是同一個 WinError 5，
+      訊息看不出真正卡住的是 `.old`。
     """
     print("備份路徑（.old 卡住時）")
     with tempfile.TemporaryDirectory() as tmp:
@@ -346,7 +342,7 @@ def test_backup_path_when_old_is_stuck() -> None:
         finally:
             holder.close()
 
-        # 唯讀是另一個成因，實測同樣是 WinError 5
+        # 唯讀是另一個成因，同樣是 WinError 5
         cur.write_bytes(b"MZ" + b"x" * 64)
         old.write_bytes(b"stale")
         os.chmod(old, stat.S_IREAD)

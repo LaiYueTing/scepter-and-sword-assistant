@@ -28,7 +28,7 @@ const showOptions = ref(false)
     -->
     <div
       class="grid gap-3"
-      style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))"
+      style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))"
     >
       <TaskCard v-for="t in host.tasks" :key="t.name" :task="t" />
     </div>

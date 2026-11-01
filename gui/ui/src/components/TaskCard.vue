@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { NCheckbox, NInput, NInputNumber, NTooltip } from 'naive-ui'
 import { Clock, Repeat } from 'lucide-vue-next'
+import { formatWeekly, parseTimes } from '../data/schedule'
 import { useHostStore } from '../stores/host'
 
 const props = defineProps({ task: { type: Object, required: true } })
@@ -68,7 +69,9 @@ const nextFull = computed(() => {
 // 那才是明確的意思表示。
 const timeKey = computed(() => (props.task.mode === 'weekly' ? 'weekly_at' : 'daily_at'))
 const timeText = computed(() =>
-  (props.task.mode === 'weekly' ? props.task.weekly_at : props.task.daily_at).join('、')
+  props.task.mode === 'weekly'
+    ? formatWeekly(props.task.weekly_at)
+    : props.task.daily_at.join('、')
 )
 
 function pad(n) {
@@ -90,23 +93,14 @@ function edit(field, value) {
   host.save([{ path: ['tasks', props.task.name, field], value }]).catch(() => {})
 }
 
-/**
- * 時間欄要送**陣列**過去，不是那串顯示文字。
- *
- * ⚠ 分隔符全部收：使用者會打頓號、逗號或空白，而「打錯一個符號就整段變成一個
- *   時刻」是無聲的錯——設定檔會寫成 `daily_at: ["08:00、21:00"]`，載入時才炸。
- */
+/** 時間欄要送**陣列**過去，不是那串顯示文字。 */
 function editTimes(text) {
-  const parts = String(text)
-    .split(/[、,，;；\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  edit(timeKey.value, parts)
+  edit(timeKey.value, parseTimes(text, props.task.mode === 'weekly'))
 }
 </script>
 
 <template>
-  <div class="nc-card nc-hover p-3 flex flex-col gap-2" style="min-width: 0">
+  <div class="task-card nc-card nc-hover p-3 flex flex-col gap-2" style="min-width: 0">
     <!--
       ⚠ 名稱與狀態徽章**拆成兩行**。擠在同一行時，最小視窗下卡片只剩 151px 可用，
         而勾選框要 114px、徽章要 61px——被切掉的正好是名稱最後一個字
@@ -141,16 +135,22 @@ function editTimes(text) {
     <!-- 時間與次數也拆成兩行（grid 讓兩行的標籤對齊成一欄）。擠在同一行時
          時間欄只剩 56px 可畫字，而「08:00」要 35px——就是使用者看到的「)8:00」。 -->
     <div class="grid gap-1.5" style="grid-template-columns: auto 1fr; align-items: center">
-      <span class="lab"><Clock :size="12" /> 時間</span>
+      <span class="lab" title="時間"><Clock :size="12" /><span class="lab-text">時間</span></span>
+      <!-- ⚠ 用會長高的多行欄：三個時刻在一排六張的卡片上放不下一行，而被切掉的
+           那一格看起來就像沒有排。Enter 仍然是送出，不是換行。 -->
       <NInput
         size="tiny"
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 3 }"
+        :resizable="false"
         :value="timeText"
         :disabled="locked"
         :placeholder="task.mode === 'weekly' ? '週一 08:00' : '08:00、21:00'"
+        @keydown.enter.prevent="$event.target.blur()"
         @change="editTimes"
       />
 
-      <span class="lab"><Repeat :size="12" /> 次數</span>
+      <span class="lab" title="次數"><Repeat :size="12" /><span class="lab-text">次數</span></span>
       <NTooltip trigger="hover" :disabled="!task.repeat_hint">
         <template #trigger>
           <NInputNumber
@@ -200,5 +200,15 @@ function editTimes(text) {
   font-size: 12.5px;
   color: var(--text-1);
   white-space: nowrap;
+}
+
+/* 卡片窄到放不下兩個時刻時，欄位標籤只留圖示，把寬度讓給時間欄。 */
+.task-card {
+  container-type: inline-size;
+}
+@container (max-width: 170px) {
+  .lab-text {
+    display: none;
+  }
 }
 </style>

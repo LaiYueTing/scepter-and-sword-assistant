@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "check": "node tools/check-tokens.mjs && node tools/check-contrast.mjs",
+    "check": "node tools/check-tokens.mjs && node tools/check-contrast.mjs && node tools/check-schedule.mjs",
     "tokens": "node tools/gen-tokens.mjs"
   },
   "dependencies": {

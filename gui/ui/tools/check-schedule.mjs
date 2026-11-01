@@ -1,8 +1,15 @@
 // 驗任務卡時間欄的文字轉換：顯示與寫回要對得起來。
 import assert from 'node:assert/strict'
-import { formatWeekly, parseTimes } from '../src/data/schedule.js'
+import { formatWeekly, parseTimes, splitWeekly } from '../src/data/schedule.js'
 
 const chaos = ['週日 10:00', '週日 14:00', '週日 21:30']
+assert.deepEqual(splitWeekly(chaos), { day: '週日', text: '10:00 14:00 21:30' })
+assert.deepEqual(parseTimes(splitWeekly(chaos).text, true, '週日'), chaos)
+assert.deepEqual(parseTimes('週一 08:00、09:00', true, '週日'), ['週一 08:00', '週一 09:00'])
+assert.deepEqual(splitWeekly(['週一 08:00', '週三 09:00']),
+  { day: '', text: '週一 08:00、週三 09:00' })
+assert.deepEqual(splitWeekly([]), { day: '', text: '' })
+
 assert.equal(formatWeekly(chaos), '週日 10:00、14:00、21:30')
 assert.deepEqual(parseTimes(formatWeekly(chaos), true), chaos)
 

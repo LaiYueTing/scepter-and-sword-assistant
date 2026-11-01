@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { NCheckbox, NInput, NInputNumber, NTooltip } from 'naive-ui'
 import { Clock, Repeat } from 'lucide-vue-next'
-import { formatWeekly, parseTimes } from '../data/schedule'
+import { parseTimes, splitWeekly } from '../data/schedule'
 import { useHostStore } from '../stores/host'
 
 const props = defineProps({ task: { type: Object, required: true } })
@@ -68,10 +68,10 @@ const nextFull = computed(() => {
 // 所以模式在後端就決定好，這裡只編它該編的那一個——要改種類就去改設定檔，
 // 那才是明確的意思表示。
 const timeKey = computed(() => (props.task.mode === 'weekly' ? 'weekly_at' : 'daily_at'))
-const timeText = computed(() =>
+const timeParts = computed(() =>
   props.task.mode === 'weekly'
-    ? formatWeekly(props.task.weekly_at)
-    : props.task.daily_at.join('、')
+    ? splitWeekly(props.task.weekly_at)
+    : { day: '', text: props.task.daily_at.join(' ') }
 )
 
 function pad(n) {
@@ -95,12 +95,12 @@ function edit(field, value) {
 
 /** 時間欄要送**陣列**過去，不是那串顯示文字。 */
 function editTimes(text) {
-  edit(timeKey.value, parseTimes(text, props.task.mode === 'weekly'))
+  edit(timeKey.value, parseTimes(text, props.task.mode === 'weekly', timeParts.value.day))
 }
 </script>
 
 <template>
-  <div class="task-card nc-card nc-hover p-3 flex flex-col gap-2" style="min-width: 0">
+  <div class="task-card nc-card nc-hover p-2.5 flex flex-col gap-2" style="min-width: 0">
     <!--
       ⚠ 名稱與狀態徽章**拆成兩行**。擠在同一行時，最小視窗下卡片只剩 151px 可用，
         而勾選框要 114px、徽章要 61px——被切掉的正好是名稱最後一個字
@@ -125,16 +125,17 @@ function editTimes(text) {
       ⚠ **執行中的那顆點會呼吸，其餘的不會。** 五張卡同時在閃的話，「哪一個真的在
         跑」反而看不出來——而那正是這顆點存在的理由。
     -->
-    <div>
+    <div class="flex items-center gap-1.5">
       <span class="nc-pill" :class="`nc-pill--${badge.tone}`">
         <span class="nc-dot" :class="{ live: badge.live }" style="--glow: currentColor"></span>
         {{ badge.text }}
       </span>
+      <span v-if="timeParts.day" class="nc-pill nc-pill--idle">{{ timeParts.day }}</span>
     </div>
 
     <!-- 時間與次數也拆成兩行（grid 讓兩行的標籤對齊成一欄）。擠在同一行時
          時間欄只剩 56px 可畫字，而「08:00」要 35px——就是使用者看到的「)8:00」。 -->
-    <div class="grid gap-1.5" style="grid-template-columns: auto 1fr; align-items: center">
+    <div class="grid gap-y-1.5 gap-x-1" style="grid-template-columns: auto 1fr; align-items: center">
       <span class="lab" title="時間"><Clock :size="12" /><span class="lab-text">時間</span></span>
       <!-- ⚠ 用會長高的多行欄：三個時刻在一排六張的卡片上放不下一行，而被切掉的
            那一格看起來就像沒有排。Enter 仍然是送出，不是換行。 -->
@@ -143,9 +144,9 @@ function editTimes(text) {
         type="textarea"
         :autosize="{ minRows: 1, maxRows: 3 }"
         :resizable="false"
-        :value="timeText"
+        :value="timeParts.text"
         :disabled="locked"
-        :placeholder="task.mode === 'weekly' ? '週一 08:00' : '08:00、21:00'"
+        :placeholder="task.mode === 'weekly' ? '週一 08:00' : '08:00 21:00'"
         @keydown.enter.prevent="$event.target.blur()"
         @change="editTimes"
       />
@@ -209,6 +210,13 @@ function editTimes(text) {
 @container (max-width: 170px) {
   .lab-text {
     display: none;
+  }
+  /* ⚠ 輸入區與量高度的 mirror 內距要一樣，否則算出來的行數和畫出來的對不上。 */
+  :deep(.n-input__textarea-el),
+  :deep(.n-input__textarea-mirror),
+  :deep(.n-input__placeholder) {
+    padding-left: 4px;
+    padding-right: 2px;
   }
 }
 </style>

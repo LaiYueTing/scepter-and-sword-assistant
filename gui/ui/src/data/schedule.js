@@ -16,13 +16,24 @@ export function formatWeekly(items) {
 }
 
 /**
+ * 任務卡要顯示的星期與時間欄文字。全部同一天時星期獨立出來（膠囊），欄位只放時刻；
+ * 跨好幾天就回空的星期，星期留在欄位裡。
+ */
+export function splitWeekly(items) {
+  const days = new Set(items.map((item) => item.split(' ')[0]))
+  if (days.size !== 1) return { day: '', text: formatWeekly(items) }
+  return { day: [...days][0], text: items.map((item) => item.split(' ')[1]).join(' ') }
+}
+
+/**
  * 時間欄的文字轉成要寫回設定檔的陣列。
  *
  * ⚠ 分隔符全部收：使用者會打頓號、逗號或空白，而「打錯一個符號就整段變成一個
  *   時刻」是無聲的錯。
- * ⚠ 每週的時刻沒寫星期就沿用前一個。星期後面沒有時刻時原樣送出，由後端回報格式錯誤。
+ * ⚠ 每週的時刻沒寫星期就沿用前一個，最前面的沿用 `defaultDay`（膠囊上的星期）。
+ *   星期後面沒有時刻時原樣送出，由後端回報格式錯誤。
  */
-export function parseTimes(text, weekly) {
+export function parseTimes(text, weekly, defaultDay = '') {
   const parts = String(text)
     .split(/[、,，;；\s]+/)
     .map((s) => s.trim())
@@ -30,7 +41,7 @@ export function parseTimes(text, weekly) {
   if (!weekly) return parts
 
   const out = []
-  let day = ''
+  let day = defaultDay
   let pending = ''
   for (const part of parts) {
     const match = part.match(CLOCK)

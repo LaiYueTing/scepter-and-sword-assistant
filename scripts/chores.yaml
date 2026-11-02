@@ -2,22 +2,23 @@
 #
 # 把每天要做、各自只有幾步的事合成一趟，省下重複導覽的時間。
 #
-# 四段依序執行：命運果實 → 羈絆冒險 → 素材祕境 → 公會捐獻，每段由一條入口規則開始，
-# 各有一個開關（chores_fruit / chores_bond / chores_material / chores_donate）。
-# 段與段之間不記錄進度，靠入口規則的 max_fires: 1 交接：走過一次就用完，回到筆記頁
-# 自然輪到下一段。
+# 先在家園處理功能區（商城 → 好友 → 任務 → 餽贈）與精彩活動（祕寶大作戰 → 每日簽到），
+# 再到筆記頁處理命運果實 → 羈絆冒險 → 素材祕境，最後公會捐獻。每段由一條入口規則開始，
+# 各有一個開關。段與段之間不記錄進度，靠入口規則的 max_fires: 1 交接：走過一次就用完，
+# 回到功能區、活動一覽或筆記頁時自然輪到下一段。
 #
-# ⚠ 順序寫在規則的排列裡。調整順序前先確認每一段結束後回到哪一頁：果實、羈絆、
-#   素材祕境都回到筆記頁，而筆記頁上同時看得到公會頁籤。
+# ⚠ 順序寫在規則的排列裡。調整順序前先確認每一段結束後回到哪一頁：功能區的各項回到
+#   功能區，活動的各項回到活動一覽，果實、羈絆、素材祕境回到筆記頁，而筆記頁上同時
+#   看得到公會頁籤。
 #
 # 共通約束與共用規則的說明見 dungeon.yaml 檔頭。
 
 name: 自動日常雜務
 package: com.m88.idleXX
 
-# 正常一趟不到三分鐘，沒有需要長時間等待的步驟，超過 8 分鐘就代表卡住了，
+# 正常一趟約五分鐘，沒有需要長時間等待的步驟，超過 15 分鐘就代表卡住了，
 # 結束本輪讓出給下一個排程。
-max_minutes: 8
+max_minutes: 15
 
 # 結束程序：捐獻面板 → 公會頁 → 公會島 → 家園。
 # ⚠ 只能用 tap_template，不能用固定座標：這是無條件執行的清單。
@@ -58,6 +59,410 @@ rules:
       - tap: [272, 666]      # 「本次登入不再提醒」的勾選框
       - wait: 0.6
       - tap_template: btn_confirm
+      - wait: 2
+
+  # ==================== 家園：功能區 ====================
+  # 聊天欄上方的方塊按鈕打開功能區，依序處理 商城 → 好友 → 任務 → 餽贈，每項處理完
+  # 回到功能區，由下一項的入口規則接手；都用完之後返回家園。
+  # ⚠ 這幾頁都有返回鍵，所以「誤入次要頁面」的 absent 列了每一頁的錨點，各頁改由
+  #   「…→ 返回」離開。否則它的計時會跨過連續領取累加，在兩次領取之間把頁面退掉。
+
+  - name: 家園 → 開啟功能區
+    # 方塊按鈕只在家園而且功能區沒開時看得到：家園 1.000、其餘 ≤0.437。
+    template: btn_home_func_panel
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 功能區 → 開啟商城
+    # 也是功能區的錨點：功能區 ≥0.984、其餘 ≤0.819。
+    template: label_panel_shop
+    when_option: chores_shop
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 功能區 → 開啟好友
+    template: label_panel_friends
+    require: [label_panel_shop]
+    when_option: chores_friends
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 功能區 → 開啟任務
+    # 「任務」卡片文字在功能區 ≥0.864、其餘 ≤0.462。
+    template: label_panel_task
+    require: [label_panel_shop]
+    threshold: 0.8
+    when_option: chores_tasks
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 功能區 → 開啟餽贈
+    # 「餽贈」在功能區 ≥0.886、其餘 ≤0.715。
+    template: label_panel_gift
+    require: [label_panel_shop]
+    threshold: 0.8
+    when_option: chores_rewards
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 功能區的項目都處理完 → 返回家園
+    template: label_panel_shop
+    when_spent: [功能區 → 開啟商城, 功能區 → 開啟好友, 功能區 → 開啟任務, 功能區 → 開啟餽贈]
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  # ---- 商城：巡禮之證、每日優惠、本週精選 ----
+  # 卡片右上角有 ❗ 代表有東西可領，領完就消失。模板連 ❗ 一起裁：有 ❗ ≥0.951、
+  # 領完的卡片 ≤0.757。依序處理巡禮之證 → 每日優惠 → 本週精選。
+
+  - name: 商城 → 巡禮之證有驚嘆號 → 進入
+    template: card_shop_pass_dot
+    require: [label_shop_list]
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 商城 → 每日優惠有驚嘆號 → 進入
+    template: card_shop_daily_dot
+    require: [label_shop_list]
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 商城 → 本週精選有驚嘆號 → 進入
+    template: card_shop_weekly_dot
+    require: [label_shop_list]
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 商城 → 往下捲到每日優惠
+    # 兩張卡片在列表最下面，拖到底兩張都看得到。
+    template: label_shop_list
+    max_fires: 2
+    cooldown: 3
+    do:
+      - swipe: [360, 1000, 360, 300, 500]
+      - wait: 1.5
+
+  - name: 商城的贈禮都領完 → 返回
+    # 列表的返回鍵是沒有底框的「<」，btn_back_arrow 認不得（0.51），用系統返回鍵。
+    template: label_shop_list
+    sustain: 6
+    cooldown: 3
+    do:
+      - back:
+      - wait: 2
+
+  - name: 巡禮目標 → 領取
+    # 與任務同一種「領取」按鈕。錨點取左上角的「巡禮之證」標題（各頁籤都是 1.000，
+    # 其餘 ≤0.419）。
+    # ⚠ 兩條領取排在切換頁籤前面：切換之後原本的頁籤可能還掛著 ❗。
+    template: btn_claim_dot
+    require: [label_pass]
+    threshold: 0.82
+    cooldown: 1.5
+    do:
+      - tap_match: []
+      - wait: 1.5
+
+  - name: 巡禮之證 → 領取巡禮指引的獎勵
+    # 左邊「巡禮指引」那一欄可領的獎勵右上角有 ❗，region 只框那一欄，不碰右邊要
+    # 付費解鎖的「女神賜福」。有 ❗ 1.000、其餘 ≤0.481。
+    template: badge_reward_dot
+    region: [250, 370, 70, 780]
+    require: [label_pass]
+    max_fires: 5
+    cooldown: 2
+    do:
+      - tap_match: [-30, 35]
+      - wait: 2
+
+  - name: 巡禮之證 → 巡禮目標有驚嘆號 → 切換頁籤
+    # badge_tab_dot_b 是頁籤上的紅色 ❗，region 只框「巡禮目標」頁籤的右上角。
+    template: badge_tab_dot_b
+    region: [660, 1170, 50, 45]
+    require: [label_pass]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [610, 1218]
+      - wait: 2
+
+  - name: 巡禮之證頁籤有驚嘆號 → 切換頁籤
+    # 巡禮值升級之後，「巡禮之證」頁籤會出現 ❗（0.830～0.975，其餘 ≤0.446）。
+    template: badge_tab_dot
+    region: [390, 1170, 50, 45]
+    require: [label_pass]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [290, 1218]
+      - wait: 2
+
+  - name: 巡禮之證已處理完 → 返回
+    require: [label_pass]
+    absent: [btn_claim_dot]
+    threshold: 0.82
+    sustain: 4
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 每日優惠 → 領取每日贈禮
+    # 左上角的禮物，有 ❗ 0.884～1.000、領完變成「已領取」0.543。錨點取「小確幸禮包」
+    # 標題（0.891～1.000，其餘 ≤0.716），大標題有光暈動畫不能用。
+    template: gift_daily_dot
+    require: [label_offer_daily]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: [-30, 20]
+      - wait: 2
+
+  - name: 每日優惠已領取 → 返回
+    require: [label_offer_daily]
+    absent: [gift_daily_dot]
+    threshold: 0.8
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 本週精選 → 領取每週贈禮
+    # 有 ❗ 1.000、領完 ≤0.642。
+    template: gift_weekly_dot
+    require: [label_offer_weekly]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: [-40, 30]
+      - wait: 2
+
+  - name: 本週精選已領取 → 返回
+    require: [label_offer_weekly]
+    absent: [gift_weekly_dot]
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  # ---- 好友：友情幣 ----
+
+  - name: 好友 → 友情幣有驚嘆號 → 開啟
+    # 底部中央的按鈕，有 ❗ 1.000、領完 ≤0.542。
+    template: btn_friend_coin_dot
+    require: [label_friends]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 獲得友情幣 → 領取
+    # 對話框的「領取」位置固定；領完之後同一個對話框改顯示「暫時沒有可領取的友情幣」。
+    require: [label_friend_coin]
+    absent: [label_friend_coin_empty]
+    max_fires: 2
+    cooldown: 3
+    do:
+      - tap: [360, 965]
+      - wait: 2
+
+  - name: 友情幣已領完 → 關閉對話框
+    template: label_friend_coin_empty
+    max_fires: 2
+    cooldown: 3
+    do:
+      - back:
+      - wait: 2
+
+  - name: 好友已處理完 → 返回
+    require: [label_friends]
+    absent: [btn_friend_coin_dot, label_friend_coin]
+    threshold: 0.8
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  # ---- 任務：日常、週常 ----
+
+  - name: 任務 → 領取
+    # 可領的任務按鈕右上角有 ❗，領完的任務沉到最下面變成「已完成」。有 ❗ 的「領取」
+    # 0.859～1.000；錨點取底部的「任務／成就」頁籤（1.000，其餘 ≤0.768）。
+    template: btn_claim_dot
+    require: [label_tasks_tabs]
+    threshold: 0.82
+    cooldown: 1.5
+    do:
+      - tap_match: []
+      - wait: 1.5
+
+  - name: 任務 → 週常有驚嘆號 → 切到週常
+    # badge_tab_dot 是頁籤上的紅色 ❗，region 只框週常頁籤的右上角。
+    template: badge_tab_dot
+    region: [330, 1170, 60, 45]
+    require: [label_tasks_tabs]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [318, 1216]
+      - wait: 2
+
+  - name: 任務已領完 → 返回
+    require: [label_tasks_tabs]
+    absent: [btn_claim_dot]
+    threshold: 0.82
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  # ---- 餽贈 ----
+
+  - name: 餽贈 → 領取全部
+    # 按任何一個「領取」就會全部領走，之後頁面顯示「暫無可領取的餽贈獎勵」。
+    template: btn_gift_claim_dot
+    require: [label_gift_overview]
+    max_fires: 2
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 餽贈已領完 → 返回
+    require: [label_gift_overview]
+    absent: [btn_gift_claim_dot]
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  # ==================== 家園：精彩活動 ====================
+  # 右上角的「精彩活動」打開活動一覽，依序處理 祕寶大作戰 → 每日簽到。賽季活動每期
+  # 內容不同，不處理。
+
+  - name: 家園 → 開啟精彩活動
+    # 功能區開著時這個圖示也看得到，所以要求方塊按鈕在（功能區會蓋住它）。
+    template: label_home_events
+    require: [btn_home_func_panel]
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 活動一覽 → 祕寶大作戰有驚嘆號 → 進入
+    # 紅色 ❗ ≥0.955；能量領完之後變成藍色 ❕，只有 ≤0.791。
+    template: card_treasure_dot
+    require: [label_event_list]
+    threshold: 0.9
+    when_option: chores_treasure
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 活動一覽 → 每日簽到有驚嘆號 → 進入
+    # 有 ❗ ≥0.992、簽完 ≤0.677。
+    template: card_signin_dot
+    require: [label_event_list]
+    when_option: chores_signin
+    max_fires: 1
+    cooldown: 5
+    do:
+      - tap_match: []
+      - wait: 3
+
+  - name: 活動一覽 → 往下捲
+    # 每日簽到在列表最下面，拖到底時祕寶大作戰與每日簽到都看得到。
+    template: label_event_list
+    max_fires: 2
+    cooldown: 3
+    do:
+      - swipe: [360, 1000, 360, 300, 500]
+      - wait: 1.5
+
+  - name: 活動都處理完 → 返回
+    # 列表的返回鍵沒有底框，用系統返回鍵。
+    template: label_event_list
+    sustain: 6
+    cooldown: 3
+    do:
+      - back:
+      - wait: 2
+
+  - name: 祕寶大作戰 → 領取能量
+    # 錨點取「購買禮包獲得」那一列：祕寶大作戰 1.000、其餘 ≤0.565。
+    template: btn_claim_dot
+    require: [label_treasure_page]
+    threshold: 0.82
+    cooldown: 1.5
+    do:
+      - tap_match: []
+      - wait: 1.5
+
+  - name: 祕寶大作戰已領完 → 返回
+    require: [label_treasure_page]
+    absent: [btn_claim_dot]
+    threshold: 0.82
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 每日簽到 → 領取今天的獎勵
+    # 今天那一格上方的「領取」標籤，1.000、其餘 ≤0.445。
+    template: btn_signin_today
+    require: [label_signin]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 每日簽到已領取 → 返回
+    require: [label_signin]
+    absent: [btn_signin_today]
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
       - wait: 2
 
   # ==================== 命運果實 ====================
@@ -427,7 +832,10 @@ rules:
     # ⚠ 要排在公會島那幾條後面（島上也看得到筆記頁籤），又要排在「點公會頁籤」前面
     #   （否則從家園啟動會直接進入捐獻，跳過前三段）。
     # ⚠ max_fires: 1：只負責開始時。各段結束後由後備規則的返回鍵回到筆記頁。
+    # ⚠ sustain: 5：家園也看得到筆記頁籤，按下功能區或精彩活動之後的等待與過渡畫面
+    #   不能觸發。家園的兩個入口沒有 sustain，一到家園就先觸發。
     template: nav_note
+    sustain: 5
     max_fires: 1
     cooldown: 4
     do:
@@ -435,8 +843,10 @@ rules:
       - wait: 2.5
 
   - name: 不在公會島 → 點公會頁籤
+    # ⚠ sustain: 5 的理由同上一條；兩條一起有，家園上仍由上一條先到。
     template: nav_guild
     when_option: chores_donate
+    sustain: 5
     cooldown: 4
     do:
       - tap_match: []
@@ -572,11 +982,16 @@ rules:
       - wait: 2
 
   - name: 誤入次要頁面 → 點返回退出
-    template: btn_back_arrow
+    # ⚠ absent 列出家園各項的頁面：那幾頁有自己的「→ 返回」，這條的計時要在那裡歸零。
+    require: [btn_back_arrow]
+    absent: [label_panel_shop, label_pass, label_offer_daily, label_offer_weekly, label_friends,
+             label_friend_coin, label_tasks_tabs, label_gift_overview,
+             label_treasure_page, label_signin]
+    threshold: 0.8
     sustain: 6
     cooldown: 3
     do:
-      - tap_match: []
+      - tap_template: btn_back_arrow
       - wait: 2
 
   - name: 停在無法處理的畫面 → 回家園重新開始

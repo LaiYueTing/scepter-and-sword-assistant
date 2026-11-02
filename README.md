@@ -528,6 +528,7 @@ python main.py scan battle btn_settings_gear --absent   # 反過來，找非戰�
 | `cooldown` | 觸發後幾秒內不再觸發 |
 | `once` / `max_fires` | 只觸發一次 / 最多觸發幾次（每輪重置） |
 | `max_fires_daily` | 每天最多觸發幾次，**跨執行保留**（記在 `state.json`，換日歸零） |
+| `when_spent` | 這幾條規則都用完了（停用、`max_fires` 或 `max_fires_daily` 到了）才成立 |
 | `when_option` | 綁定 config 的設定。`like_teammates` 要它為 true、`!claim_reward` 要它為 false、`buy_counts=2` 要它等於某個值 |
 | `do` | 動作清單。留空表示「純攔截」——只擋住後面的規則，什麼都不做 |
 

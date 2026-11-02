@@ -334,10 +334,11 @@ rules:
   - name: 今日捐獻已達設定次數 → 關閉面板並結束本輪
     # 上一條的每日上限用完（或關閉晨星捐獻）後才輪到。少了這條會停在面板上直到
     # max_minutes。
-    # ⚠ 用 sustain 不用 cooldown：捐獻後會依序出現確認框與獎勵橫幅，期間按鈕不在畫面
-    #   上、計時歸零，不會在兩次捐獻之間誤判。
+    # ⚠ 一定要 when_spent：捐獻之後按鈕一直留在畫面上，只靠 sustain 的話計時會跨過
+    #   好幾次捐獻累加，在上一條 cooldown 的那 3 秒裡搶先結束，少捐一次。
     # ⚠ 面板上沒有返回鍵，要按系統返回鍵。
     template: btn_donate_star
+    when_spent: 捐獻面板 → 花晨星捐贈
     sustain: 4
     do:
       - back:

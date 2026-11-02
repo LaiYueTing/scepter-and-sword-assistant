@@ -125,6 +125,9 @@ class Rule:
     # 用來把「在 A 畫面看到的事實」帶到 B 畫面判斷——兩張畫面沒有共同元素時，
     # 條件本身表達不了（副本的「這一級已經是天花板了嗎」就是這種形狀）。
     when_flag: list[str] = field(default_factory=list)
+    # 這幾條規則都用完（停用、max_fires 或 max_fires_daily 到了）才成立。用在「上一條
+    # 做到上限之後才輪到我」：只靠排序的話，上一條在 cooldown 期間就會被搶走。
+    when_spent: list[str] = field(default_factory=list)
     actions: list[dict[str, Any]] = field(default_factory=list)
     cooldown: float = 0.0                # 觸發後多久內不再觸發（秒）
     once: bool = False                   # 整場只觸發一次
@@ -154,6 +157,13 @@ class Rule:
         if self.max_fires_daily and self._today >= self.max_fires_daily:
             return False
         return now - self._last_fired >= self.cooldown
+
+    def spent(self) -> bool:
+        """已經不會再觸發（不看 cooldown）。"""
+        return (self._disabled
+                or (self.once and self._fires > 0)
+                or bool(self.max_fires and self._fires >= self.max_fires)
+                or bool(self.max_fires_daily and self._today >= self.max_fires_daily))
 
     def mark_fired(self, now: float) -> None:
         self._last_fired = now
@@ -242,6 +252,7 @@ class Script:
                     pick_across=bool(item.get("pick_across", False)),
                     when_option=item.get("when_option"),
                     when_flag=as_list(item.get("when_flag")),
+                    when_spent=as_list(item.get("when_spent")),
                     when_weekday=_weekdays(item.get("when_weekday"), item["name"]),
                     actions=item.get("do") or [],
                     cooldown=float(item.get("cooldown", 0)),
@@ -279,6 +290,11 @@ class Script:
         # 而紀錄上完全看不出來——所以在這裡就擋下來。
         known = {r.name for r in rules}
         for rule in rules:
+            missing = sorted(set(rule.when_spent) - known)
+            if missing:
+                raise ScriptError(
+                    f"規則「{rule.name}」的 when_spent 指到不存在的規則："
+                    + "、".join(missing))
             for action in rule.actions:
                 target = action.get("reset_fires")
                 if target is None:
@@ -930,6 +946,9 @@ class Engine:
             for want in rule.when_flag:
                 if (want[1:] in flags) if want.startswith("!") else (want not in flags):
                     return False, None
+        if rule.when_spent and flags is not None:
+            if any(not r.spent() for r in self.script.rules if r.name in rule.when_spent):
+                return False, None
 
         if rule.require and not all(
             self._find(screen, name, th) for name in rule.require

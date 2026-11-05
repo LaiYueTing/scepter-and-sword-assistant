@@ -1,19 +1,9 @@
 /**
- * 掃過**全部**背景主題 × 深淺兩套，確認每一組文字／表面的對比都還在。
+ * 檢查全部背景主題 × 深淺兩套的文字與表面對比，出現 FAIL 不可發布。
  *
  *   node tools/check-contrast.mjs
  *
- * 為什麼需要這支，有兩個各自獨立的理由：
- *
- *   1. **換色相不等於不動對比。** 相對亮度不是只看 L——同樣 L=55% 的黃色比藍色亮
- *      得多。「理論上不會變」要拿數字驗。
- *   2. **卡片是半透明的**，所以字真正落在的底是「卡片色 ＋ 透上來的漸層」，不是
- *      `--bg-2`。拿 `--bg-2` 去量會得到一組好看但和畫面無關的數字。
- *
- * ⚠ **驗的是 `appearanceFor()` 本尊**，不是在這裡重算一次。兩邊的公式只要差一點，
- *   量出來的數字就和使用者看到的畫面對不起來，而那種落差極難察覺。
- *
- * ⚠ 出現任何 FAIL 就不要出貨。
+ * ⚠ 驗的是 `appearanceFor()` 本身，不在這裡重算。半透明卡片要用合成後的底色量。
  */
 import { BG_THEMES, appearanceFor } from '../src/data/gradients.js'
 import { luminance, rgbToHsl } from '../src/data/palette.js'
@@ -34,9 +24,9 @@ function cr(a, b) {
 }
 const lightnessOf = (css) => rgbToHsl(parse(css))[2]
 
-/** 卡片上的小字。半透明時要拿合成後的底去量，那才是畫面上真正發生的事。 */
+/** 卡片上的小字，用合成後的底色量。 */
 const ON_CARD = ['--text-0', '--text-1', '--text-2', '--accent-text', '--green', '--amber', '--red']
-/** 面板（`--bg-1`）上的字。那一層不透明，直接量。 */
+/** 面板（`--bg-1`）上的字。 */
 const ON_PANEL = ['--text-0', '--text-1', '--text-2']
 
 const worst = {}
@@ -60,16 +50,12 @@ for (const isDark of [true, false]) {
     note(`${tag} --border / 面板`, cr(parse(v['--border']), panelBg), 1.3, t.name)
 
     /*
-     * 主要按鈕上的字。驗的是 `--accent-on`，不是白字——主色刻意不為了撐住白字而
-     * 被壓暗（那會讓黃色系主題整片變土色），改成換字色。
+     * 主要按鈕上的字，驗 `--accent-on`。
      */
     note(`${tag} --accent-on / 主色`, cr(parse(v['--accent-on']), parse(v['--accent'])), AA, t.name)
 
     /*
-     * ⚠ **對比夠不代表階層對。** 文字為了壓在半透明卡片上被拉亮，拉過頭就會和
-     *   `--text-1` 一樣亮——那時候「主要／次要／補充」三層在畫面上分不出來，而
-     *   使用者的抱怨會是「很多字都是灰色」而不是「看不清楚」。這兩種毛病的症狀
-     *   一樣，修法相反，所以兩個都要驗。
+     * ⚠ 對比夠不代表階層對：次要文字不可被拉亮到和 `--text-1` 一樣。
      */
     const gap = isDark
       ? lightnessOf(v['--text-1']) - lightnessOf(v['--text-2'])

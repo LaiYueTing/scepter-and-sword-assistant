@@ -22,8 +22,7 @@ const gutter = ref(null)
 const dirty = computed(() => text.value !== original.value)
 const lines = computed(() => text.value.split('\n').length)
 
-// ⚠ **每次開啟都重讀。** 設定檔可能在這中間被介面上的開關、或使用者自己用編輯器
-//   改過；留著上一次的草稿等於拿一份過期的全文去覆蓋別人的改動。
+// ⚠ 每次開啟都重讀，不保留草稿。
 watch(
   () => props.show,
   async (open) => {
@@ -53,8 +52,7 @@ async function save() {
     message.success('已寫回 config.yaml')
     emit('update:show', false)
   } catch (e) {
-    // ⚠ 這一則要留在畫面上，不能用 message——它是**多行**的（PyYAML 會指出行號
-    //   與欄位），而 message 只有一行、幾秒後還會自己消失。
+    // ⚠ 錯誤訊息是多行的（PyYAML 的行號與欄位），留在畫面上，不用 message。
     error.value = e.message
   } finally {
     saving.value = false
@@ -75,10 +73,7 @@ function close() {
 }
 
 /**
- * Tab 打兩個空白。
- *
- * ⚠ **YAML 不吃 tab 字元**（規格就是禁止用 tab 縮排），而瀏覽器的 Tab 預設是
- *   把焦點移到下一個元件——兩種行為都不是使用者要的。
+ * Tab 輸入兩個空白（YAML 不接受 tab）。
  */
 function onTab(e) {
   e.preventDefault()
@@ -90,7 +85,7 @@ function onTab(e) {
   })
 }
 
-/** 行號要跟著內文捲。 */
+/** 行號跟著內文捲動。 */
 function onScroll(e) {
   if (gutter.value) gutter.value.scrollTop = e.target.scrollTop
 }
@@ -106,11 +101,7 @@ function onScroll(e) {
     :mask-closable="!dirty"
     @update:show="(v) => (v ? emit('update:show', true) : close())"
   >
-    <!--
-      ⚠ **這裡編的是整份原文，包含介面上沒有的那些欄位**（`adb`、`runtime`、
-        腳本清單）。註解就是使用者的說明書，所以是「原文進、原文出」——不經過
-        YAML 的 dump 往返，那一趟會把註解全部洗掉。
-    -->
+    <!-- 編輯整份原文（包含介面沒有的欄位），原文進、原文出，保留註解。 -->
     <div class="hero">
       <span class="ic"><FileCog :size="20" /></span>
       <div>
@@ -191,8 +182,7 @@ function onScroll(e) {
 }
 
 /*
- * ⚠ **設定檔一定要用等寬字型顯示。** YAML 的意思全在縮排上，比例字型下兩個空白
- *   和一個全形字看起來一樣寬，改縮排等於在猜。
+ * ⚠ 一定要用等寬字型：YAML 的意思在縮排上。
  */
 .editor {
   display: flex;
@@ -232,7 +222,7 @@ textarea {
   tab-size: 2;
 }
 
-/* 驗證失敗的訊息是多行的（PyYAML 會指出行號），所以照原樣排 */
+/* 驗證失敗的訊息是多行的 */
 .err {
   margin-top: 10px;
   padding: 9px 11px;

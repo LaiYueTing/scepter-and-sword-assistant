@@ -1,7 +1,6 @@
-"""排程執行：依設定輪流跑啟用的腳本。
+"""排程執行：依設定輪流跑啟用的腳本，命令列與介面共用。
 
 流程是「啟動先跑一輪 → 跑完找最近的下一個時刻 → 休眠 → 重新連線」。
-CLI 與 GUI 共用這一份，停止改吃 `threading.Event`（GUI 沒有 Ctrl+C 可送）。
 """
 
 from __future__ import annotations
@@ -17,11 +16,10 @@ from .engine import Engine, Script
 
 log = logger.get("main")
 
-# 一輪中途出錯（模擬器沒有回應、斷線、未預期的例外）之後，等這麼多秒、重新連線再跑一次，
-# 最多連續重試這麼多次。
+# 一輪中途出錯之後，等幾秒、重新連線再跑一次，最多連續重試幾次。
 RETRY_LIMIT = 2
 RETRY_DELAY = 30
-# 到點重新連線失敗時重試幾次、隔幾秒。一次失敗最長約 40 秒，全部試完約 4 分鐘。
+# 到點重新連線失敗時重試幾次、隔幾秒。全部試完約 4 分鐘。
 CONNECT_RETRIES = 3
 CONNECT_RETRY_DELAY = 30
 
@@ -29,10 +27,7 @@ CONNECT_RETRY_DELAY = 30
 def next_scheduled(
     tasks: list[TaskConfig], now: datetime | None = None
 ) -> tuple[datetime, TaskConfig] | None:
-    """在所有腳本中挑出最近的下一個 (時刻, 腳本)。沒有任何排程就回 None。
-
-    `now` 可以指定，方便測試不同時間點會排到哪一個腳本。
-    """
+    """在所有腳本中挑出最近的下一個 (時刻, 腳本)，沒有排程就回傳 None。"""
     best = None
     for task in tasks:
         when = task.next_run(now)
@@ -42,7 +37,7 @@ def next_scheduled(
 
 
 def _pretty_wait(seconds: float) -> str:
-    """把等待時間寫成好讀的形式。排程動輒好幾小時，秒數看了沒感覺。"""
+    """把等待時間寫成「幾小時幾分」的形式。"""
     s = int(max(0, seconds))
     if s < 60:
         return f"{s} 秒"
@@ -70,18 +65,16 @@ class Runner:
         self.one_shot = one_shot
         self.dry_run = dry_run
         self.stop_event = stop_event or threading.Event()
-        # 腳本內部名稱（dungeon）→ 中文名（自動副本）。讀進腳本之後才填得起來，
-        # 在那之前寫紀錄就退回內部名稱。
+        # 腳本內部名稱 → 中文名，讀進腳本之後才有。
         self._titles: dict[str, str] = {}
         self.status_hook = status_hook
         # (腳本名, 狀態, 說明)。介面用它更新任務卡，命令列不接這個。
         self.task_hook = task_hook
-        # 終端機才提示 Ctrl+C——GUI 沒有那個鍵可按，寫了只會讓人去按而沒反應
+        # 只有終端機才提示 Ctrl+C
         self.interactive = interactive
-        # 外面塞進來、要「現在就跑」的腳本（介面上的「虛空裂縫」按鈕）。
-        # 排程等待中會立刻醒來跑它；正在跑別的腳本就接在那一輪後面。
+        # 要立刻跑的腳本（介面上的「虛空裂縫」按鈕）。
         self._injected: list[TaskConfig] = []
-        # 現在是不是在等下一個排定時刻（介面用它決定要說「馬上開始」還是「排在後面」）
+        # 是否正在等下一個排定時刻
         self.waiting = False
         # 正在跑的那一輪（腳本名, 引擎），給 abort() 用
         self._running: tuple[str, Engine] | None = None
@@ -93,23 +86,19 @@ class Runner:
         self.stop_event.set()
 
     def inject(self, task: TaskConfig) -> bool:
-        """把一個不在排程裡的腳本塞進來跑一輪。回傳 True 代表會立刻開始。
+        """加入一個不在排程裡的腳本跑一輪。回傳 True 代表會立刻開始。
 
-        給「每兩週一次、要人先組好隊伍」這種沒辦法排程的事用：排程等待期間
-        按下去就馬上跑，跑完回去等原本的下一個時刻；正在跑別的腳本時接在那一輪
-        後面（回 False），不打斷正在打的副本。
+        排程等待中會立刻執行，跑完回去等下一個時刻；正在跑別的腳本時接在那一輪後面（回傳 False）。
 
-        ⚠ 不讓出執行權（`until=None`）。這是使用者明確要求的那一輪，排定時刻在中途
-          到了也讓它打完；那一格由 _passed_during() 事後接住。
+        ⚠ 不讓出執行權（`until=None`），中途經過的排定時刻由 _passed_during() 接住。
         """
         self._injected.append(task)
         return self.waiting
 
     def abort(self, name: str) -> bool:
-        """中斷指定的腳本：還在排隊的拿掉、正在跑的立刻結束（不跑結束程序），排程照常。
+        """中斷指定的腳本：排隊中的移除、執行中的立刻結束（不跑結束程序），排程照常。
 
-        和 `stop()` 的差別：那個是整個排程結束；這個只動那一份。回傳有沒有真的
-        中斷到東西——介面要據此說「已中斷」還是「它沒有在跑」。
+        回傳是否真的中斷到。整個排程要結束用 `stop()`。
         """
         pending = [t for t in self._injected if t.name == name]
         for t in pending:
@@ -121,8 +110,7 @@ class Runner:
 
     def run(self) -> int:
         """依排程輪流執行，回傳結束碼。腳本讀不到會拋 ScriptError。"""
-        # ⚠ 先讀腳本再印設定說明：說明要寫出中文名（腳本的 `name:`），讀進來才知道。
-        #   讀不到時仍然先把設定印完再拋，那幾行是查「為什麼讀不到」的起點。
+        # ⚠ 先讀腳本再印設定說明（要寫中文名）；讀不到時仍先印完設定再拋。
         try:
             scripts = {t.name: Script.load(t.name, self.cfg.options)
                        for t in self.tasks}
@@ -136,13 +124,11 @@ class Runner:
         self._status("連線中")
         dev.connect()
 
-        # 每個腳本一個引擎，各自保有自己的規則狀態（觸發次數、sustain 計時），
-        # 所以要留著重複使用，不能每輪重建。
+        # 每個腳本一個引擎，保留規則狀態（觸發次數、sustain 計時），不可每輪重建。
         engines: dict[str, Engine] = {}
         scheduled = [t for t in self.tasks if t.times or t.weekly]
 
-        # 待辦佇列：啟動時先跑清單第一個，後面接今天已過而不會再輪到的那幾格
-        # （見 _missed_today）。真正決定「這一輪跑誰」的是 _take_next()。
+        # 待辦佇列：清單第一個，加上今天已過而不會再輪到的（_missed_today）。由 _take_next() 決定跑誰。
         queue: list[TaskConfig] = [self.tasks[0]]
         if self.cfg.runtime.catch_up:
             queue += [t for t in self._missed_today() if t is not queue[0]]
@@ -160,7 +146,7 @@ class Runner:
                         break
                 script = scripts.get(current.name)
                 if script is None:
-                    # 塞進來的腳本不在啟動時那份清單裡，輪到才讀
+                    # 不在啟動清單裡的腳本，輪到才讀
                     try:
                         script = scripts[current.name] = Script.load(
                             current.name, self.cfg.options)
@@ -175,8 +161,7 @@ class Runner:
 
                 engine = engines.get(current.name)
                 if engine is None:
-                    # ⚠ 輪到這個腳本才建立引擎：建立時會報告「哪些規則因設定而不
-                    #   啟用」，要排在分隔線之後才看得出那是哪個腳本的規則。
+                    # ⚠ 輪到才建立引擎：建立時的「略過規則」訊息要排在分隔線之後。
                     engine = engines[current.name] = Engine(
                         dev, script, repeat=current.repeat, dry_run=self.dry_run,
                         stop_event=self.stop_event, status_hook=self.status_hook)
@@ -185,42 +170,29 @@ class Runner:
                 self._task(current.name, "running", "執行中")
                 self._running = (current.name, engine)
                 started = datetime.now()
-                # ⚠ 先算好「下一個排定時刻」再交給引擎，讓它到點自己讓出執行權。少了這個，
-                #   永遠不會結束的腳本（不領獎 ＋ 次數用完繼續打 ＋ 次數不限）會把整個
-                #   排程擋住，而紀錄上看起來一切正常。
-                #
-                # ⚠ 補跑期間也要帶上限，否則會一路輾過排定時刻。讓出執行權之後那一格
-                #   由 _passed_during() 接住並排到佇列最前面。
+                # ⚠ 把下一個排定時刻交給引擎，到點自己讓出執行權，補跑期間也一樣。
+                #   讓出之後那一格由 _passed_during() 接住並排到佇列最前面。
                 nxt = next_scheduled(scheduled)
                 failed = ""
                 try:
                     engine.run(until=nxt[0] if nxt and not injected else None)
                 except AdbError as e:
-                    # ⚠ 一輪跑到一半斷線（模擬器被關掉、網路斷了）不該讓整個排程
-                    #   結束，否則當天剩下的腳本全部不會執行。重新連線後重試這一輪。
+                    # ⚠ 一輪中途斷線不結束排程，重新連線後重試這一輪。
                     log.error("執行「%s」時中斷：%s", script.name, e)
                     failed = "連線中斷"
                     if self.one_shot:
                         raise
                 except Exception as e:
-                    # ⚠ **沒預料到的例外也不能讓排程結束**，理由和上面相同。少了
-                    #   這一段，一輪炸掉會把當天剩下的腳本全部帶走，而紀錄上只有
-                    #   一段空白。
-                    # ⚠ 一定要用 log.exception。訊息本身多半看不出是哪裡壞的，而
-                    #   這種例外照定義就是我們沒想到的那一種，traceback 是唯一線索。
+                    # ⚠ 未預期的例外也不結束排程。一定要用 log.exception 留下 traceback。
                     log.exception("執行「%s」時發生未預期的錯誤：%s", script.name, e)
                     failed = "執行時發生錯誤"
                     if self.one_shot:
                         raise
                 self._running = None
                 spent = int((datetime.now() - started).total_seconds())
-                # ⚠ 不要寫「剛才完成」。這句會一直掛在卡片上到下一輪為止，
-                #   而下一輪可能是好幾個小時以後——那時「剛才」已經不成立了。
-                #   卡片的徽章講的是**現在是什麼狀態**，不是「剛剛發生什麼」。
+                # ⚠ 文字描述現在的狀態，不寫「剛才完成」：這句會一直留到下一輪。
                 took = logger.pretty_seconds(spent)
-                # ⚠ **出錯的那一輪不能寫成「這一輪沒有完成」。** 那句話和「次數
-                #   用盡就結束本輪」無法區分，卡片也會從紅色變回一般色，畫面上看不出
-                #   發生了錯誤。
+                # ⚠ 出錯的那一輪不寫「這一輪沒有完成」，要與次數用盡的結束本輪區分開。
                 if failed:
                     self._task(current.name, "error", f"{failed}（{took}）")
                 else:
@@ -232,9 +204,7 @@ class Runner:
                 if self.one_shot or self.stop_event.is_set():
                     break
 
-                # 執行期間經過的排定時刻要補回來（見 _passed_during）。
-                # ⚠ 插在佇列**最前面**：那是剛剛才過去的時刻，比早上就錯過的
-                #   那幾格急。
+                # 執行期間經過的排定時刻排到佇列最前面（見 _passed_during）。
                 if self.cfg.runtime.catch_up:
                     late = [t for t in self._passed_during(
                                 started, datetime.now(), current)
@@ -244,15 +214,8 @@ class Runner:
                                  "」「".join(self._title(t) for t in late))
                         queue[:0] = late
 
-                # 剛剛是讓出執行權，而不是腳本自己結束，代表該做的還沒做完——排回去，
-                # 等這一波排定時刻與補跑清完再接著跑。
-                #
-                # ⚠ 少了這一段，讓出執行權一次就等於整天只做一半：次數還有、獎勵還沒領
-                #   的腳本再也沒有人叫它回來，而紀錄上每一行都正常。
-                # ⚠ 排在**最後面**：剛過去的那幾格（late）比它急，而它本來就是
-                #   被判定成「可以晚一點」才讓出執行權的。
-                # ⚠ 不會無限讓出執行權：until 一定是未來的時刻，所以重跑之後至少要再
-                #   完成一次（count）才可能再讓一次，每一輪都有進展。
+                # 讓出執行權代表工作還沒做完，排回佇列最後面（late 比它急）。
+                # ⚠ 不會無限讓出：until 一定是未來的時刻，重跑後至少要再走到一次 count。
                 if (self.cfg.runtime.catch_up and engine.yielded
                         and current not in queue):
                     log.info("「%s」還沒做完就讓出執行權了，排到後面接著跑",
@@ -260,9 +223,7 @@ class Runner:
                     queue.append(current)
 
                 # 出錯的那一輪重新連線後排到最前面重試。
-                # ⚠ 排在剛過去的那幾格（late）前面：中途斷掉的腳本可能把遊戲留在只有
-                #   它自己認得的畫面上（副本沒領的結算頁會在重開遊戲後再跳出來），
-                #   先讓它自己收拾，後面的腳本才不會卡在那裡。
+                # ⚠ 排在 late 前面：中斷的腳本可能把遊戲留在只有它認得的畫面上。
                 if failed:
                     if self._retry_after_failure(dev, current, failures):
                         if current in queue:
@@ -281,21 +242,15 @@ class Runner:
     # ---------- 內部 ----------
 
     def _title(self, task: TaskConfig) -> str:
-        """腳本的中文名稱，讀不到就退回內部名稱。
-
-        紀錄不該露出 dungeon / raid 這種設定檔的鍵。中文名直接取自腳本的
-        `name:`，不另外維護一份對照表。
-        """
+        """腳本的中文名稱（取自 `name:`），讀不到就用內部名稱。"""
         return self._titles.get(task.name, task.name)
 
     def _retry_after_failure(
         self, dev: Device, task: TaskConfig, failures: dict[str, int]
     ) -> bool:
-        """一輪中途出錯之後要不要重試。等 RETRY_DELAY 秒、重新連線，連得上就回 True。
+        """一輪中途出錯之後要不要重試。等 RETRY_DELAY 秒、重新連線，連得上就回傳 True。
 
-        ⚠ 連續失敗 RETRY_LIMIT 次就放掉這一格，等下一個排定時刻。每次都失敗代表問題
-          不在一時的連線，重試只會一直重開遊戲。
-        ⚠ 連不上也放掉，不忙碌重試：下一個排定時刻 _wait_for_next 會再連一次。
+        ⚠ 連續失敗 RETRY_LIMIT 次或連不上就放掉這一格，等下一個排定時刻。
         """
         tries = failures.get(task.name, 0) + 1
         failures[task.name] = tries
@@ -319,24 +274,18 @@ class Runner:
         return True
 
     def _missed_today(self, now: datetime | None = None) -> list[TaskConfig]:
-        """今天已經過了排定時刻、而且今天不會再輪到的腳本，依原本的時刻排序。
+        """今天已過排定時刻、而且今天不會再輪到的腳本，依時刻排序。
 
-        目的是「不要讓今天整個跳過」（晚上才開程式，08:00 與 09:30 都會被算到
-        明天去）。刻意不記錄「今天跑過沒」——狀態檔會和實際情況不一致，而腳本
-        本來就會進遊戲自己確認，補跑一輪只是進去看一眼就結束本輪。
+        不記錄今天跑過沒：腳本會進遊戲自己確認。
 
-        ⚠ 今天還輪得到的不補跑。一天跑兩次的腳本只要還有下一格，今天本來就跑
-          得到，提前補一輪只是把那一格的有限次數挪到更早用掉。
-
-        ⚠ 腳本自己也可以退出補跑（`TaskConfig.catch_up = false`）。討伐就是這種
-          ——補跑的前提是「晚一點做也一樣」，而它的價值就綁在那個時刻上。
+        ⚠ 今天還有下一格的不補跑，否則會把那一格的有限次數提前用掉。
+        ⚠ `TaskConfig.catch_up = false` 的腳本不補跑。
         """
         now = now or datetime.now()
         clock = (now.hour, now.minute)
         found: list[tuple[tuple[int, int], TaskConfig]] = []
         for task in self.tasks:
-            # ⚠ 要問「今天」會跑哪些時刻，不能直接看 times：每週一的競技場在
-            #   星期三並不算「今天錯過的」，拿 times 去比會每天都想補跑一次。
+            # ⚠ 用 times_on 而不是 times：每週的腳本只在那一天算。
             if not task.catch_up:
                 continue
             today = task.times_on(now.date())
@@ -354,12 +303,9 @@ class Runner:
     def _due_soon(
         self, scheduled: list[TaskConfig], now: datetime | None = None
     ) -> tuple[datetime, TaskConfig] | None:
-        """下一個排定時刻是不是近在眼前。夠近就回傳 (時刻, 腳本)，否則 None。
+        """下一個排定時刻是否在 `catch_up_guard_minutes` 之內，是就回傳 (時刻, 腳本)，否則 None。
 
-        給「補跑要不要讓路」用的。補跑晚一點做沒差，而排定時刻是使用者指定的
-        那一刻（討伐 21:00 的價值就在人最多），所以時刻優先。
-
-        ⚠ `catch_up_guard_minutes` 設 0 就整個關掉（補跑照舊搶先）。
+        設 0 表示關閉。
         """
         guard = self.cfg.runtime.catch_up_guard_minutes
         if guard <= 0:
@@ -373,13 +319,10 @@ class Runner:
     def _take_next(
         self, dev: Device, queue: list[TaskConfig], scheduled: list[TaskConfig]
     ) -> TaskConfig | None:
-        """決定這一輪跑誰：排定時刻優先，其次才是待補跑的。回 None 代表結束。
+        """決定這一輪跑誰：排定時刻優先，其次是待補跑的。回傳 None 代表結束。
 
-        ⚠ 啟動那一輪也要讓路。它本質上和補跑是同一件事（都是「不等時刻、先做
-          點什麼」）。
-        ⚠ 不比對「近的那個是不是佇列第一個」。就算是同一個腳本，等到時刻再跑
-          也比較好——現在跑的話跑完時刻還沒到，等一下會被排程再叫一次。
-        ⚠ `--once` 不讓路。那是人在旁邊手動叫的，乾等十幾分鐘會像當住了。
+        ⚠ 啟動那一輪也要讓路，就算近的那個和佇列第一個是同一個腳本。
+        ⚠ `--once` 不讓路。
         """
         if self._injected:
             return self._injected.pop(0)
@@ -397,13 +340,9 @@ class Runner:
     def _wait_for_next(
         self, dev: Device, scheduled: list[TaskConfig]
     ) -> TaskConfig | None:
-        """睡到下一個排定時刻並重新連線，回傳該跑的腳本。
+        """睡到下一個排定時刻並重新連線，回傳該跑的腳本；沒有排程或被要求停止就回傳 None。
 
-        沒有排程、或中途被要求停止就回 None。
-
-        ⚠ 連不上不能讓整個排程結束——模擬器只是還沒開機或網路剛好斷了的話，
-          當天剩下的腳本會全部不執行。連不上就放掉這一格，繼續等下一個時刻
-          （那時 `next_scheduled()` 算的已經是更後面的時刻，不會忙碌重試）。
+        ⚠ 連不上就放掉這一格，繼續等下一個時刻，不結束排程。
         """
         while not self.stop_event.is_set():
             # 每次都重新算：腳本可能跑了好幾個小時，也可能剛剛連線失敗
@@ -414,18 +353,14 @@ class Runner:
             if not self._sleep_until(when, task):
                 return None
             if self._injected:
-                task = self._injected.pop(0)       # 被叫醒的：先跑塞進來的那個
+                task = self._injected.pop(0)       # 被叫醒：先跑加入的那個
             if self._connect_with_retry(dev, task):
                 return task
             self._task(task.name, "error", "連線失敗")
         return None
 
     def _connect_with_retry(self, dev: Device, task: TaskConfig) -> bool:
-        """到點時重新連線，連不上就隔一段時間再試。
-
-        ⚠ 排定時刻只有這一次，放掉就要等隔天（副本與競技場的 08:05、討伐的 21:00），
-          所以一時的斷線要撐過去。全部失敗才放掉這一格。
-        """
+        """到點時重新連線，連不上就隔 CONNECT_RETRY_DELAY 秒再試，全部失敗才放掉這一格。"""
         for attempt in range(1, CONNECT_RETRIES + 2):
             self._status("重新連線")
             try:
@@ -446,22 +381,11 @@ class Runner:
     def _passed_during(
         self, start: datetime, end: datetime, current: TaskConfig | None = None
     ) -> list[TaskConfig]:
-        """在上一輪執行期間經過的排定時刻，依時刻排序。
+        """上一輪執行期間經過的排定時刻，依時刻排序。
 
-        `next_scheduled()` 只看未來，所以某個腳本正在跑的時候，別的腳本的時刻
-        就這樣過去了——那一格今天等於沒發生，而且完全沒有紀錄。
-
-        ⚠ 判斷的是「落在這一輪的執行區間內」，不是「今天已過」。後者會讓每跑完
-          一輪就把今天所有跑過的腳本再補一次，永遠停不下來。
-
-        ⚠ **起點要退到整分鐘。** `start` 是 `datetime.now()`，取得的時間點在
-          引擎建好之後（例如 08:00:00.213），而排定時刻是 08:00:00.000。直接比
-          的話，**和這一輪排在同一分鐘的腳本永遠差 0.2 秒落在區間外**，那一格
-          整個消失而且沒有任何紀錄。
-
-        ⚠ 退到整分鐘之後要把**剛跑完的那個腳本自己的那一格**排除掉：它就是被那
-          一格叫起來的，不是「錯過」。少了這個判斷，清單第一個腳本每天都會多跑
-          一輪（它自己的起跑時刻永遠落在自己的執行區間內）。
+        ⚠ 判斷落在執行區間內，不是今天已過，否則會永遠補跑。
+        ⚠ 起點退到整分鐘：`start` 比排定時刻晚幾百毫秒，同一分鐘的腳本會落在區間外。
+        ⚠ 排除剛跑完的腳本自己那一格：它就是被那一格叫起來的。
         """
         base = start.replace(second=0, microsecond=0)
         found: list[tuple[datetime, TaskConfig]] = []
@@ -493,10 +417,7 @@ class Runner:
                 pass
 
     def _sleep_until(self, when: datetime, task: TaskConfig) -> bool:
-        """睡到排定時刻，回傳「是否睡完了」（False 代表中途被要求停止）。
-
-        每秒醒一次，讓狀態顯示跟著倒數、也讓停止即時生效。
-        """
+        """睡到排定時刻，回傳是否睡完（False 代表被要求停止）。每秒醒一次更新倒數。"""
         log.info("下一輪「%s」排在 %s（%s後）%s", self._title(task),
                  when.strftime("%m/%d %H:%M"),
                  _pretty_wait((when - datetime.now()).total_seconds()),
@@ -508,7 +429,7 @@ class Runner:
                 remain = (when - datetime.now()).total_seconds()
                 if remain <= 0 or self._injected:
                     return True
-                # 文字有變才更新：倒數多半只精確到分，每秒推一次只是白白重畫介面。
+                # 文字有變才更新，避免重畫介面。
                 text = (f"等候下一輪「{self._title(task)}」　"
                         f"{when.strftime('%m/%d %H:%M')} 開始，"
                         f"還有 {_pretty_wait(remain)}")
@@ -521,10 +442,9 @@ class Runner:
             self.waiting = False
 
     def describe_setup(self) -> None:
-        """開場印出「這一次是用什麼設定在跑」：版本、設定檔、裝置、資源、排程、開關。
+        """開場印出這次執行的設定：版本、設定檔、裝置、資源、排程、開關。
 
-        ⚠ 要排在建立引擎之前。引擎初始化時會報告「哪些規則因設定而不啟用」，
-          那是這段說明的延伸，順序顛倒就變成先看到結論再看到前提。
+        ⚠ 要排在建立引擎之前：引擎的「略過規則」訊息接在這段後面。
         """
         cfg, tasks = self.cfg, self.tasks
         log.info("═══ 杖劍傳說助手 v%s ═══", VERSION)
@@ -540,8 +460,7 @@ class Runner:
         else:
             log.info("執行方式：依排程輪流執行，啟動時先跑「%s」",
                      self._title(tasks[0]))
-            # ⚠ 子項目用「・」起頭，不要用全形空格縮排。那是等寬終端機的排版思維，
-            #   而紀錄面板是比例字型，補出來的空白只會歪成一格突兀的空隙。
+            # ⚠ 子項目用「・」起頭：紀錄面板是比例字型，全形空格對不齊。
             for task in tasks:
                 log.info("・%s ── %s，%s", self._title(task), task.describe(),
                          f"完成 {task.repeat} 次就換下一個腳本" if task.repeat

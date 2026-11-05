@@ -1,8 +1,4 @@
-"""影像比對層：在畫面上尋找模板圖片。
-
-解析度固定為 720x1280，因此採用單一尺度的模板比對即可，
-不需要多尺度搜尋，速度快也夠準。
-"""
+"""影像比對層：在畫面上尋找模板圖片。解析度固定 720x1280，用單一尺度比對。"""
 
 from __future__ import annotations
 
@@ -60,12 +56,9 @@ def imwrite_unicode(path: Path, img: np.ndarray) -> None:
 
 @lru_cache(maxsize=None)
 def load_template(name: str) -> np.ndarray:
-    """依名稱載入模板，結果會快取。
+    """依名稱載入模板，結果會快取（不設上限，全部留著只有幾 MB）。
 
-    ⚠ 不設上限。上限小於模板數時，每輪都會把最久沒用到的那張擠掉，下次再重新解
-      一次 PNG。全部留著也只有幾 MB。
-
-    模板打包在 EXE 裡，但 EXE 旁邊放同名檔案可以覆蓋——詳見 config.resource_file。
+    EXE 旁邊放同名檔案可以覆蓋，見 config.resource_file。
     """
     stem = Path(name).stem
     for ext in (".png", ".jpg", ".jpeg", ".bmp"):
@@ -80,11 +73,9 @@ def load_template(name: str) -> np.ndarray:
 
 @lru_cache(maxsize=1)
 def _search_regions() -> dict[str, Region]:
-    """固定 UI 元素的預設搜尋範圍（templates/search_regions.yaml），由
-    tools/gen_search_regions.py 從樣本產生。
+    """固定 UI 元素的預設搜尋範圍（templates/search_regions.yaml），由 tools/gen_search_regions.py 產生。
 
-    全畫面彩色比對一次約 60ms，而導覽列、返回鍵這類元素永遠在同一塊區域；
-    只在那一塊找可以把每一輪的判斷時間降到幾分之一。沒列在表上的模板照舊掃全畫面。
+    全畫面彩色比對一次約 60ms。沒列在表上的模板掃全畫面。
     """
     path = resource_file("templates", "search_regions.yaml")
     if not path.is_file():
@@ -204,16 +195,9 @@ def color_span(
     tol: int = 22,
     fill: float = 0.6,
 ) -> int:
-    """量指定區域裡「有多少像素寬」接近某個顏色，回傳欄數。
+    """量指定區域裡有幾欄接近某個顏色，回傳欄數（順序條的空軌道長度）。
 
-    模板比對認的是圖案，有些東西卻是「長度」在講話——公會討伐的順序條就是這種：
-    每一格都是不同玩家的角色與寵物，裁模板等於每遇到一個新玩家就要補一張。
-    但沒被圖示佔住的那段空軌道是 UI 元件、顏色極均勻，量它的長度就等於量參戰
-    單位的數量（軌道越短、人越多）。量固定的 UI 比認會變的內容可靠。
-
-    以「欄」為單位而不是總像素數，因為要量的是**水平長度**：某一欄只要有 fill
-    比例以上的像素接近目標色就算命中，這樣上下緣的反鋸齒、軌道上的箭頭裝飾都
-    不會把長度算少。
+    某一欄有 fill 比例以上的像素接近目標色就算命中，不受上下緣反鋸齒與箭頭裝飾影響。
     """
     area, _, _ = _crop(screen, region)
     diff = np.abs(area.astype(np.int16) - np.array(color, dtype=np.int16))
@@ -229,22 +213,13 @@ def queue_units(
     tol: int = 22,
     fill: float = 0.6,
 ) -> float:
-    """估計順序條上排了幾個單位，回傳估計值（浮點數）。
-
-    `color_span` 量的空軌道長度**會飽和**：圖示多到超過軌道寬度時會自動縮小擠
-    進去，約 12 個單位以上就一律是 0，分不出 3 人與 8 人。
-
-    圖示縮小本身就是線索——間距在飽和之後仍然單調（48px → 14px），所以把兩件事
-    合起來：
+    """估計順序條上排了幾個單位，回傳估計值。
 
         單位數 ≈ （已排到的寬度）÷（圖示間距）
 
-    間距用自相關求：圖示等距重複，外圈藍的列剖面會有明顯週期。不必知道每個圖示
-    長什麼樣，也就不必為任何玩家的角色或寵物裁模板。
+    空軌道長度在約 12 個單位以上會飽和成 0，圖示間距仍然單調（48px → 14px）。間距用自相關求。
 
-    ⚠ 這是估計值不是精確計數。自相關的峰值只有 0.3～0.6（隊列中間的分隔記號會
-      破壞週期性），單幀讀數相鄰可能差到 20 個單位——呼叫端一定要配 smooth
-      （滑動中位數）與 sustain，不要拿單一讀數做決定。
+    ⚠ 自相關峰值只有 0.3～0.6，單幀讀數相鄰可差到 20 個單位，呼叫端要配 smooth 與 sustain。
     """
     x, y, w, h = region
     area, _, _ = _crop(screen, region)
@@ -268,7 +243,7 @@ def queue_units(
     if ac[0] <= 0:
         return 0.0
     ac /= ac[0]
-    # 間距的合理範圍：最寬 48px（沒人擠）、最窄 14px（塞滿）
+    # 間距的合理範圍：最寬 48px（空位多）、最窄 14px（排滿）
     lo, hi = 12, 60
     pitch = lo + int(np.argmax(ac[lo:hi]))
     return filled / pitch
@@ -276,27 +251,20 @@ def queue_units(
 
 def find_blob(screen: np.ndarray, spec: dict,
               avoid: list[tuple[int, int]] | None = None) -> Match | None:
-    """找畫面上最大的一塊指定顏色，回傳它的外框；不夠大就回 None。
+    """找畫面上最大的一塊指定顏色，回傳外框；不夠大就回傳 None。
 
-    模板認的是圖案，而有些東西沒有固定的圖案——虛空裂縫的門是一團會動的紫色
-    漩渦，同一個門連拍每一幀都不一樣，模板在各幀只有 0.72～0.85，和對話框裡
-    那張大圖差不到 0.06。但它的**顏色**極穩定：核心是 H≈129、S≈190 的飽和紫，
-    整張地圖其他地方 S 的 90 百分位只有 85。用顏色找連通區塊，門在 5200～6750
-    像素，沒有門的地圖 ≤12 像素。
+    用於沒有固定圖案的元素：虛空裂縫的門模板只有 0.72～0.85，核心顏色 H≈129、S≈190 極穩定，
+    門 5200～6750 像素，沒有門的地圖 ≤12 像素。
 
     欄位（HSV 用 OpenCV 的尺度：H 0～180、S/V 0～255）：
         hue       [lo, hi]　色相範圍，必填
         sat       [lo, hi]　飽和度範圍，預設 [150, 255]
         val       [lo, hi]　明度範圍，預設 [0, 255]
         region    [x, y, w, h]　只在這一帶找
-        exclude   [[x, y, w, h], …]　挖掉的區域（同色的 UI 元件）
+        exclude   [[x, y, w, h], …]　排除的區域（同色的 UI 元件）
         min_area  至少要這麼多像素才算，預設 1000
 
-    ⚠ 回傳的是最大的那一塊，不是全部。要的是「門在哪」，而畫面上同色的小碎片
-      （粒子、遠處的植物）本來就該被面積門檻擋掉。
-
-    `avoid` 是要跳過的位置：中心落在任一點 AVOID_RADIUS 像素內的色塊不算，改取次大的
-    （其他隊伍正在使用、點了無法互動的門）。
+    `avoid` 是要跳過的位置：中心落在任一點 AVOID_RADIUS 像素內的色塊不算，改取次大的。
     """
     x0, y0 = 0, 0
     region = spec.get("region")
@@ -310,7 +278,7 @@ def find_blob(screen: np.ndarray, spec: dict,
         ex_x, ex_y, ex_w, ex_h = (int(v) for v in ex)
         mask[max(0, ex_y - y0):max(0, ex_y - y0 + ex_h),
              max(0, ex_x - x0):max(0, ex_x - x0 + ex_w)] = 0
-    # 開運算去掉一兩個像素的雜點，免得它們把兩塊不相干的東西連成一塊
+    # 開運算去掉雜點，避免把不相干的色塊連在一起
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     count, _, stats, _ = cv2.connectedComponentsWithStats(mask)
     min_area = int(spec.get("min_area", 1000))

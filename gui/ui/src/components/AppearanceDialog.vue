@@ -12,8 +12,7 @@ const ui = useUiStore()
 const keyword = ref('')
 
 /**
- * 174 組全部畫出來不會慢（都是純 CSS 漸層的方塊），但**捲不完**——所以給一個
- * 搜尋框。中英文都比對：名字記不住的時候，記得的往往是 "sunset" 那個英文字。
+ * 主題搜尋，比對中英文名稱。
  */
 const list = computed(() => {
   const k = keyword.value.trim().toLowerCase()
@@ -36,10 +35,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
     @update:show="(v) => $emit('update:show', v)"
   >
     <!--
-      ⚠ **每一列都是「名稱 ／ 一行說明 ／ 控制項」的同一種形狀，說明一律以
-        『套用範圍：』起頭。** 這個對話框以後還會長，格式先固定下來：說明長短不一、
-        有的有有的沒有的話，讀者每一列都得重新找一次「控制項在哪」。
-      ⚠ 說明寫的是**這個選項控制什麼**，不是「這次改了什麼」——後者兩週後就過期了。
+      每一列的格式：名稱 ／ 一行說明 ／ 控制項。說明以「套用範圍：」起頭，寫這個選項控制什麼。
     -->
     <div class="rows">
       <!-- 背景主題 -->
@@ -93,12 +89,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
 
       <div class="rule"></div>
 
-      <!--
-        關閉行為。
-        ⚠ **它屬於這裡，不屬於「玩法設定」。** 判準是存在哪裡：`config.yaml` 是
-          腳本行為，`ui.json` 是視窗長什麼樣、怎麼關——兩份東西不該混在同一個
-          對話框裡按同一顆儲存。
-      -->
+      <!-- 關閉行為，存在 ui.json。 -->
       <section class="hd">
         <div>
           <div class="k">按下視窗的 ✕ 時</div>
@@ -116,12 +107,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
 
       <div class="rule"></div>
 
-      <!--
-        縮到系統匣的那則通知。
-        ⚠ 它也可以由「點那則通知」直接關掉（gui/tray.py 的 BalloonTipClicked），
-          但那條路不保證走得到——Windows 11 的 toast 不一定回報點擊——所以這裡
-          是唯一保證有效的入口，而且是關掉之後唯一能開回來的地方。
-      -->
+      <!-- 縮到系統匣的通知。點通知也能關閉，但不一定收得到事件，這裡是可靠的入口。 -->
       <section class="hd">
         <div>
           <div class="k">縮到系統匣時提醒</div>
@@ -137,12 +123,6 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
       </section>
     </div>
 
-    <!--
-      ⚠ 明暗切換**不放在這裡**，它在標題列那顆月亮／太陽上。那是每天會按好幾次的
-        東西，藏進一個要先打開的對話框裡等於降級。
-      ⚠ **不補一行 footer 去說明這件事。** 那句話每次開都要再讀一遍，而它講的是
-        「別的東西在哪裡」——放不下的資訊應該讓那顆按鈕自己的 tooltip 去講。
-    -->
   </NModal>
 </template>
 
@@ -154,8 +134,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
 }
 
 /*
- * ⚠ **對齊交給版面，不要用 em 去推別的元件的尺寸。** 說明文字的字級比標題小，
- *   同樣的 `em` 換算出來比較短，補 `margin-left` 只會讓說明跑到標題左邊去。
+ * 對齊交給版面，不用 em 推算別的元件的尺寸。
  */
 .hd {
   display: flex;
@@ -170,7 +149,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
   font-weight: 600;
   font-size: 14px;
 }
-/* 補充說明才用 --text-2；欄位標題一律 --text-1 以上 */
+/* 補充說明用 --text-2，欄位標題用 --text-1 以上 */
 .s {
   margin-top: 3px;
   font-size: 12.5px;
@@ -178,7 +157,7 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
   color: var(--text-2);
 }
 
-/* 分隔線用 1px 高的 div，不要 border 疊 border */
+/* 分隔線 */
 .rule {
   height: 1px;
   background: var(--border);
@@ -208,14 +187,13 @@ const current = computed(() => BG_THEMES.find((t) => t.id === ui.bgTheme) || BG_
 .swatch:hover {
   transform: translateY(-1px);
 }
-/* 選中的用最強的文字色描邊——漸層什麼顏色都有可能，主色描邊會在某些主題上消失 */
+/* 選中的用最強的文字色描邊（主色描邊在某些主題上看不見） */
 .swatch.on {
   border-color: var(--text-0);
 }
 
 /*
- * ⚠ 名字底下那條半透明黑帶是必要的：色塊可能是淺黃或近白（`wg18`、`wg50`），
- *   白字直接放上去會整段看不見。
+ * ⚠ 名字底下的半透明黑帶不可省略：色塊可能近白（`wg18`、`wg50`）。
  */
 .name {
   position: absolute;

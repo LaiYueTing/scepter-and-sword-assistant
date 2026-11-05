@@ -9,15 +9,10 @@ const emit = defineEmits(['update:show'])
 const host = useHostStore()
 
 /**
- * 換好檔之後問使用者要不要現在重新啟動。
+ * 換檔完成後詢問是否重新啟動。
  *
- * ⚠ **一定要問，而且問完才排重啟。** 換檔本身只是把新的 EXE 放到位，畫面上
- *   完全沒有反應。而排重啟的背景工作是「等這個行程結束就啟動新版」，先排後問的話
- *   它會在使用者下次關閉程式時自己啟動新版，還可能和他自己開的那次被防多開擋下。
- *
- * ⚠ **形狀跟著 CloseDialog 走**（自繪的 NModal、主色淡底的圓角圖示、按鈕帶
- *   圖示）。用 naive-ui 的 `dialog.success()` 會把主要按鈕染成綠色，而綠色在
- *   這套介面裡是**狀態語意**（好／執行中），不是「這是主要動作」的意思。
+ * ⚠ 問完才排定重新啟動（`restart()` 等的是這個行程結束）。
+ * ⚠ 用自繪的 NModal：`dialog.success()` 的綠色在這套介面是狀態語意。
  */
 
 async function choose(now) {
@@ -42,12 +37,6 @@ async function choose(now) {
     :mask-closable="false"
     @update:show="(v) => emit('update:show', v)"
   >
-    <!--
-      ⚠ **不要補說明。** 「重新啟動只是關掉再開」是使用者本來就知道的，
-        「選稍後也不會漏掉這一版」則是按鈕名稱自己就講完的——寫上去只是讓
-        他多讀兩行。CloseDialog 那邊有說明，是因為「縮到系統匣」真的需要
-        解釋（排程會繼續跑、圖示在哪裡叫回來）。
-    -->
     <div class="ask">
       <span class="ic"><RefreshCw :size="20" /></span>
       <div>
@@ -75,13 +64,11 @@ async function choose(now) {
   display: flex;
   gap: 12px;
   /*
-   * ⚠ 這裡用 center，而 CloseDialog 用 flex-start——差別在**文字有幾行**。
-   *   那邊有問句加兩行說明，圖示要對齊「第一行」；這裡只有一行問句，靠上
-   *   對齊會讓文字浮在 40px 圖示的上緣。
+   * 只有一行問句，圖示置中（CloseDialog 有多行才靠上）。
    */
   align-items: center;
 }
-/* 對話框的圖示：主色淡底的圓角方塊。全站的對話框用同一種形狀。 */
+/* 對話框的圖示：主色淡底的圓角方塊 */
 .ic {
   width: 40px;
   height: 40px;

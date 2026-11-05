@@ -3,9 +3,8 @@
 
     python tests/test_claim_rank_a.py
 
-計數靠「結算未達 S → 退出重打」的 max_fires，用完才輪得到「A 也領獎」那條。
-selftest 驗不到：它每一張畫面的計數都從零開始，而這裡要驗的正是**跨畫面累積的
-次數**。畫面用假的比對結果餵（`_find` 換成查表），不碰模擬器。
+計數靠「結算未達 S → 退出重打」的 max_fires，用完才輪到「A 也領獎」。
+畫面用假的比對結果（`_find` 換成查表），不碰模擬器。
 """
 import os
 import sys

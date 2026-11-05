@@ -3,9 +3,6 @@
 
     python tests/test_connect_retry.py
 
-⚠ 排定時刻只有一次。連線閒置一整晚之後第一個指令常收到「error: closed」，放掉的話
-  副本與競技場整個早上都不會跑。
-
 測試把 Device 換成假的，不會碰到模擬器。
 """
 import os
@@ -16,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import core.runner as runner_mod

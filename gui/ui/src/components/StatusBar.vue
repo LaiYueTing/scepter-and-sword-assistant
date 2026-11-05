@@ -19,26 +19,17 @@ const tone = computed(() => {
     style="height: 28px; font-size: 12.5px"
   >
     <span class="flex items-center gap-1.5" :class="tone">
-      <!--
-        ⚠ **執行中用會呼吸的燈號，不要再配一顆圖示。** 兩個都放的話是同一件事講兩次，
-          而狀態列只有 28px 高。其餘狀態是「一次性的結果」（壞了／結束程序執行中／閒著），
-          圖示的形狀本身就說得完，不需要一直發光去搶注意力。
-      -->
+      <!-- 執行中用呼吸燈號，其餘狀態用圖示。 -->
       <span v-if="tone === 'run'" class="nc-dot live" style="--glow: var(--green)"></span>
       <CircleX v-else-if="tone === 'bad'" :size="13" />
       <Loader v-else-if="tone === 'warn'" :size="13" class="icon-spin running" />
       <CircleCheck v-else :size="13" />
-      <!-- 狀態列放「會一直變的值」——副本戰鬥中的評級每輪都在動，寫進紀錄只會洗版 -->
+      <!-- 會一直變的值（副本評級）放這裡，不寫紀錄。 -->
       {{ host.fatal || host.status }}
     </span>
 
     <div class="flex-1"></div>
 
-    <!--
-      ⚠ **右邊刻意留白：狀態列的位置留給會變的東西。** 設定檔路徑那種**不會變**
-        的值放這裡只是常駐佔一整條，而「要抄路徑」的那一刻有「關於」可以開
-        （那裡還能直接選取複製）。
-    -->
   </footer>
 </template>
 

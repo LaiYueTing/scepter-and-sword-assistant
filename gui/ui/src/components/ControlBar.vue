@@ -11,16 +11,12 @@ const starting = ref(false)
 const riftStarting = ref(false)
 
 /**
- * ⚠ **只鎖「會操作遊戲」的那兩顆。** 測試連線與玩法設定照常——那兩個正是排查
- *   「為什麼連不上」時要用的，一起鎖住只會妨礙人。
+ * 待更新時只鎖會操作遊戲的兩顆，測試連線與玩法設定照常。
  */
 const startDisabled = computed(() => !host.canStart || starting.value)
 
 /**
- * 為什麼不能按。
- *
- * ⚠ **每一則都要先講「現在是什麼狀態」，再講「所以怎樣」。** 停用的按鈕若說不出
- *   原因，看起來就是壞了——而使用者不會知道要去按標題列那顆更新。
+ * 停用的原因。格式：先寫現在的狀態，再寫結果。
  */
 const whyDisabled = computed(() => {
   if (host.closing) return '結束程序執行中：正在逐層退回家園，結束前不能開始新的一輪'
@@ -42,8 +38,8 @@ async function run(once) {
 }
 
 /**
- * 虛空裂縫不排程，由這顆按鈕手動觸發。**執行中也按得動**：排程等待期間會叫醒它
- * 先跑這一輪，正在跑別的腳本時就接在那一輪後面。只有結束程序執行中與待更新時鎖住。
+ * 虛空裂縫由這顆按鈕手動觸發。排程等待中會立刻執行，正在跑別的腳本時接在後面；
+ * 結束程序執行中與待更新時鎖住。
  */
 const riftDisabled = computed(
   () => !host.ready || host.closing || host.updateRequired || riftStarting.value
@@ -53,10 +49,10 @@ const riftHint = computed(() => {
   if (host.closing) return '結束程序執行中：結束前不能開始新的一輪'
   if (host.updateRequired) return `有待安裝的更新：要先更新到 v${host.update.version} 才能開始執行`
   if (!host.ready) return '後端尚未就緒：還在啟動，稍候再試'
-  return '把虛空裂縫剩下的場次打完，打完自動離開地圖。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等原本的時刻'
+  return '執行虛空裂縫剩下的場次，完成後自動離開地圖。請先自己組好隊伍、停在活動地圖上再按。排程等待中也可以按，跑完會回去等下一個時刻'
 })
 
-/** 裂縫正在排隊或執行中，才需要中斷鈕。 */
+/** 裂縫排隊中或執行中才顯示中斷鈕。 */
 const riftActive = computed(
   () => host.riftPending || host.taskStates.rift?.state === 'running'
 )
@@ -85,8 +81,7 @@ async function rift() {
 async function stop() {
   try {
     await host.stop()
-    // 按下停止到真正結束要 14～18 秒（結束程序要逐層退回家園）。這句話一定要說，
-    // 否則看起來像當掉。
+    // 停止到真正結束要 14～18 秒（結束程序逐層退回家園），要先顯示訊息。
     message.info('已要求停止，正在執行結束程序（約 15 秒）⋯')
   } catch (e) {
     message.error(e.message)
@@ -102,8 +97,7 @@ async function stop() {
           <Play :size="15" /> 開始執行
         </button>
       </template>
-      <!-- ⚠ 停用的按鈕一定要講得出原因，否則它看起來就是壞了——而使用者不會知道
-           要去按標題列那顆更新。 -->
+      <!-- ⚠ 停用的按鈕要寫出原因。 -->
       {{ whyDisabled }}
     </NTooltip>
 
@@ -150,8 +144,7 @@ async function stop() {
           <Settings2 :size="15" /> 玩法設定
         </button>
       </template>
-      <!-- 引擎是**建立時**才套用開關的，中途改不會生效。讓使用者以為改了有用，
-           比不給改更糟。 -->
+      <!-- 引擎在建立時才套用開關，執行中不可修改。 -->
       {{
         host.running
           ? '執行中不能改設定：引擎在建立時才套用開關，改了不會生效'

@@ -1,8 +1,4 @@
-"""ADB 連線層：負責與 Android 模擬器溝通，提供截圖與輸入操作。
-
-所有操作都透過 ADB 完成，屬於「後台操作」——不會搶佔實體滑鼠鍵盤，
-也不需要模擬器視窗保持在前景，甚至可以最小化。
-"""
+"""ADB 連線層：與 Android 模擬器溝通，提供截圖與輸入操作。不佔用實體滑鼠鍵盤，模擬器可以最小化。"""
 
 from __future__ import annotations
 
@@ -24,8 +20,7 @@ log = logger.get("adb")
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
-# 套件名對應到遊戲的顯示名稱。紀錄裡只寫 com.m88.idleXX 看不出那是什麼，
-# 寫成「杖劍傳說（com.m88.idleXX）」兩邊都留著。認不出來的套件就只寫套件名。
+# 套件名對應的遊戲名稱，寫紀錄用。
 _APP_NAMES = {"com.m88.idleXX": "杖劍傳說"}
 
 
@@ -40,19 +35,10 @@ class AdbError(RuntimeError):
 
 
 def _install_adb() -> Path | None:
-    """把打包在 EXE 裡的 adb 複製到 EXE 旁邊，回傳新位置。
+    """把打包在 EXE 裡的 adb 複製到 EXE 旁邊，回傳新位置；複製失敗回傳 None。
 
-    ⚠ **不能直接執行 `sys._MEIPASS` 裡的 adb.exe。** adb 會 fork 一個常駐的
-      daemon，而它會一直持有自己的執行檔目錄——也就是每次執行都不同的
-      `_MEI******` 暫存資料夾。後果有兩個：
-
-        1. 程式結束時 PyInstaller 刪不掉那個資料夾（檔案被佔用），暫存區愈積愈多
-        2. 下次啟動解壓到**新的** `_MEI`，新的客戶端連上 5037 埠接到的卻是那個
-           「執行檔目錄已經殘缺」的舊 daemon，`adb connect` 於是卡到逾時，而
-           錯誤訊息只寫「connect timed out」，看不出真正的原因
-
-    複製到 EXE 旁邊之後路徑就固定了，daemon 也不再跟暫存目錄綁在一起。
-    複製失敗（例如放在唯讀的位置）就回 None，改用內建的那份。
+    ⚠ 不可直接執行 `sys._MEIPASS` 裡的 adb.exe：常駐的 daemon 會佔住暫存目錄，
+      造成目錄刪不掉，下次啟動的 `adb connect` 也會逾時。
     """
     src = BUNDLE / "platform-tools"
     dst = ROOT / "platform-tools"
@@ -126,18 +112,12 @@ class Device:
             capture_output=True,
             timeout=timeout or self.timeout,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            # ⚠ 明確指定工作目錄為 adb 自己的資料夾。不指定的話子行程會繼承
-            #   我們的 cwd，而 adb 那個常駐 daemon 會一直佔著它——打包執行時
-            #   那可能就是 PyInstaller 的暫存目錄，於是又刪不掉了。
+            # ⚠ 工作目錄指定為 adb 自己的資料夾，否則 daemon 會佔住暫存目錄。
             cwd=str(Path(self.adb).parent),
         )
 
     def _run_device(self, args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:
-        """對裝置下指令。逾時轉成 AdbError，讓排程當成連線中斷處理（重新連線、重試這一輪）。
-
-        ⚠ 不要讓 `subprocess.TimeoutExpired` 往上冒：排程把它當成程式錯誤，紀錄上是一長串
-          英文命令列與 traceback，看不出是模擬器沒有回應。
-        """
+        """對裝置下指令。逾時轉成 AdbError，排程會當成連線中斷處理。"""
         try:
             return self._run(["-s", self.serial, *args], timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -167,15 +147,9 @@ class Device:
         return proc.stdout.decode("utf-8", "ignore").strip()
 
     def _ensure_server(self) -> None:
-        """先把 adb server（daemon）叫起來，再做真正的連線。
+        """先啟動 adb server，再做真正的連線；起不來也不拋錯。
 
-        ⚠ 少了這一步會在冷啟動時連不上。`adb connect` 發現 server 沒在跑時會自己
-          啟動一個，但**那段時間算在 connect 的 timeout 裡**，而 server 冷啟動
-          可能要十幾秒（防毒會對剛解壓出來的執行檔做一次完整掃描）。兩件事擠在
-          20 秒裡就會逾時，而訊息只說「connect 逾時」，看不出卡在哪。
-          相較之下 server 已經在跑時，同一個 connect 只要 0.15 秒。
-
-        起不來也不拋錯——後面的 `is_online()` 會給出完整的排查步驟。
+        ⚠ 不可省略：冷啟動可能要十幾秒，會吃掉 `adb connect` 的逾時時間。
         """
         try:
             self._run(["start-server"], timeout=max(self.timeout, 60))
@@ -185,18 +159,13 @@ class Device:
     def connect(self) -> None:
         """建立連線並驗證裝置規格。
 
-        ⚠ `serial: auto` 只是「從已經連上的裝置裡挑一台」，它本身不會建立連線。
-          跨機器連線時 adb server 一重啟（或電腦重新啟動）就什麼都不剩，排程那一輪
-          會直接失敗在「找不到任何已連線的裝置」。所以只要設定檔填了 host/port，
-          即使 serial 是 auto 也先 `adb connect` 一次——這樣才自己接得回來。
+        ⚠ `serial: auto` 不會建立連線，所以有填 host/port 時一律先 `adb connect`。
         """
         self._ensure_server()
         self._try_connect()
 
         if not self.is_online():
-            # 連不上有一種很難查的原因：5037 埠上掛著一個狀態壞掉的舊 daemon
-            # （例如它的執行檔目錄已經被刪，見 _install_adb）。這種情況下
-            # 重啟 server 就會好，所以自己先試一次再放棄。
+            # 5037 埠上的舊 daemon 狀態壞掉時，重啟 server 就會恢復。
             log.warning("連線失敗，重啟 adb server 後再試一次")
             try:
                 self._run(["kill-server"], timeout=self.timeout)
@@ -223,8 +192,7 @@ class Device:
         try:
             self._verify_spec()
         except AdbError as e:
-            # ⚠ 連線閒置一整晚之後 adb 仍回報在線，第一個指令才收到「error: closed」。
-            #   斷開重連就好，不必等到下一格排程。
+            # ⚠ 連線閒置一整晚之後 adb 仍回報在線，第一個指令才收到「error: closed」，斷開重連。
             log.warning("裝置連線已失效，重新連線：%s", str(e).strip().splitlines()[-1])
             self._disconnect()
             self._try_connect()
@@ -238,7 +206,7 @@ class Device:
             pass
 
     def _try_connect(self) -> None:
-        """依設定建立連線。auto 也要先 connect——見 connect() 的說明。"""
+        """依設定建立連線（見 connect）。"""
         if self.serial == "auto":
             if self.cfg.device.port:
                 self._network_connect(f"{self.cfg.device.host}:{self.cfg.device.port}")
@@ -247,20 +215,14 @@ class Device:
             self._network_connect(self.serial)
 
     def _network_connect(self, target: str) -> None:
-        """對網路位址執行 adb connect，把結果講成中文。連不上不拋錯——
-        呼叫端接著會用 is_online() 判斷，那裡的錯誤訊息完整得多。
-
-        ⚠ 逾時也不要讓 `subprocess.TimeoutExpired` 往上冒。那個例外的訊息是一長
-          串英文命令列（`Command '[...adb.exe, connect, ...]' timed out`），
-          使用者只看得到「有東西壞了」，看不出要去檢查模擬器還是網路。
-        """
+        """對網路位址執行 adb connect，結果寫成中文。連不上不拋錯，由 is_online() 判斷。"""
         try:
             proc = self._run(["connect", target], timeout=self.timeout)
         except subprocess.TimeoutExpired:
             log.warning("連線 %s 逾時（%d 秒）", target, self.timeout)
             return
         out = proc.stdout.decode("utf-8", "ignore").strip()
-        # adb 的原始輸出是英文，正常情況講中文結論就好，異常時才需要看原文
+        # adb 的原始輸出是英文，正常時寫中文結論，異常時附原文
         detail = out or proc.stderr.decode("utf-8", "ignore").strip()
         if "already connected" in detail:
             log.info("已連線到 %s", target)
@@ -289,11 +251,7 @@ class Device:
                    for s, state in self.list_devices())
 
     def _verify_spec(self) -> None:
-        """檢查解析度與 DPI 是否符合設定，不符只警告不中斷。
-
-        每輪排程醒來都會重新連線，所以規格正常時只在第一次寫紀錄——否則跑一整天
-        會累積幾十行一樣的「裝置規格」。不符合仍然每次都警告（那是要看到的）。
-        """
+        """檢查解析度與 DPI，不符只警告不中斷。規格正常時只在第一次寫紀錄。"""
         size = self.shell("wm size")
         density = self.shell("wm density")
         # 原始輸出長這樣：「Physical size: 720x1280」、「Physical density: 320」
@@ -319,8 +277,7 @@ class Device:
     def screencap(self) -> np.ndarray:
         """擷取一張畫面，回傳 OpenCV BGR 影像。
 
-        先用原始格式（不壓縮，約 0.3 秒）；格式不符時改用 PNG（模擬器端要先壓縮，
-        約 0.8 秒），之後這台裝置都用 PNG。兩種格式的像素完全相同。
+        先用原始格式（約 0.3 秒），格式不符時這台裝置改用 PNG（約 0.8 秒）。兩種格式的像素相同。
         """
         if self._raw_capture:
             img = self._screencap_raw()
@@ -333,7 +290,7 @@ class Device:
     def _screencap_raw(self) -> np.ndarray | None:
         """原始格式：檔頭（寬、高、像素格式，新版多一個色彩空間）＋ RGBA 像素。
 
-        像素格式不是 RGBA_8888（1）或長度對不上就回傳 None。
+        像素格式不是 RGBA_8888（1）或長度不符就回傳 None。
         """
         raw = self._run_device(["exec-out", "screencap"]).stdout
         if len(raw) < 12:
@@ -347,16 +304,14 @@ class Device:
         return cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
 
     def _screencap_png(self) -> np.ndarray:
-        """PNG 格式。用 `exec-out` 直接取得二進位輸出，避開 shell 重導向會插入 BOM、
-        把 \\n 換成 \\r\\n 而破壞 PNG 的問題。
-        """
+        """PNG 格式。用 `exec-out` 取得二進位輸出，避開 shell 重導向破壞 PNG。"""
         proc = self._run_device(["exec-out", "screencap", "-p"])
         raw = proc.stdout
         if not raw:
             raise AdbError(f"截圖失敗：{proc.stderr.decode('utf-8', 'ignore')}")
 
         if not raw.startswith(PNG_MAGIC):
-            # 舊版 adb 或某些模擬器仍會做換行轉換，這裡補救一次
+            # 部分環境仍會做換行轉換，這裡還原
             raw = raw.replace(b"\r\n", b"\n")
         if not raw.startswith(PNG_MAGIC):
             raise AdbError("截圖資料不是有效的 PNG，請確認 adb 版本")
@@ -392,10 +347,9 @@ class Device:
         time.sleep(self.cfg.runtime.post_tap_delay)
 
     def tap_repeat(self, x: int, y: int, times: int) -> None:
-        """同一點連點，給加減鈕用。
+        """同一點連點，給加減鈕用，不帶抖動。
 
-        ⚠ 全部塞進一個 shell 指令：一下一個 adb 呼叫的話每下要 1 秒（27 下
-          28 秒），引擎會把那段靜止的畫面當成卡住而按返回鍵。不帶抖動，按鈕夠大。
+        ⚠ 全部放進一個 shell 指令：逐次呼叫 adb 每下要 1 秒，引擎會判定畫面靜止而按返回鍵。
         """
         if times <= 0:
             return
@@ -428,6 +382,6 @@ class Device:
         log.info("關閉應用程式：%s", app_label(package))
 
     def is_app_running(self, package: str) -> bool:
-        # pidof 印的是 PID 數字，不是套件名，所以要看有沒有輸出而非比對名稱
+        # pidof 輸出的是 PID，只看有沒有輸出
         out = self.shell(f"pidof {package} || true").strip()
         return any(token.isdigit() for token in out.split())

@@ -1,11 +1,7 @@
-"""啟動畫面的進度回報。
+"""啟動畫面的進度回報。畫面由 PyInstaller 的 Splash 顯示，進度條與動畫在 `assets/splash.tcl`。
 
-雙擊到視窗出現要六秒。PyInstaller 的 Splash 讓 bootloader 在解壓時就把畫面顯示出來，
-進度條與動畫由 `assets/splash.tcl` 畫，這支模組只負責告訴它走到哪了。
-
-⚠ 這支模組不能 import 任何重的東西，它的用途是在載入 cv2 與介面之前就讓畫面有反應。
-
-⚠ STAGES 的百分比依各階段的實際耗時分配。改動 import 順序或加了重量級相依時要重新量。
+⚠ 不可 import 任何重量級模組，要在載入 cv2 與介面之前就能回報。
+⚠ STAGES 的百分比依各階段的實際耗時分配，改動 import 順序或相依時要重新量。
 """
 
 from __future__ import annotations
@@ -41,15 +37,14 @@ def step(name: str) -> None:
     try:
         mod.update_text(f"{'' if pct is None else pct}|{name}")
     except Exception:
-        # 啟動畫面已經被關掉、或 Tk 那頭出了問題，都不該影響啟動流程
+        # 啟動畫面已關閉或 Tk 出錯，都不影響啟動流程
         pass
 
 
 def close() -> None:
-    """關掉啟動畫面。
+    """關閉啟動畫面。
 
-    ⚠ **每一條啟動路徑都要呼叫**，包含開不了視窗的那些（已經有實例在跑、設定檔
-      壞掉、命令列子命令）。漏掉的話那張圖會留在螢幕上直到行程結束。
+    ⚠ 每一條開不了視窗的路徑都要呼叫（已有實例在跑、設定檔損毀、命令列子命令）。
     """
     mod = _pyi()
     if mod is None:

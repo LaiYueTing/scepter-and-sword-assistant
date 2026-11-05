@@ -14,7 +14,7 @@ const body = ref(null)
 
 const rows = computed(() => logs.visible)
 
-// 新的一行進來就捲到底，除非使用者自己往回翻了（關掉「跟著捲」）
+// 新的一行進來就捲到底，除非關閉「跟隨」
 watch(
   () => rows.value.length,
   async () => {
@@ -25,8 +25,7 @@ watch(
 )
 
 /**
- * ⚠ **一般訊息不要內嵌顏色**，讓它繼承 CSS 變數。內嵌的話切換主題之後，早先寫進去
- *   的幾百行會留在舊配色上。警告與錯誤才用 token——那兩個在每套配色下都夠顯眼。
+ * ⚠ 一般訊息不內嵌顏色，繼承 CSS 變數才會跟著主題。警告與錯誤用 token。
  */
 function toneOf(level) {
   if (level === '錯誤') return 'bad'
@@ -42,9 +41,7 @@ function toneOf(level) {
 const menu = ref({ show: false, x: 0, y: 0, row: null, sel: '' })
 
 /**
- * ⚠ **選取的文字要在按下右鍵的那一刻就抄下來，不能等按了選單才去讀。**
- *   點選單項目時瀏覽器會把整份文件的選取範圍收掉——等 `onSelect` 跑起來，
- *   `window.getSelection()` 已經是空的了。而選單打開時選取還在，項目不會是灰的。
+ * ⚠ 在按下右鍵時就存下選取的文字：點選單項目時瀏覽器會清除選取範圍。
  */
 function onContextMenu(e, row) {
   e.preventDefault()
@@ -72,9 +69,7 @@ const lineText = (r) => `[${r.time}] [${r.level}] ${r.module} ${r.msg}`
 /**
  * 複製到剪貼簿。
  *
- * ⚠ **不能只用 `navigator.clipboard`。** 網頁版是用 `file://` 載入的，而那**不是
- *   安全內容**——`navigator.clipboard` 在那裡是 `undefined`，呼叫下去會丟例外而
- *   「按了沒反應」。舊的 `execCommand('copy')` 沒有這個限制，所以拿它當退路。
+ * ⚠ `file://` 不是安全內容，`navigator.clipboard` 是 undefined，用 `execCommand('copy')` 當退路。
  */
 async function copy(text) {
   if (!text) return
@@ -84,7 +79,7 @@ async function copy(text) {
     } else {
       const ta = document.createElement('textarea')
       ta.value = text
-      // 放在畫面外，否則捲動位置會被改變
+      // 放在畫面外，不影響捲動位置
       ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'
       document.body.appendChild(ta)
       ta.select()
@@ -118,9 +113,7 @@ function onSelect(key) {
       break
     case 'select-all':
       /*
-       * ⚠ **虛擬捲動只選得到「畫出來的那幾行」。** 這不是 bug，是虛擬捲動的本質
-       *   ——沒捲到的行根本不在 DOM 裡。真的要整份就按「複製全部」，那條是從
-       *   store 拿的，不受畫面影響。
+       * ⚠ 虛擬捲動只選得到畫出來的行，整份用「複製全部」（從 store 取）。
        */
       selectAll()
       break
@@ -183,11 +176,7 @@ function onSelect(key) {
         </button>
       </div>
 
-      <!--
-        類別篩選。⚠ **只列出現過的標籤**，而且「不選 = 不過濾」（不是「全部排除」）
-        ——固定列出所有等級與模組的話，畫面上會有一排永遠是 0 的東西，而這個面板的
-        重點是「今天實際發生了什麼」。
-      -->
+      <!-- 類別篩選：只列出現過的標籤，沒有選取表示不過濾。 -->
       <div v-if="logs.lines.length" class="tags">
         <button
           v-for="t in logs.tags.levels"
@@ -223,10 +212,7 @@ function onSelect(key) {
       </div>
     </div>
 
-    <!--
-      ⚠ **空狀態要放在同一層裡置中，不能接在捲動區後面。** 接在後面的話它是「內容
-        之後的一段文字」，會貼在面板上緣底下一點的位置。用 `position: absolute` 蓋滿同一格才置得中。
-    -->
+    <!-- 空狀態用 absolute 蓋滿同一格再置中。 -->
     <div
       ref="body"
       class="body flex-1 selectable"
@@ -285,7 +271,7 @@ function onSelect(key) {
   position: relative;
 }
 
-/* 空狀態：鋪滿整格再置中，而不是「接在內容後面的一段文字」 */
+/* 空狀態：鋪滿整格再置中 */
 .empty {
   position: absolute;
   inset: 0;
@@ -313,7 +299,7 @@ function onSelect(key) {
   align-items: center;
   gap: 6px;
 }
-/* 等級標籤帶自己的顏色，掃一眼就知道哪個是錯誤 */
+/* 等級標籤帶自己的顏色 */
 .nc-tag.lv-bad {
   color: var(--red);
   border-color: color-mix(in srgb, var(--red) 45%, transparent);
@@ -330,9 +316,7 @@ function onSelect(key) {
 }
 
 /*
- * ⚠ **不要沿用終端機那份欄位對齊。** 那是為等寬字型設計的（`logger.pad()` 按顯示
- *   寬度補空白），這裡是比例字型，補空白只會歪。改用顏色分欄：時間淡、模組是提示色、
- *   訊息才是主角。
+ * 比例字型，用顏色分欄：時間淡、模組用提示色、訊息最明顯。
  */
 .row {
   display: grid;
@@ -358,9 +342,7 @@ function onSelect(key) {
   text-overflow: ellipsis;
 }
 /*
- * ⚠ **多行訊息要用懸掛縮排，不能補空白字元。** 連線失敗那段有七行提示，補
- *   `&nbsp;` 在比例字型下永遠對不齊——那是等寬字型的排版思維。負的 text-indent
- *   配同寬的 padding-left 才會讓第二行以後（含自動折行）對齊到訊息欄的左緣。
+ * ⚠ 多行訊息用懸掛縮排：負的 text-indent 配同寬的 padding-left。
  */
 .msg {
   white-space: pre-wrap;

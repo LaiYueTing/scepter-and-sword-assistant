@@ -1,12 +1,8 @@
 /*
  * 元件語彙：外殼、卡片、狀態 chip、按鈕、面板標題、標籤、霓虹燈號。
+ * 顏色與尺寸在 `tokens.css`（產生的），配色在 `data/palette.js`。
  *
- * 和 `tokens.css` 的分工：那份（產生的）只回答「顏色與尺寸是多少」，這份回答
- * 「這些東西長什麼樣子」。要換配色去改 `data/palette.js`，要改造型才動這裡。
- *
- * ⚠ **這裡一個顏色都不要寫死。** 整套配色會跟著背景主題的色相換掉（174 組），
- *   寫死的那一個會變成「換了主題只有它沒變」——而且只在某幾組主題上才看得出來。
- *   需要淡一點的顏色用 `color-mix(in srgb, var(--x) N%, transparent)`。
+ * ⚠ 不要寫死顏色，整套配色會跟著主題換。淡色用 `color-mix(in srgb, var(--x) N%, transparent)`。
  */
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -14,10 +10,9 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 /*
- * 上緣高光漸層 ＋ 往下打的投影，讓標題列像浮在內容上方，而不是一片平的底色。
+ * 上緣高光漸層 ＋ 往下的投影。
  *
- * ⚠ **底色要寫在這裡，不能寫在元件的 inline style 上。** 下面 `[data-bgtheme]`
- *   那條毛玻璃規則永遠贏不過 inline。
+ * ⚠ 底色寫在這裡，不可寫在 inline style：`[data-bgtheme]` 的毛玻璃規則贏不過 inline。
  */
 .app-chrome {
   background: linear-gradient(
@@ -37,20 +32,16 @@
   --chrome-shadow: 0 8px 22px -12px color-mix(in srgb, var(--text-0) 26%, transparent);
 }
 
-/* 狀態列在下面，投影要往上打，否則它看起來像貼在內容底下 */
+/* 狀態列的投影往上 */
 .app-chrome--bottom {
   box-shadow: 0 -6px 18px -10px rgb(0 0 0 / 45%),
     inset 0 1px 0 color-mix(in srgb, #fff var(--chrome-inset, 6%), transparent);
 }
 
 /*
- * 選了背景主題之後，外殼改成毛玻璃讓漸層透成一層底色。
+ * 選了背景主題時，外殼是毛玻璃。
  *
- * ⚠ **卡片刻意不參加。** 88% 不透明的卡片疊在最糟的漸層上，深色 `--text-2` 量到
- *   **4.24:1**——離 AA 的 4.5 只差一點點，正是「不要卡在剛好貼齊的邊界」那個形狀。
- *   整個介面跟著主題變色是靠 `palette.js` 換色相做到的，不是靠透明度。
- *
- * ⚠ **88% 是量出來的。** WebGradients 原本用的 58% 會讓 `--text-2` 掉到 2.54:1。
+ * ⚠ 88% 是量出來的：58% 會讓 `--text-2` 掉到 2.54:1。
  */
 :root[data-bgtheme='on'] .app-chrome {
   background: color-mix(in srgb, var(--bg-1) 88%, transparent);
@@ -60,17 +51,10 @@
 }
 
 /*
- * 卡片也是毛玻璃。
+ * 卡片的毛玻璃，推導在 `data/gradients.js`。
  *
- * ⚠ **不透明的卡片會讓整個介面「死硬」**——換了主題只有邊邊在變，中間一大塊還是
- *   實心色塊。但透明度是拿可讀性換的，所以配套是**會自己適應的遮罩**：溫和的漸層
- *   用淡遮罩（顏色鮮豔），極端的（`wg40` 純黑到純白）自動加重，而且文字最後還會
- *   對「合成之後的實際底色」重新鉗一次。整套推導在 `data/gradients.js`。
- *
- * ⚠ **底色是 JS 算好之後給的（`--card-bg`）**，不要在這裡再乘一次 alpha——
- *   同一個數字寫在兩個地方，改了其中一個的那天不會有人發現。
- *
- * ⚠ `saturate()` 是必要的：blur 會把透上來的漸層攪成灰，補一點回去才看得出主題。
+ * ⚠ 底色由 JS 算好（`--card-bg`），這裡不再乘 alpha。
+ * ⚠ `saturate()` 不可省略：blur 會讓透上來的漸層變灰。
  */
 :root[data-bgtheme='on'] .card,
 :root[data-bgtheme='on'] .nc-card {
@@ -100,7 +84,7 @@
   box-shadow: var(--shadow-card);
   overflow: hidden;
 }
-/* 頂部那道高光讓卡片和背景分得開，不必靠加粗邊框 */
+/* 頂部高光 */
 .card::before,
 .nc-card::before {
   content: '';
@@ -115,9 +99,7 @@
 }
 
 /*
- * hover 時浮起來一點。
- * ⚠ **只給「點下去會有事發生」的卡片。** 純顯示的面板（紀錄、裝置）也跟著動的話，
- *   滑鼠掃過去整個版面都在跳——而這個視窗是拿來盯狀態的。
+ * hover 時浮起。⚠ 只給可點擊的卡片。
  */
 .nc-hover {
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
@@ -128,13 +110,8 @@
   box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* 面板的標題列。右邊那段灰字放規格／筆數這種「不是主角但每次都要看」的資訊 */
 /*
- * 面板標題列。
- *
- * ⚠ **標題那一列要釘死高度。** 各面板擺的控制項不一樣高（模擬器那邊是 28px 的
- *   小按鈕，日誌那邊有 32px 的圖示鍵），不釘死的話行高就跟著最高的那一個走，
- *   兩個面板的標題於是差了 2px——而它們是並排的，一眼就看得出來。
+ * 面板標題列。⚠ 高度固定：各面板的控制項高度不同（28px、32px），並排時才對齊。
  */
 .pane-hd {
   display: flex;
@@ -151,15 +128,11 @@
   flex: none;
 }
 /*
- * 標題那一組：名稱（13.5px）＋規格（11.5px）。
+ * 標題組：名稱（13.5px）＋規格（11.5px）。
  *
- * ⚠ **兩段字級不同的文字要對基線，而基線對齊必須發生在「只有它們兩個」的容器裡。**
- *   直接給它們 `align-self: baseline`（讓它們和整條標題列的其他項目一起排基線）
- *   會出事：基線的位置取決於那一行裡最高的是誰，而各面板標題列擺的東西不一樣
- *   （一邊是 28px 的按鈕，一邊是輸入框與開關）——同一組字在兩個面板上就落在
- *   不同的高度。包成自己的一組之後，組內對基線、組本身置中，兩邊必定一致。
+ * ⚠ 基線對齊要在只有這兩段文字的容器裡，組本身置中。
  */
-/* 直向排列的標題列（日誌那邊底下還有一排標籤），第一列一樣要 32px */
+/* 直向排列的標題列，第一列同樣 32px */
 .pane-hd .hd-row {
   display: flex;
   align-items: center;
@@ -185,7 +158,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   狀態 chip：兩行的資訊塊，亮起來會呼吸
+   狀態 chip：兩行的資訊塊，亮起來會發光
    ══════════════════════════════════════════════════════════════════════ */
 
 .chip {
@@ -232,15 +205,14 @@
 }
 
 /*
- * ⚠ **亮起來才發光。** 沒亮的時候是一顆安靜的灰點——每一顆都在呼吸的話，
- *   「哪一個真的在跑」反而看不出來，而那正是這些燈存在的理由。
+ * 亮起來才發光，沒亮時是灰點。
  */
 .chip.live {
   border-color: color-mix(in srgb, var(--glow) 70%, var(--border));
   box-shadow: 0 0 12px color-mix(in srgb, var(--glow) 42%, transparent),
     inset 0 0 8px color-mix(in srgb, var(--glow) 16%, transparent);
 }
-/* ⚠ 亮度由 `data/pulse.js` 每秒換一次，不要改回 CSS 動畫或 transition，理由見那支檔案。 */
+/* ⚠ 亮度由 `data/pulse.js` 每秒換一次，不要用 CSS 動畫或 transition。 */
 :root[data-pulse='0'] .chip.live {
   border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
   box-shadow: 0 0 7px -1px color-mix(in srgb, var(--glow) 30%, transparent),
@@ -306,8 +278,7 @@
   transform: translateY(0);
 }
 /*
- * ⚠ **停用的按鈕要看得出是停用的，但不能糊到讀不出字。** `opacity: .45` 會把文字
- *   一起吃掉——那顆按鈕正是需要 tooltip 說明「為什麼不能按」的時候。
+ * 停用的按鈕。⚠ 不用 `opacity: .45`：文字要讀得出來。
  */
 .nc-btn:disabled {
   opacity: 0.55;
@@ -316,9 +287,7 @@
 }
 
 /*
- * 主要按鈕。
- * ⚠ **字色用 `--accent-on` 不是白色。** 黃色系的主題主色很亮，白字讀不到；
- *   而為了讓白字讀得到去把主色壓暗，會讓一整片主題變成土色。細節見 `palette.js`。
+ * 主要按鈕。⚠ 字色用 `--accent-on`，不是白色（見 `palette.js`）。
  */
 .nc-btn--primary {
   border-color: transparent;
@@ -334,11 +303,8 @@
 }
 
 /*
- * 第三種樣式：主色描邊。
- *
- * ⚠ **一個畫面只能有一顆主要按鈕**（`--primary` 是實心主色，它在說「這裡是
- *   出口」）。但「測試連線」也需要看得出來比旁邊那幾顆重要——那正是這一階存在
- *   的理由：描邊與文字用主色，底只有一層極淡的主色，份量介於實心與一般之間。
+ * 主色描邊：描邊與文字用主色，底是極淡的主色，份量介於實心與一般之間。
+ * ⚠ 一個畫面只有一顆 `--primary`。
  */
 .nc-btn--soft {
   color: var(--accent-text);
@@ -375,7 +341,7 @@
   width: 28px;
 }
 
-/* 標題列那種只有圖示、沒有邊框的按鈕 */
+/* 只有圖示、沒有邊框的按鈕 */
 .iconbtn {
   width: 32px;
   height: 32px;
@@ -424,7 +390,7 @@
   background: var(--bg-3);
   color: var(--text-0);
 }
-/* 選中的用漸層底 ＋ 內側描邊，而不是換一個色塊——那在 174 組主題下都成立 */
+/* 選中：漸層底 ＋ 內側描邊 */
 .nc-tab.on {
   color: var(--text-0);
   background: linear-gradient(
@@ -468,8 +434,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 /*
- * ⚠ **文字用 token 本尊，只有底色拿 `color-mix` 去淡化。** 反過來寫（淡文字配實底）
- *   會讓對比整段掉下去，而這幾個 pill 是 11.5px 的小字。
+ * ⚠ 文字用 token 本身，只有底色用 `color-mix` 淡化。
  */
 .nc-pill {
   display: inline-flex;
@@ -511,8 +476,7 @@
   border-color: color-mix(in srgb, var(--accent) 42%, transparent);
 }
 /*
- * 「待命」用 `--text-1` 而不是 `--text-2`：它回答「這份腳本現在怎麼樣」，是功能性
- * 資訊，讀者每次都要看。只有「已停用」才掉到最弱的那一層——那是刻意讓它退到背景去。
+ * 「待命」用 `--text-1`（功能性資訊），「已停用」用最弱的文字色。
  */
 .nc-pill--idle {
   color: var(--text-1);
@@ -562,8 +526,7 @@
 }
 
 /*
- * 「靜態」燈號：關掉呼吸，但**保留發光**。`glow` 是喜好開關（`ui.json`），
- * 和 `prefers-reduced-motion` 是兩件事，後者無條件遵守、不做成介面上的選項。
+ * 靜態燈號：關閉呼吸，保留發光（`ui.json` 的 glow）。
  */
 :root[data-glow='none'] .chip.live {
   border-color: color-mix(in srgb, var(--glow) 70%, var(--border));
@@ -575,11 +538,7 @@
 }
 
 /*
- * 下拉清單裡的多行內容不要被截斷。
- *
- * ⚠ naive-ui 的選項預設是單行 ＋ `text-overflow: ellipsis`，而裝置那一項是
- *   「位址／型號／解析度」三行——被切掉的永遠是後面那兩行，也就是使用者真正要看的。
- *   `renderLabel` 畫成多行只是第一步，這條規則才讓它撐得開。
+ * ⚠ 下拉清單的多行內容不截斷：naive-ui 預設單行加 ellipsis，要配合 `renderLabel`。
  */
 .n-base-select-option__content {
   white-space: normal;

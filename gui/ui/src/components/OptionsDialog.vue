@@ -18,7 +18,7 @@ const emit = defineEmits(['update:show'])
 const host = useHostStore()
 const message = useMessage()
 
-/** 改了但還沒寫回去的值：{ key: value }。 */
+/** 修改後還沒寫回的值：{ key: value }。 */
 const draft = ref({})
 const saving = ref(false)
 const tab = ref('')
@@ -27,15 +27,13 @@ const groups = computed(() => host.options.groups)
 const items = computed(() => host.options.items)
 const dirty = computed(() => Object.keys(draft.value).length > 0)
 
-// ⚠ **每次開啟都從後端的值重來。** 設定可能在這中間被人直接改過 config.yaml，
-//   留著上一次的草稿只會把別人的改動蓋回去。
+// ⚠ 每次開啟都從後端的值重來，不保留草稿。
 watch(
   () => props.show,
   (open) => {
     if (!open) return
     draft.value = {}
-    // ⚠ **一定要指定第一個分頁。** `NTabs` 一旦被 `v-model` 控制住，值是空字串
-    //   就等於「誰都沒選中」：畫面上分頁列在、內容區卻是空的。
+    // ⚠ 要指定第一個分頁：`NTabs` 受 `v-model` 控制時，空字串表示沒有選中。
     tab.value = groups.value[0]?.name || ''
   }
 )
@@ -84,9 +82,8 @@ function close() {
 
 <template>
   <!--
-    強制回應是安全的：執行中那顆按鈕本來就停用，開得起來就代表沒有腳本在跑。
-    ⚠ 對話框一定要有自己的不透明底色（`.opt-dialog`），否則在某些合成模式下底會
-      畫不出來，變成看得到底下的內容。
+    強制回應：開得起來就代表沒有腳本在跑。
+    ⚠ `.opt-dialog` 要有不透明底色。
   -->
   <NModal
     :show="show"
@@ -98,24 +95,11 @@ function close() {
     @update:show="(v) => (v ? emit('update:show', true) : close())"
   >
     <NTabs v-model:value="tab" type="line" animated>
-      <!--
-        ⚠ 分頁用**腳本**分，不靠鍵名前綴猜歸屬；分頁標題是後端讀腳本的 `name:`
-          拿來的，和任務卡、紀錄同一個來源。前端不維護第二份對照表——維護兩份
-          就會有不一致的那天。
-      -->
+      <!-- 分頁依腳本分，標題來自腳本的 `name:`。 -->
       <NTabPane v-for="g in groups" :key="g.name" :name="g.name" :tab="g.title">
         <NScrollbar style="max-height: 52vh">
           <div class="pr-3 pt-1">
-            <!--
-              ⚠ **對齊靠 grid，不要靠 margin 猜。** 第一欄放核取方塊、第二欄放
-                「標籤＋說明」，於是標籤和說明**天生**就對齊在同一條線上，
-                而數值型（沒有方塊）的標籤也自動跟它們切齊。
-
-                ⚠ 不要用 `margin-left: 1.85em` 這種寫法去推核取方塊的寬度：說明
-                的字級（12px）比標籤（14px）小，同樣的 em 換算出來**比較短**，
-                說明反而會跑到標籤左邊。凡是「對齊到某個元件的內部尺寸」都不要
-                用 em／px 推算。
-            -->
+            <!-- 第一欄放核取方塊，第二欄放標籤與說明，對齊靠 grid。 -->
             <div v-for="key in g.keys" :key="key" class="opt" :class="{ sub: items[key].sub }">
               <div class="box">
                 <NCheckbox
@@ -135,8 +119,7 @@ function close() {
                     {{ items[key].label }}
                   </span>
 
-                  <!-- ⚠ 小數位是必要的：raid_plateau_players 預設 6.5，用整數欄位
-                       會被無聲地寫回 6——使用者只是打開介面看一眼，門檻就被改掉了。 -->
+                  <!-- ⚠ 小數位不可省略：raid_plateau_players 預設 6.5。 -->
                   <NInputNumber
                     v-if="items[key].kind === 'number'"
                     :value="valueOf(key)"
@@ -150,10 +133,7 @@ function close() {
                   />
                 </div>
 
-                <!--
-                  說明直接印在開關底下，不只掛 tooltip：使用者猶豫的正是「關掉會
-                  怎樣」，那句話藏在滑鼠停留兩秒後才出現的地方等於沒寫。
-                -->
+                <!-- 說明直接印在開關底下。 -->
                 <div v-if="items[key].hint" class="hint">{{ items[key].hint }}</div>
               </div>
             </div>
@@ -188,15 +168,12 @@ function close() {
 .opt + .opt {
   border-top: 1px solid var(--border-soft);
 }
-/* 子項目往後縮一格。這是真的縮排，不是在標籤前面塞空白字元
-   ——比例字型下補空白永遠對不齊，而且說明那一行也跟不上。 */
+/* 子項目縮排 */
 .opt.sub {
   padding-left: 28px;
 }
 /*
- * ⚠ **核取方塊要對齊「標籤那一行」，不是整塊的垂直中央。** 少了 `align-self: start`
- *   的話，這一格會被拉成整列的高度（標籤＋說明兩行），置中之後方塊就掉到兩行中間，
- *   看起來像沒對齊。min-height 要和 `.row` 一樣，兩邊才會落在同一條中線上。
+ * ⚠ 核取方塊對齊標籤那一行：`align-self: start`，min-height 與 `.row` 相同。
  */
 .box {
   display: flex;

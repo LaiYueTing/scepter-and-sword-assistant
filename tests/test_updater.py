@@ -1,11 +1,6 @@
-"""驗自動更新裡「換掉執行中的執行檔」這件事真的成立。
+"""驗自動更新的換檔、重新啟動、下載驗證與清理（Windows 的檔案語意要實際量）。
 
-⚠ 這條路 `selftest` 涵蓋不到——那支是拿樣本圖驗規則的，而這裡驗的是作業系統的
-  檔案語意。也不能只靠讀程式碼判斷：Windows 允許改名執行中的 EXE、卻不允許覆寫它，
-  整個換檔手法就建立在這個差別上，所以要當場量。
-
-用 `PING.EXE` 當替身（自帶會阻塞的參數、不需要任何相依檔案），
-不必為了測試去編一份一百多 MB 的 EXE。
+用 `PING.EXE` 當替身（有會阻塞的參數、不需要相依檔案）。
 
     python tests/test_updater.py
 """
@@ -24,8 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core import updater
@@ -45,14 +39,14 @@ def test_version_compare() -> None:
     check("新版比得出來", updater.is_newer("1.0.92.0", "1.0.91.0"))
     check("同版不算新", not updater.is_newer("1.0.91.0", "1.0.91.0"))
     check("舊版不算新", not updater.is_newer("1.0.90.0", "1.0.91.0"))
-    # 位數不一樣時要補齊再比，否則 1.0.92 會被判成小於 1.0.92.0
+    # 位數不同時補齊再比
     check("位數不同也對得起來", not updater.is_newer("1.0.91", "1.0.91.0"))
     check("v 前綴不影響", updater.is_newer("v1.1.0.0", "1.0.99.0"))
-    check("認不出來的字串不會炸", not updater.is_newer("", "1.0.91.0"))
+    check("無法辨識的字串不會丟例外", not updater.is_newer("", "1.0.91.0"))
 
 
 def test_swap() -> None:
-    """改名 → 搬新檔 → 行程照活，這正是 `updater.apply()` 的三步。"""
+    """改名 → 搬新檔 → 行程繼續執行（`updater.apply()` 的步驟）。"""
     print("換掉執行中的執行檔")
     with tempfile.TemporaryDirectory() as tmp:
         here = Path(tmp)
@@ -92,7 +86,7 @@ def test_swap() -> None:
 
             check("換檔期間行程仍活著", proc.poll() is None)
 
-            # 反向驗證：直接覆寫會失敗，這正是「非得先改名不可」的理由
+            # 反向驗證：直接覆寫會失敗
             try:
                 shutil.copyfile(src, backup)
                 check("直接覆寫執行中的 EXE 會失敗", False, "竟然成功了")
@@ -112,8 +106,7 @@ def test_swap() -> None:
 
 
 
-# 這段會被寫成一支獨立的腳本執行：`restart()` 的重點是「母行程結束**之後**」
-# 才動作，同一個行程裡驗不到。
+# 寫成獨立腳本執行：`restart()` 在母行程結束之後才動作。
 _PROBE = """
 import os, subprocess, sys
 target, marker = sys.argv[1], sys.argv[2]
@@ -132,8 +125,7 @@ def _try_flags(tmp: Path, name: str, flags: int) -> bool:
     target = tmp / f"t_{name}.cmd"
     probe = tmp / f"probe_{name}.py"
     marker.unlink(missing_ok=True)
-    # ⚠ 批次檔的換行用 os.linesep 組出來，不要在字串裡寫跳脫序列——
-    #   這個檔案本身就會被工具改寫，跳脫序列在那個過程裡很容易被吃掉。
+    # 批次檔的換行用 os.linesep。
     target.write_text("@echo off" + os.linesep
                       + f'> "{marker}" echo ok' + os.linesep,
                       encoding="ascii")
@@ -149,12 +141,7 @@ def _try_flags(tmp: Path, name: str, flags: int) -> bool:
 
 
 def test_restart_flags() -> None:
-    """`restart()` 的 creationflags 只能給 CREATE_NO_WINDOW。
-
-    ⚠ 這不是潔癖：`DETACHED_PROCESS` 會讓那個 PowerShell 當場死掉，而
-      `Popen` 不報錯、PID 也拿得到——症狀是「更新完就再也開不起來」，
-      從程式碼上完全看不出來。
-    """
+    """`restart()` 的 creationflags 只能給 CREATE_NO_WINDOW（`DETACHED_PROCESS` 會讓 PowerShell 當場結束）。"""
     print("重新啟動的排程手法")
     no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     detached = getattr(subprocess, "DETACHED_PROCESS", 0)
@@ -166,14 +153,7 @@ def test_restart_flags() -> None:
 
 
 def test_restart_env_scrubbed() -> None:
-    """重新啟動時傳出去的環境變數不能帶著 PyInstaller 的私有那幾個。
-
-    ⚠ bootloader 靠
-      `_PYI_PARENT_PROCESS_LEVEL` / `_PYI_APPLICATION_HOME_DIR` 認出「我是已經
-      解壓好的子行程」，繼承下去的話新版會跳過解壓、去載入舊版早就刪掉的目錄，
-      使用者看到 `Failed to load Python DLL ... LoadLibrary: 找不到指定的模組`。
-      雙擊不會有事，所以只有更新後的重新啟動會遇到。
-    """
+    """重新啟動時傳出去的環境變數不含 PyInstaller 的私有變數（見 `updater._clean_env`）。"""
     print("重新啟動時的環境變數")
     keep = dict(os.environ)
     os.environ["_PYI_APPLICATION_HOME_DIR"] = r"C:\Temp\_MEI999992"
@@ -197,8 +177,7 @@ class _FakeResponse:
     def __init__(self, body: bytes, declared: int):
         self._body = body
         self._at = 0
-        # 200 而不是 206：這個假回應不支援分段，download() 會走單線那條路，
-        # 而這支測試要驗的正是「單線抓完之後的完整性檢查」。
+        # 回 200：不支援分段，download() 走單一連線。
         self.status = 200
         self.headers = {"Content-Length": str(declared)}
 
@@ -237,16 +216,11 @@ def _download_with(body: bytes, declared: int, tmp: Path):
 
 
 def test_download_verification() -> None:
-    """截斷的下載不能被當成完成。
-
-    ⚠ 後果是永久的：`resp.read()` 在連線半途斷掉時回傳
-      空字串，`while` 迴圈就正常結束——沒有例外。少了驗證，一個截斷的 EXE 會被
-      換上去，使用者從此每次啟動都看到「Failed to load Python DLL」。
-    """
+    """截斷的下載不算完成。"""
     print("下載完整性")
     with tempfile.TemporaryDirectory() as tmp:
         here = Path(tmp)
-        whole = b"MZ" + bytes(4094)      # 假的執行檔：檔頭對、長度固定
+        whole = b"MZ" + bytes(4094)      # 假的執行檔
         check("完整的下載會收下", _download_with(whole, len(whole), here) is not None)
         check("截斷的下載要拒絕",
               _download_with(whole[:3000], len(whole), here) is None)
@@ -259,11 +233,7 @@ def test_download_verification() -> None:
 
 
 def test_sweep_temp() -> None:
-    """清暫存殘骸只能碰「確定是我們的、而且沒被鎖住」的那些。
-
-    ⚠ 最重要的是最後一項：唯讀工具（doctor、selftest）不上防多開的鎖，可能正有
-      一份在跑。忽略錯誤地刪下去會把它**刪成半殘**而當場炸掉，比不清還糟。
-    """
+    """暫存目錄只清自己的、而且沒有被鎖住的。"""
     print("清暫存殘骸")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -283,8 +253,7 @@ def test_sweep_temp() -> None:
         busy = root / "_MEI333333"
         busy.mkdir()
         (busy / "config.example.yaml").touch()
-        # 正在跑的那一份：Python 本體一定鎖著，而排在它前面的 libcrypto 不一定
-        # （沒連過網路就還沒載入）。只看第一個 DLL 的話會判成沒人在用。
+        # 執行中的那一份：python3XX.dll 鎖著，libcrypto 不一定。
         (busy / "libcrypto-3.dll").touch()
         held = (busy / "python314.dll").open("wb")
 
@@ -301,17 +270,13 @@ def test_sweep_temp() -> None:
         check("自己的殘骸清得掉", not mine.exists())
         check("目前這一份不會被誤刪", current.exists())
         check("別的程式的不要碰", other.exists())
-        check("鎖住的整個跳過，不會刪成半殘",
+        check("鎖住的目錄整個跳過",
               busy.exists() and (busy / "config.example.yaml").exists())
         check("回報清掉的數量", swept == 1, f"回報 {swept}")
 
 
 def test_backup_path_when_old_is_stuck() -> None:
-    """`.old` 還被佔著的時候，備份要換一個名字，不要在同一個路徑上硬碰硬。
-
-    ⚠ 兩種成因都要驗：**被別的行程開著**與**唯讀屬性**，都是同一個 WinError 5，
-      訊息看不出真正卡住的是 `.old`。
-    """
+    """`.old` 被佔用（別的行程開著、唯讀屬性）時，備份改用其他名字。"""
     print("備份路徑（.old 卡住時）")
     with tempfile.TemporaryDirectory() as tmp:
         here = Path(tmp)
@@ -327,7 +292,7 @@ def test_backup_path_when_old_is_stuck() -> None:
               updater._spare_backup(cur).name == cur.name + ".old")
 
         old.write_bytes(b"stale")
-        holder = open(old, "rb")            # 上一版的行程還開著
+        holder = open(old, "rb")            # 模擬上一版的行程還開著
         try:
             picked = updater._spare_backup(cur)
             check("被佔著時換一個名字", picked != old, picked.name)
@@ -342,7 +307,7 @@ def test_backup_path_when_old_is_stuck() -> None:
         finally:
             holder.close()
 
-        # 唯讀是另一個成因，同樣是 WinError 5
+        # 唯讀屬性
         cur.write_bytes(b"MZ" + b"x" * 64)
         old.write_bytes(b"stale")
         os.chmod(old, stat.S_IREAD)
@@ -354,7 +319,7 @@ def test_backup_path_when_old_is_stuck() -> None:
 
 
 def test_cannot_apply_from_source() -> None:
-    """從原始碼跑的時候要明講「換不了」，不要默默做出一個壞掉的 EXE。"""
+    """從原始碼執行時回報無法換檔。"""
     print("執行環境判斷")
     can, why = updater.can_apply()
     check("未打包時拒絕換檔", not can and bool(why), why)

@@ -1,12 +1,7 @@
 /**
- * 通往後端的唯一入口。
+ * 通往後端的唯一入口：頁面 → pywebview 的 `js_api` → `gui/api.py`。
  *
- * 後端是同一個 Python 行程：頁面 → pywebview 的 `js_api` → `gui/api.py`。
- * 要加新方法只要在那邊加一個公開方法，這裡不維護白名單。
- *
- * ⚠ **一律用 `import { api }`，不要直接摸 `window.pywebview`。** 直接摸的話在
- *   注入完成之前會是 undefined，而且錯得很安靜——畫面照樣畫得出來，只是按什麼
- *   都沒反應。
+ * ⚠ 一律用 `import { api }`，不要直接使用 `window.pywebview`：注入完成之前是 undefined。
  */
 
 const listeners = new Set()
@@ -22,9 +17,7 @@ function fanout(event, data) {
 }
 
 /**
- * ⚠ **`window.pywebview.api` 不是一開始就有的。** pywebview 注入它之後才發出
- *   `pywebviewready`；在那之前呼叫會是 `Cannot read properties of undefined`。
- *   所以每一發呼叫都先等這個 Promise——它只會真的等第一次。
+ * 等 `pywebviewready`：`window.pywebview.api` 在注入之後才存在，每次呼叫都先等這個 Promise。
  */
 function whenReady() {
   return new Promise((resolve) => {
@@ -51,7 +44,7 @@ function shell() {
     try {
       return { ok: true, result: await fn(params) }
     } catch (e) {
-      // pywebview 把 Python 的例外包成 JS 的 Error，訊息本身已經是中文
+      // pywebview 把 Python 的例外包成 JS 的 Error，訊息是中文
       return { ok: false, error: String(e?.message || e) }
     }
   }

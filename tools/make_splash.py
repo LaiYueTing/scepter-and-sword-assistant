@@ -2,16 +2,11 @@
 
     python tools/make_splash.py
 
-換過底圖或改過版面時才要跑一次。進度條與文字是 assets/splash.tcl 在執行時畫的，
-這張圖只放底圖、標題與暗部漸層。
+底圖與版面改動時才需要執行。進度條與文字由 assets/splash.tcl 在執行時畫。
 
-⚠ 底圖 assets/loading.png 是遊戲的美術素材，不進版本控制；沒有那張圖時畫純色漸層，
-  一樣編譯得出來。
-
-⚠ 圓角的外緣只能是全透明或全不透明。bootloader 用 magenta 當透明色，半透明的邊緣會
-  留下一圈粉紅色。
-
-⚠ 尺寸不要超過 760x480，超過時 PyInstaller 會重新縮放而變糊。
+⚠ assets/loading.png 是遊戲的美術素材，不進版控；沒有這張圖時畫純色漸層。
+⚠ 圓角外緣只能全透明或全不透明：bootloader 用 magenta 當透明色。
+⚠ 尺寸不超過 760x480，超過時 PyInstaller 會重新縮放。
 """
 
 from __future__ import annotations
@@ -49,7 +44,7 @@ def base() -> Image.Image:
 
 
 def fade(img: Image.Image) -> Image.Image:
-    """底部壓暗，文字與進度條才讀得到。曲線用平方，交界不會有一條線。"""
+    """底部壓暗（平方曲線），文字與進度條才讀得到。"""
     mask = Image.new("L", (1, H))
     for y in range(H):
         t = max(0.0, (y - FADE_TOP) / (H - FADE_TOP))

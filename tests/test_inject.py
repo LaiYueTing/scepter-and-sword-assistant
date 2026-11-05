@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-"""排程等待中塞一個腳本進去跑（介面上的「虛空裂縫」按鈕）：
+"""排程等待中加入一個腳本（介面上的「虛空裂縫」按鈕）：
 
     python tests/test_inject.py
 
-虛空裂縫每兩週開一次、要人先組好隊伍，排不了程；使用者要的是「就算排程正在
-背景等，按下去也要能打」。`Runner.inject()` 守三件事：
+`Runner.inject()` 的三條路：
 
-  1. 等待中被塞進來 → 立刻醒來跑它，跑完回去等原本的下一個時刻（不是結束）
-  2. 正在跑別的腳本時塞進來 → 接在那一輪後面，不打斷正在打的那一場
-  3. 塞進來的那一輪**不讓出執行權**（`until=None`）：那是使用者明確要求的，排定時刻在
-     中途到了也讓它打完
+  1. 等待中加入 → 立刻跑，跑完回去等下一個時刻
+  2. 正在跑別的腳本時加入 → 接在那一輪後面
+  3. 加入的那一輪不讓出執行權（`until=None`）
 
-⚠ selftest 涵蓋不到（那支驗的是規則），這裡把 Engine 與 Device 換成假的。
+Engine 與 Device 換成假的。
 """
 import os
 import sys
@@ -81,7 +79,7 @@ def build_runner() -> runner_mod.Runner:
 
 
 def drive(hold: float, inject_after: float) -> tuple[list, bool, bool]:
-    """跑一個 Runner，在 inject_after 秒後塞入虛空裂縫，回傳（各輪, 塞入時 waiting, 之後有沒有回到等待）。"""
+    """跑一個 Runner，在 inject_after 秒後加入虛空裂縫，回傳（各輪, 加入時 waiting, 之後是否回到等待）。"""
     FakeEngine.runs = []
     FakeEngine.hold = hold
     real_engine, real_device = runner_mod.Engine, runner_mod.Device
@@ -92,7 +90,7 @@ def drive(hold: float, inject_after: float) -> tuple[list, bool, bool]:
         t.start()
         time.sleep(inject_after)
         was_waiting = r.inject(TaskConfig(name="rift"))
-        # 等它跑完塞進去的那一輪
+        # 等加入的那一輪跑完
         deadline = time.time() + 10
         while time.time() < deadline and not any(n == "虛空裂縫" for n, _ in FakeEngine.runs):
             time.sleep(0.1)
@@ -106,7 +104,7 @@ def drive(hold: float, inject_after: float) -> tuple[list, bool, bool]:
 
 
 def main() -> int:
-    print("等待中塞進來 → 立刻跑，跑完回去等")
+    print("等待中加入 → 立刻跑，跑完回去等")
     runs, was_waiting, back_waiting = drive(hold=0.0, inject_after=2.0)
     names = [n for n, _ in runs]
     print(f"    實際跑的順序：{names}")
@@ -114,9 +112,9 @@ def main() -> int:
     check("虛空裂縫真的跑了", "虛空裂縫" in names)
     check("跑完之後回到等待，排程沒有結束", back_waiting)
     until = dict(runs).get("虛空裂縫", "沒跑")
-    check("塞進來的那一輪不讓出執行權（until=None）", until is None, f"until={until}")
+    check("加入的那一輪不讓出執行權（until=None）", until is None, f"until={until}")
 
-    print("正在跑別的腳本時塞進來 → 接在那一輪後面")
+    print("正在跑別的腳本時加入 → 接在那一輪後面")
     runs, was_waiting, _ = drive(hold=3.0, inject_after=0.8)
     names = [n for n, _ in runs]
     print(f"    實際跑的順序：{names}")

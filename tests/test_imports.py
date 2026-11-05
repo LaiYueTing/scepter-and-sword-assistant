@@ -1,12 +1,6 @@
 """每一個模組都要 import 得起來。直接 `python tests/test_imports.py` 跑。
 
-⚠ **這支守的是「刪掉一個模組之後，還有誰在 import 它」。** 延後載入的模組
-  （例如 `gui/runner.py` 要按下「開始執行」才載入）寫錯 import 時，視窗照樣開得起來。
-
-⚠ 用 grep 找漏網之魚是不夠的：漏掉的那一個正是你沒想到的那一個。這支直接把每個
-  模組都 import 一次，答案是確定的。
-
-⚠ 這裡只 import，**不執行任何東西**——不連模擬器、不建視窗、不碰設定檔。
+涵蓋延後載入的模組（`gui/runner.py` 按下「開始執行」才載入）。只 import，不執行。
 """
 
 from __future__ import annotations
@@ -20,8 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 FAILED: list[str] = []

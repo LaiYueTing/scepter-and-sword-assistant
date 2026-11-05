@@ -1,12 +1,9 @@
 import { defineStore } from 'pinia'
 
-/** 面板最多留這麼多行。掛整夜的話紀錄會很長，而真正要看的永遠是最近那一段。 */
+/** 面板保留的行數上限。 */
 const CAP = 3000
 
-/**
- * 等級的顯示順序。⚠ **不要用出現順序排**——那會讓標籤列在執行中跳來跳去
- * （冒出第一個警告的瞬間整排就重排了），而使用者正想按其中一個。
- */
+/** 等級的顯示順序，固定不隨出現順序改變。 */
 const LEVEL_ORDER = ['錯誤', '警告', '資訊', '等待']
 
 let seq = 0
@@ -16,8 +13,7 @@ export const useLogStore = defineStore('logs', {
     lines: [],
     follow: true, // 自動捲到底
     filter: '', // 只看含這段文字的行
-    // 選起來的標籤。**空陣列 = 不過濾**，不是「全部排除」——這個區別很重要，
-    // 否則一開始沒選任何標籤時畫面會是空的。
+    // 選取的標籤，空陣列表示不過濾。
     levels: [],
     modules: []
   }),
@@ -25,9 +21,6 @@ export const useLogStore = defineStore('logs', {
   getters: {
     /**
      * 目前紀錄裡實際出現過的標籤與筆數。
-     *
-     * ⚠ **只列出現過的。** 固定列出所有等級與模組的話，畫面上會有一排永遠是 0
-     *   的標籤——而這個介面的重點是「今天實際發生了什麼」。
      */
     tags: (s) => {
       const levels = new Map()
@@ -44,7 +37,7 @@ export const useLogStore = defineStore('logs', {
         levels: [...levels]
           .map(([name, count]) => ({ name, count }))
           .sort((a, b) => rank(a.name) - rank(b.name)),
-        // 模組沒有天然的輕重之分，照名稱排就好——至少是穩定的
+        // 模組依名稱排序
         modules: [...modules]
           .map(([name, count]) => ({ name, count }))
           .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'))
@@ -65,7 +58,7 @@ export const useLogStore = defineStore('logs', {
       })
     },
 
-    /** 有沒有在過濾。用來決定要不要顯示「清掉篩選」。 */
+    /** 是否正在過濾，決定是否顯示「清除篩選」。 */
     filtering: (s) => Boolean(s.filter.trim() || s.levels.length || s.modules.length),
 
     counts: (s) => ({
@@ -76,11 +69,7 @@ export const useLogStore = defineStore('logs', {
 
   actions: {
     /**
-     * 收一批紀錄。
-     *
-     * ⚠ **整批一次改陣列**，不要 for 迴圈逐筆 push：每 push 一次就觸發一次
-     *   響應式更新，副本開場那種一秒好幾行的時候會把整個畫面拖住。後端已經
-     *   把紀錄批次送過來了（`Channel._pump`），這裡不要把它拆散。
+     * 接收一批紀錄。⚠ 整批一次改陣列：逐筆 push 每次都會觸發響應式更新。
      */
     append(batch) {
       const rows = batch.map((row) => ({
@@ -88,8 +77,7 @@ export const useLogStore = defineStore('logs', {
         level: row.level,
         module: row.module,
         msg: row.msg,
-        // 時間戳要帶日期。這個視窗常常掛整夜，隔天早上看到一行「03:12:07」
-        // 根本分不出是哪天。不寫年份是因為面板只留 3000 行、不可能跨年。
+        // 時間戳帶日期，不帶年份（面板只留 3000 行）。
         time: formatTime(row.ts)
       }))
       const next = this.lines.concat(rows)

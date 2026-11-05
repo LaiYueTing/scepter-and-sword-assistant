@@ -3,11 +3,7 @@
 
     python tests/test_daily_cap.py
 
-⚠ selftest 驗不到——那支一張畫面判一次規則，每條規則的計數都從零開始，而這裡
-要驗的正是**跨執行保留下來的計數**。
-
-要守住四件事：**同一輪內會擋**、**重新執行仍然記得**（`max_fires` 就是敗在這裡）、
-**換一天自動歸零**、**狀態檔壞掉要安全退化**。
+驗四件事：同一輪內會擋、重新執行仍然記得、換一天自動歸零、狀態檔損毀時視為未做過。
 """
 import json
 import os
@@ -20,8 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core import dailystate
@@ -118,7 +113,7 @@ try:
     sc = Script.load("raid", cfg.options)
     joins = [r for r in sc.rules
              if any(a.get("tally") == "參戰" for a in r.actions)]
-    # 討伐有四種入場方式，全部數進同一格——「今天參戰幾次」是一件事。
+    # 討伐的四種入場方式數進同一格。
     check("四條入場規則共用同一格", len(joins) == 4)
     check("腳本知道自己的鍵前綴", sc.stem == "raid")
 
@@ -129,13 +124,11 @@ try:
     for _ in range(9):
         e._do("tally", "參戰", None, None)
     check("數到 9 也不會停", dailystate.counts().get("raid/參戰") == 9)
-    # ⚠ 這是 tally 和 max_fires_daily 的唯一差別，也是它存在的理由：規則的
-    #   ready() 完全不看它。
+    # tally 不影響規則的 ready()。
     check("規則仍然可以觸發", joins[0].ready(time.time()))
 
     print("=== 8. 打錯的 tally 要在載入時就擋下來 ===")
-    # ⚠ tally 只數不擋，所以打錯了**沒有任何症狀**——面板上少一列而已，
-    #   而那正是沒有人會發現的那種錯。所以形狀要在載入時就驗。
+    # tally 的形狀在載入時驗證。
     import tempfile as _tf
 
     import yaml as _yaml
@@ -175,10 +168,9 @@ try:
     rows = {r["key"]: r for r in api.daily_state({})["rows"]}
     check("帶得出今天的次數與上限",
           rows[KEY]["done"] == 3 and rows[KEY]["limit"] == 3)
-    # ⚠ 被計數的是**動作**（打一場、捐一次），所以標籤取「→」後面那半。
+    # 標籤取「→」後面那半。
     check("標籤取「→」後面那半", rows[KEY]["label"] == "按下入場鍵")
-    # ⚠ 狀態檔裡有、現在的腳本裡沒有的鍵也要列出來——它仍然佔著位子，而使用者
-    #   正是來這裡找「為什麼今天不打了」的。
+    # 狀態檔裡有、現在的腳本沒有的鍵也要列出來。
     check("腳本裡已經沒有的鍵仍然列得出來",
           "arena/這條規則已經改名了 → 動作" in rows)
 
@@ -188,8 +180,7 @@ try:
         guarded = False
     except RuntimeError:
         guarded = True
-    # ⚠ 引擎是在**建立時**把計數讀進規則裡的，執行中歸零要下一輪才生效——
-    #   「按了看起來沒作用」是最難查的那種形狀，所以後端直接擋下來。
+    # 執行中不可歸零：引擎在建立時就讀入計數。
     check("執行中不給重設", guarded)
     check("而且真的一個都沒被清掉", dailystate.counts().get(KEY) == 3)
     api._runner = None

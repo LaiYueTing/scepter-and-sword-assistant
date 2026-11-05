@@ -3,11 +3,6 @@
 
     python tests/test_retry_after_failure.py
 
-⚠ 中途出錯（例如截圖逾時）時要重試這一輪，否則次數用不掉；而遊戲重新啟動後會回到
-  沒領的結算頁，後面的腳本會卡在它的退出確認框上。
-
-⚠ selftest 涵蓋不到：這裡驗的是一輪結束之後排程怎麼決定下一個跑誰。
-
 測試把 Engine 與 Device 換成假的，不會碰到模擬器也不會操作遊戲。
 """
 import os
@@ -18,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import core.runner as runner_mod

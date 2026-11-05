@@ -3,9 +3,7 @@
 
     python tests/test_wait_for.py
 
-這條路 selftest 驗不到——那支是一張畫面判一次規則，而 `wait_for` 只出現在
-`on_finish`（無條件執行的清單，沒有規則會經過它）。要守住的是三件事：
-**看到就立刻往下走**、**看不到會等而不是直接跳過**、**逾時要放行不要卡住結束程序**。
+驗三件事：看到就往下走、看不到會等、逾時就放行。
 """
 import os
 import sys
@@ -16,8 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import numpy as np
@@ -54,7 +51,7 @@ def make_engine(dev, seen_after: float):
     e = Engine.__new__(Engine)
     e.device, e.cfg, e._finishing = dev, cfg, True
     e._stop_event = __import__("threading").Event()
-    # 用假的 exists 決定「畫面上看不看得到」，不必真的準備兩張圖
+    # 用假的 exists 決定畫面上看不看得到
     started = time.time()
     vision.exists = lambda *a, **k: time.time() - started >= seen_after
     return e

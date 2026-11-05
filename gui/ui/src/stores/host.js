@@ -4,28 +4,27 @@ import { useUiStore } from './ui'
 import { api } from '../bridge'
 
 /**
- * 後端的鏡像。**這裡不做任何判斷邏輯**——連線、規則引擎、排程全部在 Python 那一份，
- * 這個 store 只負責「拿到什麼、顯示什麼、按了什麼就轉發過去」。
+ * 後端的鏡像，不做判斷邏輯：接收狀態、顯示、轉發操作。
  */
 export const useHostStore = defineStore('host', {
   state: () => ({
-    ready: false, // 後端起來了沒
-    fatal: '', // 後端根本起不來（找不到 Python、被別的實例擋住）
+    ready: false, // 後端是否就緒
+    fatal: '', // 後端無法啟動的原因
     fatalTitle: '後端沒有在執行',
     version: '',
     configPath: '',
     logDir: '',
     isNew: false, // 這次執行才剛從範本建立設定檔
-    frozen: false, // 後端是打包版還是原始碼
+    frozen: false, // 是否為打包版
     device: { serial: '', host: '', port: 0, spec: '' },
     tasks: [],
     options: { items: {}, groups: [] },
-    // 今天做了幾次（跨執行保留的那幾項，見 core/dailystate.py）。
+    // 當日計數（見 core/dailystate.py）。
     daily: { date: '', rows: [], path: '' },
 
     running: false,
-    closing: false, // 正在執行結束程序，按鈕全部要停用
-    // 「虛空裂縫」按下去之後、還沒跑完之前為 true（排隊中或執行中），中斷鈕看它
+    closing: false, // 結束程序執行中，按鈕全部停用
+    // 「虛空裂縫」排隊中或執行中為 true，中斷鈕依此顯示
     riftPending: false,
     status: '待命中',
     // 任務卡各自的狀態：{ [name]: { state, note } }
@@ -37,26 +36,18 @@ export const useHostStore = defineStore('host', {
     testResult: null, // { ok, text }
 
     update: null, // { found, version, error, can_apply, why, page }
-    // 這次的查詢是使用者自己按的嗎。自動查那次不出聲（沒網路不是他當下關心的事），
-    // 手動按的一定要回一句話——查完什麼都沒有的話，看起來就像那顆按鈕壞了。
+    // 這次查詢是否由使用者按下。自動查詢不出聲，手動查詢一定要回報結果。
     updateAsked: false,
     updateProgress: null, // { done, total }
-    // 換好檔了，等使用者回答「要不要現在重新啟動」。⚠ 一定要問——排定重啟的
-    // 那個背景工作是等這個行程結束才動作的，不問的話畫面上完全沒有反應。
+    // 換檔完成，等待使用者回答是否重新啟動。
     updateReady: null // { version }
   }),
 
   getters: {
     /**
-     * 有待裝的更新時「開始執行」是鎖住的。
+     * 有待安裝的更新時「開始執行」是鎖住的。
      *
-     * ⚠ 這比強制安裝好：它擋的是「用舊版無人看管地跑好幾小時」，而不是把使用者的
-     *   程式換掉——壞掉的那一版仍然裝不進去。
-     *
-     * ⚠ 三種情況**不算**「非更新不可」，少判一種就會出事：
-     *   查不到更新（那是我們這邊的問題，不該讓排程整晚不執行）、
-     *   從原始碼執行（`can_apply` 本來就會拒絕換檔，鎖住等於讓開發動不了）、
-     *   已經是最新。
+     * ⚠ 三種情況不鎖：查不到更新、從原始碼執行（`can_apply` 會拒絕換檔）、已經是最新。
      */
     updateRequired: (s) => Boolean(s.update?.found && s.update?.can_apply),
 
@@ -68,7 +59,7 @@ export const useHostStore = defineStore('host', {
   },
 
   actions: {
-    /** 接上事件，把第一份狀態拉下來。 */
+    /** 接上事件，取得第一份狀態。 */
     async init() {
       const logs = useLogStore()
 
@@ -79,8 +70,7 @@ export const useHostStore = defineStore('host', {
             this.refresh()
             break
           case 'busy':
-            // 已經有一個助手在執行中。這不是錯誤——後端好好地跑起來、發現鎖被
-            // 別人握著、然後正常結束，所以標題不能寫「後端沒有在執行」。
+            // 已經有一個助手在執行中，這不是錯誤。
             this.fatalTitle = '助手已經在執行中'
             this.fatal = data.text
             break
@@ -99,7 +89,7 @@ export const useHostStore = defineStore('host', {
             if (!data) {
               this.riftPending = false
               this.status = '待命中'
-              this.refresh() // 下一輪的排定時刻要重算
+              this.refresh() // 重算下一輪的排定時刻
             }
             break
           case 'failed':
@@ -115,8 +105,7 @@ export const useHostStore = defineStore('host', {
             this.testResult = data
             break
           case 'ui_pref':
-            // 後端自己改掉了某個介面偏好——點擊系統匣通知就是一次。
-            // ⚠ 少了這一段，開關會停在舊值直到下次啟動，看起來像「沒有記住」。
+            // 後端改了介面偏好（例如點擊系統匣通知），同步到開關上。
             if (data.key === 'tray_hint') useUiStore().trayHint = !!data.value
             break
           case 'update':
@@ -133,10 +122,7 @@ export const useHostStore = defineStore('host', {
           case 'fatal':
           case 'exit':
             this.ready = false
-            // ⚠ **已經有說明就不要蓋掉。** `busy`（拿不到防多開的鎖）之後後端會
-            //   正常結束，緊接著就來一則 exit——先寫的那句「助手已經在執行中」
-            //   才是使用者要看的，而 exit 只知道「結束碼 0」。照順序覆寫的話，
-            //   唯一講得出原因的那句話會被最沒有資訊的那句取代。
+            // ⚠ 已經有說明就不覆寫：`busy` 之後緊接著的 exit 只有結束碼。
             if (!this.closing && !this.fatal) {
               this.fatal =
                 data.text || `後端已結束（結束碼 ${data.code}），詳細原因請看紀錄檔。`
@@ -150,9 +136,7 @@ export const useHostStore = defineStore('host', {
         this.status = '停止中，正在執行結束程序 ⋯'
       })
 
-      // ⚠ **主動拉一次，不要只等 `ready` 事件。** 拉得到就代表後端活著，拉不到
-      //   就安靜退回去等事件。少了這一步，事件漏接時的失敗樣子是**畫面看起來
-      //   完全正常，只是永遠停在「正在啟動後端」**。
+      // ⚠ 主動取一次，不只等 `ready` 事件：取得到代表後端已就緒，取不到就繼續等事件。
       this.refresh().catch(() => {})
     },
 
@@ -171,8 +155,7 @@ export const useHostStore = defineStore('host', {
       this.isNew = s.is_new
       this.frozen = s.frozen
       this.device = s.device
-      // ⚠ 空的分組不要留——使用者的 config.yaml 沒有那份腳本的開關時，
-      //   分頁點進去是一片空白，看起來像壞掉。
+      // 空的分組不顯示。
       this.options = { ...s.options, groups: s.options.groups.filter((g) => g.keys.length) }
       this.tasks = s.tasks
       this.running = s.running
@@ -199,8 +182,7 @@ export const useHostStore = defineStore('host', {
     },
 
     /**
-     * 現在就跑一輪不排程的腳本（虛空裂縫）。回傳 `now`：true 是馬上開始，
-     * false 是排在正在跑的那一輪後面。
+     * 現在就跑一輪不排程的腳本（虛空裂縫）。回傳 `now`：true 表示馬上開始。
      */
     async runNow(task) {
       const res = await this.call('run_now', { task })
@@ -208,7 +190,7 @@ export const useHostStore = defineStore('host', {
       return res
     },
 
-    /** 中斷 runNow 塞進去的那一份，排程照常。回傳有沒有真的中斷到。 */
+    /** 中斷 runNow 加入的那一份，排程照常。回傳是否真的中斷到。 */
     async cancelRun(task) {
       const { cancelled } = await this.call('run_cancel', { task })
       if (task === 'rift') this.riftPending = false
@@ -216,9 +198,7 @@ export const useHostStore = defineStore('host', {
     },
 
     /**
-     * 寫回 config.yaml。`changes` 是 `[{ path: ['options','claim_reward'], value }]`。
-     *
-     * ⚠ 路徑而不是整份物件：後端是**就地改寫**那一行，設定檔的註解才留得住。
+     * 寫回 config.yaml。`changes` 是 `[{ path: ['options','claim_reward'], value }]`，後端就地改寫。
      */
     async save(changes) {
       await this.call('save', { changes })
@@ -226,11 +206,7 @@ export const useHostStore = defineStore('host', {
     },
 
     /**
-     * 探索可用的模擬器。
-     *
-     * ⚠ `auto` 是「開視窗時自動跑的那一次」。它**不做多埠掃描**——對同一台遠端
-     *   主機連敲十幾個埠會被防毒判定成連接埠掃描而封鎖整台機器，而開視窗是
-     *   會反覆發生的動作。
+     * 探索可用的模擬器。`auto` 表示開視窗時自動觸發，不做多埠掃描（見 core/discover.py）。
      */
     async discover(auto = false) {
       this.discovering = true

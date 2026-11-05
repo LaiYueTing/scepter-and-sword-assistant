@@ -1,8 +1,4 @@
-"""產生一個預設的 icon.ico 給 build.bat 使用。
-
-只用 OpenCV 畫圖，再手工組出 ICO 檔頭，不需要額外裝 Pillow。
-想換成自己的圖示，直接把 icon.ico 覆蓋掉即可。
-"""
+"""產生預設的 icon.ico：用 OpenCV 畫圖，手工組出 ICO 檔頭。"""
 
 from __future__ import annotations
 

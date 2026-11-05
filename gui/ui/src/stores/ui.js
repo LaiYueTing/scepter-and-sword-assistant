@@ -6,24 +6,21 @@ export const useUiStore = defineStore('ui', {
   state: () => ({
     theme: 'dark', // dark | light
     bgTheme: 'default', // 背景漸層主題的 id，見 data/gradients.js
-    glow: 'breathe', // breathe | none —— 燈號要不要呼吸
+    glow: 'breathe', // breathe | none：燈號動畫
     onClose: 'ask', // ask | tray | quit
-    trayHint: true // 縮到系統匣時要不要跳那則氣泡通知
+    trayHint: true // 縮到系統匣時是否跳氣泡通知
   }),
 
   actions: {
     /**
-     * ⚠ **偏好存在 Python 那一側（`core/uistate.py` → 專案旁邊的 ui.json）。**
-     *   兩份介面共用同一份——各存各的話，換一張臉主題就跳回預設，而使用者不會
-     *   知道為什麼。
+     * 讀取偏好，存在 Python 那一側（`core/uistate.py` → ui.json）。
      */
     async load() {
       this.theme = (await this.pref('theme')) || 'dark'
       this.bgTheme = (await this.pref('bg_theme')) || 'default'
       this.glow = (await this.pref('glow')) || 'breathe'
       this.onClose = (await this.pref('on_close')) || 'ask'
-      // ⚠ 這個是布林值，不能用 `|| 預設` 去補：關掉之後存的是 false，
-      //   那樣寫會每次載入都被推回 true。
+      // ⚠ 布林值不可用 `|| 預設` 補：關閉時存的是 false。
       const hint = await this.pref('tray_hint')
       this.trayHint = hint === null ? true : !!hint
       this.apply()
@@ -37,17 +34,8 @@ export const useUiStore = defineStore('ui', {
     /**
      * 把目前的外觀套到 `<html>` 上。
      *
-     * ⚠ **顏色不是靠 `data-theme` 換的。** 那個屬性只給少數幾條 CSS 規則看（卡片
-     *   高光的方向、毛玻璃）。真正的整套配色是 `applyAppearance()` 用 inline 變數
-     *   蓋在 `<html>` 上的——面板、卡片、框線、輸入框、次要文字全部跟著背景主題的
-     *   色相走，而不是只換背景。
-     *
-     * ⚠ **兩件事一定要一起做。** 明度階梯在深淺兩套是相反的，只改 `data-theme` 而
-     *   不重算 palette 會得到「淺色的底配深色的字」；只重算 palette 而不改
-     *   `data-theme`，卡片高光會留在上一套。所以寫在同一個函式裡，不要拆開呼叫。
-     *
-     * 這也是為什麼紀錄面板的一般訊息不內嵌顏色：內嵌的話，切換之後早先寫進去的
-     * 幾百行會留在舊主題上。
+     * ⚠ 配色由 `applyAppearance()` 用 inline 變數設定，`data-theme` 只影響少數 CSS 規則。
+     *   兩者要一起更新，不可拆開呼叫。
      */
     apply() {
       document.documentElement.dataset.theme = this.theme

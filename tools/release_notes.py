@@ -4,22 +4,10 @@
     python tools/release_notes.py --out notes.md
     python tools/release_notes.py --since v1.0.0
 
-版本是**發布**的單位，commit 是**修正**的單位，兩者不必一對一——一個 tag
-底下有五個 `fix` 是正常的，而發布頁要把那五個列出來。
-
-⚠ **不要手打發版說明。** 憑「這一段工作做過什麼」寫，會把上一版就有的東西寫成
-  這一版的新內容——兩者只有在「上一版之後沒有人動過」時才相等。從 commit 生成的
-  話那種錯在結構上就不會發生：`git log <上一個 tag>..HEAD` 是唯一的真相。
-
-⚠ **`gh release create` 是在遠端建 tag，本機不會有。** 生成之前要先
-  `git fetch --tags`，否則找不到上一個 tag 就會退回更早的那個，把已經發過的
-  內容再寫一次。
-
-⚠ **生成之後一定要讀一遍再發。** 這支工具負責「不漏、不多、對得上 commit」，
-  而「這條對使用者意味著什麼」仍然是人要判斷的。
-
-⚠ `fix` 的 commit **body 要寫「本來會怎樣」**，工具會原樣帶進說明。只有標題
-  的話，發布頁就只有一行「修好 X」，讀的人判斷不出要不要更新。
+⚠ 內容以 `git log <上一個 tag>..HEAD` 為準，不要手打。
+⚠ `gh release create` 在遠端建 tag，生成之前要先 `git fetch --tags`。
+⚠ 生成之後要讀過再發布。
+⚠ `fix` 的 commit body 要寫修正前的行為，工具會原樣帶進說明。
 """
 
 from __future__ import annotations
@@ -33,12 +21,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.logger import force_utf8_output      # noqa: E402
 
-# 用來把短雜湊接成 commit 連結，和 core/updater.py 指的是同一個儲存庫。
+# 短雜湊的 commit 連結用，與 core/updater.py 相同。
 REPO = "LaiYueTing/scepter-and-sword-assistant"
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# 段落順序就是輸出順序。整理類的合成一段——使用者看不到的東西不值得各佔一節。
+# 段落順序就是輸出順序，整理類合成一段。
 SECTIONS: list[tuple[str, tuple[str, ...]]] = [
     ("新增（feat）", ("feat",)),
     ("修正（fix）", ("fix",)),
@@ -46,7 +34,7 @@ SECTIONS: list[tuple[str, tuple[str, ...]]] = [
      ("refactor", "perf", "docs", "chore", "style", "test", "build", "ci")),
 ]
 
-# 「整理」那一段的標題，`tools` 的修正會被塞進去
+# 「整理」段的標題，`tools` 的修正也歸在這裡
 HOUSEKEEPING = next(t for t, _ in SECTIONS if t.startswith("整理"))
 
 # <type>(<scope>)!: <說明>
@@ -66,18 +54,16 @@ def previous_tag() -> str | None:
     tags = [t for t in git("tag", "--sort=-creatordate").splitlines() if t.strip()]
     head = git("rev-parse", "HEAD").strip()
     for tag in tags:
-        # 跳過指向 HEAD 的那個——它就是這一版自己的 tag
+        # 跳過指向 HEAD 的 tag
         if git("rev-parse", f"{tag}^{{commit}}").strip() != head:
             return tag
     return None
 
 
 def commits(since: str | None, until: str = "HEAD") -> list[tuple[str, str]]:
-    """回傳 [(標題, body)]，舊的在前面（讀起來才是發生順序）。
+    """回傳 [(標題, body)]，舊的在前面。
 
-    ⚠ 終點要能指定。發版當下 HEAD 常常已經**超過**那個 tag（別人剛 commit 了
-      下一版的東西，或 tag 是稍早打的），用 HEAD 當終點就會把不屬於這一版的
-      commit 寫進說明。發布時請指定 `--until <tag>`。
+    ⚠ 發布時指定 `--until <tag>`：HEAD 可能已經超過那個 tag。
     """
     span = f"{since}..{until}" if since else until
     raw = git("log", span, "--reverse", "--no-merges", "--format=%h%x00%s%x00%b%x1e")
@@ -91,12 +77,7 @@ def commits(since: str | None, until: str = "HEAD") -> list[tuple[str, str]]:
 
 
 def render(items: list[tuple[str, str, str]]) -> str:
-    """把 commit 排成 Markdown。認不得格式的一律歸到整理那段，不要吞掉。
-
-    ⚠ 末尾一定要列出**這一版整合了哪些 commit**。一個版本底下有五個修正是
-      正常的，而分段描述只講「修了什麼」，看不出這一版涵蓋到哪裡——那份清單
-      才是版本與 commit 之間的對照表。
-    """
+    """把 commit 排成 Markdown，無法辨識格式的歸到整理段，末尾列出這一版涵蓋的 commit。"""
     buckets: dict[str, list[tuple[str, str, bool]]] = {t: [] for t, _ in
                                                        [(s, k) for s, k in SECTIONS]}
     breaking: list[str] = []
@@ -109,15 +90,11 @@ def render(items: list[tuple[str, str, str]]) -> str:
         if m and m.group("bang"):
             breaking.append(text)
 
-        # ⚠ 遞增版本號那一筆不進分段。它每一版都有，而「遞增版本號到 vX.Y.Z」
-        #   對讀發布頁的人沒有任何意義——版本號就寫在標題上。末尾那份 commit
-        #   對照表仍然列它，那裡要的是完整。
+        # 遞增版本號那一筆不進分段，只列在末尾的 commit 對照表。
         if kind == "chore" and scope == "release":
             continue
 
-        # ⚠ `tools/` 底下的東西不會打包進 EXE，所以那裡的修正對使用者**沒有
-        #   任何差別**。歸進「修正」段的話，讀的人會以為助手的行為變了——
-        #   一律放到整理段並註明，判斷「要不要更新」才不會被誤導。
+        # ⚠ `tools/` 不打包進 EXE，這類修正歸到整理段。
         if scope == "tools" and kind in ("fix", "feat", "perf"):
             buckets[HOUSEKEEPING].append(
                 (f"{text}（只影響開發，助手本身沒有差別）", body, True))
@@ -143,7 +120,7 @@ def render(items: list[tuple[str, str, str]]) -> str:
         lines.append(f"## {title}")
         lines.append("")
         if title.startswith("整理"):
-            # 整理類只寫結果，不逐條展開 body——那些是給讀程式碼的人看的
+            # 整理類只寫標題
             for text, _body, _ in got:
                 lines.append(f"- {text}")
             lines.append("")
@@ -159,16 +136,14 @@ def render(items: list[tuple[str, str, str]]) -> str:
     lines.append("")
     lines.append("### 這一版整合的變更")
     lines.append("")
-    # ⚠ 短雜湊要寫成明確的 markdown 連結。包在反引號裡的 SHA **GitHub 不會自動
-    #   連結**，於是清單只是一串看得到、點不進去的字；而那份清單的用途正是
-    #   「想知道某一條到底改了什麼就點進去看」。
+    # ⚠ 短雜湊寫成 markdown 連結：包在反引號裡的 SHA GitHub 不會自動連結。
     for sha, subject, _body in items:
         lines.append(f"- [`{sha}`](https://github.com/{REPO}/commit/{sha}) {subject}")
     return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> int:
-    force_utf8_output()     # commit 訊息裡有「≈」「−」這類 cp950 沒有的字
+    force_utf8_output()     # commit 訊息可能含 cp950 沒有的字
     ap = argparse.ArgumentParser(description="從 commit 生成發版說明")
     ap.add_argument("--since", help="從哪個 tag 之後算起（預設是上一個 tag）")
     ap.add_argument("--until", default="HEAD",

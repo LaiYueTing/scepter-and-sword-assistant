@@ -1,8 +1,4 @@
-"""在背景執行緒跑排程，把狀態回報給介面。
-
-排程本身在 `core/runner.py`，命令列與介面共用同一份；這裡只負責「另開一條
-執行緒」與「怎麼叫停」（`threading.Event`）。
-"""
+"""在背景執行緒跑排程（core/runner.py），把狀態回報給介面。"""
 
 from __future__ import annotations
 
@@ -42,17 +38,11 @@ class RunnerThread(threading.Thread):
         try:
             self.runner.run()
         except Exception as e:
-            # 連不上裝置、腳本讀不到都會走到這裡。訊息本身已經是給人看的中文。
-            #
-            # ⚠ **一定要寫進紀錄。** 只送 `failed` 事件的話，那句話只在狀態列閃
-            #   一下就被蓋掉——執行時能看到的只有紀錄，排程死掉卻不留
-            #   痕跡是最糟的形狀。
+            # 連不上裝置、腳本讀不到都走到這裡。⚠ 一定要寫進紀錄，狀態列的訊息會被蓋掉。
             log.exception("排程結束於未預期的錯誤：%s", e)
             error = str(e)
         self.channel.send("running", False)
-        # ⚠ **順序不能反。** 介面收到 `running=False` 會把狀態列寫回「待命中」，
-        #   先送 `failed` 的話那句訊息只會停留幾毫秒：狀態列顯示「待命中」、
-        #   任務卡停在「執行中」，看不出發生了錯誤。
+        # ⚠ 順序不可反：`running=False` 會把狀態列寫回「待命中」，`failed` 要排在後面。
         if error:
             self.channel.send("failed", error)
 

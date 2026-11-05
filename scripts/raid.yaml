@@ -17,8 +17,8 @@
 #
 # 4. 順序條用 measure 量測長度，不裁模板（見「旁觀房間」那段）。
 #
-# 共通約束與共用規則的說明見 dungeon.yaml 檔頭。⚠ 這份腳本少了 cooldown 的後果
-# 是點開 BOSS 詳情面板蓋住整頁。
+# 共通約束與共用規則的說明見 dungeon.yaml 檔頭。
+# ⚠ tap_match 少了 cooldown 會點開 BOSS 詳情面板蓋住整頁。
 
 name: 自動公會討伐
 package: com.m88.idleXX
@@ -95,7 +95,7 @@ rules:
   # 量測階梯（軌道全長 572px）：
   #   場上沒人（raid_start_battle）     空軌道 367px　間距 48px　約  4 個單位
   #   1 人在打（raid_battle_room）      空軌道 286px　間距 41px　約  7 個單位
-  #   數人在打（raid_room_few）         空軌道 121px　間距 25px　約 18 個單位
+  #   數人在打                          空軌道 121px　間距 25px　約 18 個單位
   #   戰鬥中期                          空軌道  40px　間距 20px　約 27 個單位
   #   人數很多（raid_room_crowded）     空軌道   0px　間距 14px　約 41 個單位
   #
@@ -132,7 +132,7 @@ rules:
     # 人數達不到上一條時，估計值停在 raid_plateau_players（預設 6.5 人）以上持續
     # raid_plateau_sustain 秒就入場。順序條是「當下存活的單位」，早入場的人陣亡就消失，
     # 人數會先升後降，等越久不一定人越多。人數還在上升時這條不會累積滿。
-    # sustain 120：再長的話先升後降的場次會錯過高峰（取捨過程見 CLAUDE.md）。
+    # sustain 120：再長的話先升後降的場次會錯過高峰（見 CLAUDE.md）。
     # 不設 log：量的是同一個數值，上一條已經寫了。
     require: [btn_join_battle]
     measure:
@@ -146,7 +146,7 @@ rules:
     max_fires: 3
     do:
       - tally: 參戰
-      - log: 湊不到設定的人數，但估計值已經不再上升
+      - log: 未達設定人數，估計值已不再上升
       - tap_template: btn_join_battle
       - wait: 6
       - count:
@@ -170,8 +170,8 @@ rules:
       - finish:
 
   - name: 等不到更多人 → 還是加入戰鬥
-    # 保底：等 raid_join_wait_minutes（預設 5 分鐘）仍湊不到人數，有人在打就加入。
-    # 刻意不設人數條件，否則人很少的日子會一直等到結束本輪而沒有參戰。
+    # 保底：等 raid_join_wait_minutes（預設 5 分鐘）仍未達人數，有人在戰鬥就加入。
+    # 不設人數條件，否則人很少時不會參戰。
     require: [btn_join_battle]
     sustain_minutes: "${raid_join_wait_minutes:5}"
     max_fires: 3
@@ -450,7 +450,7 @@ rules:
   # ==================== 後備規則（共用規則，說明見 dungeon.yaml） ====================
   # sustain 比副本長一些：公會島與討伐頁的載入比副本慢。
 
-  - name: 限時禮包彈窗 → 按系統返回鍵關閉
+  - name: 限時禮包對話框 → 按系統返回鍵關閉
     # 升級或達成條件時跳的付費禮包（好感倍增禮包等）。沒有關閉鈕，系統返回鍵關得掉。
     # 模板取「購買禮包後立即獲得獎勵」那行字：1.000、其餘 ≤0.564。
     # ⚠ 不要點下面的黃色按鈕，那是購買。

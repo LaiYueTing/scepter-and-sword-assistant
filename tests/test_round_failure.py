@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
-"""一輪炸掉不能把整個排程帶走，而且一定要留下紀錄：
+"""一輪發生例外時排程要繼續，而且要留下紀錄：
 
     python tests/test_round_failure.py
-
-⚠ selftest 涵蓋不到——那支是一張畫面一張畫面地驗規則，而這裡驗的是「某一輪
-  丟出例外之後，排程還跑不跑得下去」。
-
-⚠ `Runner.run()` 只接 `AdbError` 的話，別的例外會冒到介面的背景執行緒而被吞掉：
-  當天剩下的腳本全部不執行，紀錄上也問不出壞在哪裡。
 
 測試把 Engine 與 Device 換成假的，不會碰到模擬器也不會操作遊戲。
 """
@@ -21,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import core.runner as runner_mod
@@ -54,9 +48,9 @@ class ExplodingEngine:
     def run(self, until=None):
         ExplodingEngine.runs.append(self.script.name)
         if len(ExplodingEngine.runs) == 1:
-            raise RuntimeError("假裝這一輪炸了")
+            raise RuntimeError("模擬這一輪發生例外")
         if self._stop_event is not None:
-            self._stop_event.set()      # 第二輪跑完就結束本輪，不要停在等下一個時刻
+            self._stop_event.set()      # 第二輪跑完就結束
         return 0
 
 
@@ -69,7 +63,7 @@ class FakeDevice:
 
 
 class Recorder(logging.Handler):
-    """收下這次跑出來的紀錄，才驗得到「有沒有真的寫進去」。"""
+    """收集這次的紀錄。"""
 
     def __init__(self):
         super().__init__()
@@ -87,7 +81,7 @@ def main() -> int:
     cfg = Config(path=Path("x"))
     cfg.device.serial = "auto"          # describe_setup() 會去讀
     cfg.runtime.catch_up_guard_minutes = 0
-    # 副本刻意不排時間：它只以「啟動先跑清單第一個」的身分跑一次，而那一次會炸。
+    # 副本不排時間，只以清單第一個的身分跑一次，那一次會丟例外。
     cfg.tasks = [
         TaskConfig(name="dungeon", enabled=True, daily_at=[], repeat=0),
         TaskConfig(name="chores", enabled=True, daily_at=[soon], repeat=1),
@@ -99,8 +93,7 @@ def main() -> int:
     real_engine, real_device = runner_mod.Engine, runner_mod.Device
     real_limit = runner_mod.RETRY_LIMIT
     runner_mod.Engine, runner_mod.Device = ExplodingEngine, FakeDevice
-    # 這裡驗的是「放掉這一輪之後」：重試關掉，第二輪才會輪到雜務。重試本身見
-    # test_retry_after_failure.py。
+    # 驗放掉這一輪之後的路徑，重試關閉。重試見 test_retry_after_failure.py。
     runner_mod.RETRY_LIMIT = 0
     logging.getLogger().addHandler(rec)
     try:
@@ -113,21 +106,20 @@ def main() -> int:
         runner_mod.Engine, runner_mod.Device = real_engine, real_device
         runner_mod.RETRY_LIMIT = real_limit
 
-    print("炸掉的那一輪之後，排程還跑不跑得下去")
+    print("發生例外的那一輪之後，排程要繼續")
     print(f"    實際跑的順序：{ExplodingEngine.runs}")
-    check("第一輪炸了，第二輪照樣跑到", len(ExplodingEngine.runs) >= 2)
+    check("第一輪發生例外，第二輪照樣執行", len(ExplodingEngine.runs) >= 2)
 
     print("紀錄要留得住，否則事後什麼都查不到")
     blob = "\n".join(rec.lines)
     check("寫得出「未預期的錯誤」", "未預期的錯誤" in blob)
     check("附上 traceback", "<traceback>" in blob)
-    check("訊息裡看得到那個例外", "假裝這一輪炸了" in blob)
+    check("訊息裡看得到那個例外", "模擬這一輪發生例外" in blob)
 
     print("任務卡要轉紅，而且不能被「這一輪沒有完成」蓋回去")
     dungeon = [s for n, s in states if n == "dungeon"]
     check("出錯時轉紅", "error" in dungeon)
-    # ⚠ 「這一輪沒有完成」和「次數用盡就結束本輪」長得一模一樣，蓋回去等於把出過事
-    #   這件事從畫面上抹掉。
+    # 出錯的文字不可與「這一輪沒有完成」相同。
     check("最後停在 error 而不是 done", dungeon[-1] == "error", f"實際：{dungeon}")
     print("介面那一層：失敗訊息不能被「待命中」蓋掉")
     from gui.runner import RunnerThread
@@ -141,14 +133,13 @@ def main() -> int:
 
     class Boom:
         def run(self):
-            raise RuntimeError("假裝排程整個炸了")
+            raise RuntimeError("模擬排程發生例外")
 
     spy = SpyChannel()
     th = RunnerThread.__new__(RunnerThread)
     th.channel, th.runner = spy, Boom()
     th.run()
-    # ⚠ 介面收到 running=False 會把狀態列寫回「待命中」，所以 failed 一定要排在
-    #   它後面，否則那句話活不過幾毫秒。
+    # failed 要排在 running=False 後面。
     check("running 先送、failed 後送", spy.sent == ["running", "failed"],
           f"實際：{spy.sent}")
 

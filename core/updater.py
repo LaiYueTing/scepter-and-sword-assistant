@@ -1,19 +1,9 @@
 """檢查 GitHub Release 有沒有新版，下載並就地換掉自己。
 
-發布的是**單一 EXE**，所以更新就是「把新的那個檔案換上去」——不需要安裝程式，
-也不需要另外一支更新器行程。
-
-⚠ **Windows 允許把執行中的 EXE 改名，但不允許覆寫它。** 換檔因此是兩步：
-  先把自己改名成 `*.exe.old`（那個 handle 仍然有效，程式照常跑），再把新檔
-  搬到原本的路徑。下次啟動時 `cleanup()` 把 `.old` 刪掉。
-  這條路不必等自己結束，也就不需要一支「等父行程退出再動手」的批次檔。
-
-⚠ **只用標準庫。** 這支模組會在 GUI 啟動時被匯入，多拉一個第三方套件進來就是
-  多幾百毫秒的啟動時間，而它做的事只有一個 HTTPS GET。
-
-⚠ **每一種失敗都要能安靜退化成「不更新」。** 沒有網路、GitHub 掛掉、Release
-  還沒發、防毒擋下下載——這些都不該讓助手不能用，所以對外的函式一律回傳
-  None／False 而不是往上拋。
+⚠ Windows 允許把執行中的 EXE 改名，但不允許覆寫。換檔分兩步：先把自己改名成 `*.exe.old`，
+  再把新檔搬到原路徑；下次啟動時由 `cleanup()` 刪除 `.old`。
+⚠ 只用標準庫，這支模組在介面啟動時就會匯入。
+⚠ 所有失敗都退化成「不更新」，對外的函式回傳 None／False，不往上拋。
 """
 
 from __future__ import annotations
@@ -42,25 +32,24 @@ REPO = "LaiYueTing/scepter-and-sword-assistant"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 PAGE = f"https://github.com/{REPO}/releases/latest"
 
-# GitHub 的 API 一律要求帶 User-Agent，沒帶會直接回 403。
+# GitHub API 要求帶 User-Agent，否則回 403。
 _HEADERS = {
     "User-Agent": f"ScepterSwordAssistant/{VERSION}",
     "Accept": "application/vnd.github+json",
 }
 
-CHECK_TIMEOUT = 10.0        # 查版本：使用者在等，逾時就當成沒有更新
-DOWNLOAD_TIMEOUT = 60.0     # 下載：EXE 有一百多 MB，慢的網路要留裕度
+CHECK_TIMEOUT = 10.0        # 查版本的逾時（秒）
+DOWNLOAD_TIMEOUT = 60.0     # 下載的逾時（秒）
 
-# 分成幾段同時抓。超過 4 段對 CDN 幫助有限，
-# 而且連線數愈多，防毒的連線監控愈可能介入。
+# 同時下載的分段數。
 DOWNLOAD_THREADS = 4
-# 單一分段失敗時重抓幾次，只重抓失敗的那一段。
+# 單一分段失敗時的重試次數，只重抓失敗的那一段。
 DOWNLOAD_RETRIES = 3
 
 
 @dataclass(frozen=True)
 class Release:
-    """一個版本。`url` 是那顆 EXE 的下載位址，沒有 EXE 的 Release 不會被建立。"""
+    """一個版本。`url` 是 EXE 的下載位址。"""
 
     version: str
     tag: str
@@ -75,23 +64,22 @@ class Release:
 
 
 def _parse(version: str) -> tuple[int, ...]:
-    """「v1.0.91.0」→ (1, 0, 91, 0)。認不出來的段一律當 0，不要拋。"""
+    """「v1.0.91.0」→ (1, 0, 91, 0)，無法辨識的段當 0。"""
     nums = re.findall(r"\d+", version or "")
     return tuple(int(n) for n in nums[:4]) or (0,)
 
 
 def is_newer(candidate: str, current: str = VERSION) -> bool:
-    """比大小時把兩邊補到一樣長，免得 1.0.92 被判成小於 1.0.92.0。"""
+    """比較版本，兩邊補到一樣長。"""
     a, b = _parse(candidate), _parse(current)
     width = max(len(a), len(b))
     return a + (0,) * (width - len(a)) > b + (0,) * (width - len(b))
 
 
 def latest_status() -> tuple["Release | None", str]:
-    """問 GitHub 最新的 Release。回傳（Release 或 None, 查不到的原因）。
+    """查詢 GitHub 最新的 Release，回傳（Release 或 None, 查不到的原因）。
 
-    ⚠ **「查不到」和「已經是最新」不是同一件事。** `latest()` 把兩種都變成 None，
-      而沒網路時不能告訴使用者「已經是最新版本」，所以另外回傳原因。
+    ⚠ 要分得出「查不到」與「已經是最新」，所以另外回傳原因。
     """
     try:
         req = urllib.request.Request(API, headers=_HEADERS)
@@ -119,12 +107,12 @@ def latest_status() -> tuple["Release | None", str]:
 
 
 def latest() -> Release | None:
-    """問 GitHub 最新的 Release 是哪一個。任何失敗都回 None。"""
+    """查詢最新的 Release，失敗回傳 None。"""
     return latest_status()[0]
 
 
 def check_status() -> tuple["Release | None", str]:
-    """有比現在新的版本才回傳 Release；第二個值是查不到的原因（空字串＝問到了）。"""
+    """有更新的版本才回傳 Release；第二個值是查不到的原因（空字串表示查詢成功）。"""
     rel, err = latest_status()
     if err:
         return None, err
@@ -135,18 +123,13 @@ def check_status() -> tuple["Release | None", str]:
 
 
 def check() -> Release | None:
-    """有比現在新的版本才回傳，否則 None。"""
+    """有更新的版本才回傳，否則 None。"""
     return check_status()[0]
 
 def _target_exe() -> Path:
-    """更新要換掉的那一個檔案。
+    """要換掉的檔案，一律以自己的實際路徑（`sys.executable`）為準。
 
-    ⚠ 一律以**自己的實際路徑**為準，不要用寫死的名字。使用者可以把 EXE 改成
-      任何檔名（GitHub 的附件叫 ScepterSwordAssistant.exe，而桌面捷徑指向的
-      是他自己命名的那一個），寫死就會換錯檔案、或在旁邊多生一個。
-
-    沒有 frozen 時退回 ROOT 底下的預設名字——那只有開發環境會走到，而那條路
-    `can_apply()` 本來就會拒絕換檔。
+    ⚠ 使用者可以把 EXE 改成任何檔名。開發環境退回 ROOT 底下的預設名字（`can_apply()` 會拒絕換檔）。
     """
     if getattr(sys, "frozen", False):
         return Path(sys.executable)
@@ -154,14 +137,9 @@ def _target_exe() -> Path:
 
 
 def _spare_backup(cur: Path) -> Path:
-    """挑一個搬得動的備份路徑，回傳要用的那個。
+    """挑一個可用的備份路徑，回傳路徑。
 
-    ⚠ `.old` 可能還被佔著：上一版的行程還沒結束（例如縮在系統匣）、防毒正在掃、
-      或者檔案是唯讀的。而
-      `os.replace` 的**目標**被佔用時丟的是 **[WinError 5] 存取被拒**——訊息
-      指著新舊兩個路徑，完全看不出真正卡住的是那個 `.old`。
-
-    所以刪不掉就換一個帶時間戳的名字。
+    ⚠ `.old` 被佔用或唯讀時 `os.replace` 丟 [WinError 5]。刪不掉就改用帶時間戳的名字。
     """
     first = cur.with_name(cur.name + ".old")
     try:
@@ -174,7 +152,7 @@ def _spare_backup(cur: Path) -> Path:
 
 
 def can_apply() -> tuple[bool, str]:
-    """現在這個執行環境換不換得了檔。回傳（可以嗎, 不行的理由）。"""
+    """目前的執行環境能否換檔，回傳（可否, 不行的理由）。"""
     if not getattr(sys, "frozen", False):
         return False, "這是從原始碼執行的版本，請用 git pull 更新"
     if not Path(sys.executable).is_file():
@@ -183,10 +161,9 @@ def can_apply() -> tuple[bool, str]:
 
 
 def _probe(url: str) -> tuple[int, bool]:
-    """回傳（檔案總長度, 支不支援分段下載）。問不到就 (0, False)。
+    """回傳（檔案總長度, 是否支援分段下載），查不到就回傳 (0, False)。
 
-    用 `Range: bytes=0-0` 探：回 206 就代表支援，總長度在 `Content-Range` 的
-    斜線後面。這比 HEAD 可靠——有些 CDN 對 HEAD 的回應和實際下載不一致。
+    用 `Range: bytes=0-0` 探測：回 206 代表支援，總長度在 `Content-Range` 的斜線後面。
     """
     try:
         req = urllib.request.Request(
@@ -205,8 +182,7 @@ def _probe(url: str) -> tuple[int, bool]:
 def _fetch_range(url: str, path: Path, start: int, end: int, bump) -> bool:
     """抓 [start, end] 這一段寫進 `path` 的對應位置。
 
-    ⚠ 每條執行緒開**自己的**檔案物件再 seek，不共用。共用一個檔案物件的話
-      「seek 然後 write」不是原子的，兩條同時寫就會互相蓋到對方的位置。
+    ⚠ 每條執行緒開自己的檔案物件：「seek 然後 write」不是原子操作。
     """
     for attempt in range(DOWNLOAD_RETRIES):
         at = start
@@ -227,16 +203,16 @@ def _fetch_range(url: str, path: Path, start: int, end: int, bump) -> bool:
             log.debug("分段 %d-%d 只拿到 %d，重試", start, end, at - start)
         except (urllib.error.URLError, OSError) as e:
             log.debug("分段 %d-%d 失敗（第 %d 次）：%s", start, end, attempt + 1, e)
-        # 重試時已經寫下去的部分不算數，退回這一段的起點重抓
+        # 重試時退回這一段的起點
         bump(start - at)
     return False
 
 
 def _download_parallel(url: str, path: Path, total: int, on_progress) -> bool:
-    """切成幾段同時抓。⚠ 只在對方支援 Range 時才走這條。"""
+    """切成幾段同時下載。⚠ 只在對方支援 Range 時使用。"""
     path.unlink(missing_ok=True)
     with path.open("wb") as fh:
-        fh.truncate(total)          # 先把空間開好，各段直接寫到自己的位置
+        fh.truncate(total)          # 先配置空間，各段直接寫到自己的位置
 
     lock = threading.Lock()
     done = [0]
@@ -257,7 +233,7 @@ def _download_parallel(url: str, path: Path, total: int, on_progress) -> bool:
 
 
 def _download_stream(url: str, path: Path, total: int, on_progress) -> bool:
-    """一條連線從頭抓到尾。對方不支援 Range 時的退路。"""
+    """單一連線下載，對方不支援 Range 時使用。"""
     try:
         req = urllib.request.Request(url, headers=_HEADERS)
         with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT) as resp:
@@ -277,24 +253,12 @@ def _download_stream(url: str, path: Path, total: int, on_progress) -> bool:
 def download(rel: Release, on_progress=None) -> Path | None:
     """下載到 EXE 旁邊的暫存檔。`on_progress(已下載, 總計)` 可省略。
 
-    對方支援 Range 就切成幾段同時抓——單一連線被限速時差很多，而且**某一段失敗
-    只要重抓那一段**，不必整個一百多 MB 重來。不支援就退回單條連線。
+    對方支援 Range 就分段下載（失敗只重抓那一段），否則用單一連線。
 
-    ⚠ **一定要驗大小。** `resp.read()` 在連線半途斷掉時回傳空字串，`while` 迴圈
-      就這樣**正常結束**——沒有例外、沒有錯誤。少了這道檢查，一個截斷的檔案會
-      被當成下載完成、改名、然後換上去，使用者拿到的是**每次啟動都失敗**的執行檔：
-
-          Failed to load Python DLL '...python314.dll'.
-          LoadLibrary: 找不到指定的模組。
-
-      （單檔打包的 EXE 是個壓縮包，截斷之後 bootloader 解壓不出裡面的 DLL。）
-
-    ⚠ 也要看檔頭。GitHub 偶爾會回一頁 HTML（維護中、速率限制），那種內容大小
-      對得上與否都不該拿去換執行檔。
+    ⚠ 要驗大小：連線半途中斷時 `read()` 回傳空字串，迴圈會正常結束。截斷的 EXE 無法啟動。
+    ⚠ 要驗檔頭：GitHub 偶爾回一頁 HTML（維護中、速率限制）。
     """
-    # ⚠ 暫存檔名要**跟著自己的檔名走**（`sys.executable` 的實際檔名），而且一看
-    #   就知道是暫存的。寫死名稱的話，換檔失敗時旁邊會留下一個看起來像正式版的
-    #   檔案，而使用者的 EXE 可以是任何檔名——桌面捷徑指的是他自己命名的那一個。
+    # ⚠ 暫存檔名跟著自己的實際檔名走，並帶 `.new` 副檔名。
     cur = _target_exe()
     target = cur.with_name(cur.name + ".new")
     part = cur.with_name(cur.name + ".part")
@@ -329,18 +293,13 @@ def download(rel: Release, on_progress=None) -> Path | None:
         return None
 
     os.replace(part, target)
-    # ⚠ 用 MB 不用位元組。「81208677 位元組」讀的人得自己心算才知道是不是
-    #   完整的一份，而這一行的用途正是「確認拿到的份量對不對」。
+    # 訊息用 MB 表示。
     log.info("已下載 %s（%.0f MB）", target.name, got / 1048576)
     return target
 
 
 def apply(new_exe: Path) -> tuple[bool, str]:
-    """把新檔換到自己的位置。回傳（成功嗎, 失敗的說明）。
-
-    ⚠ 第二步失敗要把舊的搬回來。少了這段就會變成「更新沒成功，而且原本的
-      程式也不見了」——那比更新失敗嚴重得多。
-    """
+    """把新檔換到自己的位置，回傳（成功與否, 失敗說明）。⚠ 第二步失敗要把舊檔搬回來。"""
     ok, why = can_apply()
     if not ok:
         return False, why
@@ -349,11 +308,9 @@ def apply(new_exe: Path) -> tuple[bool, str]:
     backup = _spare_backup(cur)
 
     try:
-        os.replace(cur, backup)          # 執行中的 EXE 改得了名，覆寫不了
+        os.replace(cur, backup)          # 執行中的 EXE 可以改名，不能覆寫
     except OSError as e:
-        # ⚠ 訊息要說得出**下一步做什麼**。只寫「[WinError 5] 存取被拒」的話，
-        #   使用者看不出要去關掉什麼——最常見的成因是另一個助手還開著（縮在系統
-        #   匣也算），其次是防毒的即時掃描正握著檔案。
+        # ⚠ 訊息要寫出下一步：最常見的成因是另一個助手還開著，其次是防毒的即時掃描。
         return False, "\n".join([
             f"換不掉舊版：{e}",
             "請確認沒有另一個助手還在執行（縮到系統匣的也算），"
@@ -365,7 +322,7 @@ def apply(new_exe: Path) -> tuple[bool, str]:
     try:
         os.replace(new_exe, cur)
     except OSError as e:
-        os.replace(backup, cur)          # 搬回來，維持在可以執行的狀態
+        os.replace(backup, cur)          # 搬回來，維持可執行
         return False, f"新版搬不進去：{e}"
 
     log.info("已更新到 %s，重新啟動後生效", new_exe.name)
@@ -373,11 +330,9 @@ def apply(new_exe: Path) -> tuple[bool, str]:
 
 
 def cleanup() -> None:
-    """刪掉上一次更新留下的殘骸。啟動時呼叫。
+    """刪除上次更新留下的檔案，啟動時呼叫。
 
-    ⚠ 三種都要收：`.old`（換檔成功後的舊版）、`*.<時間戳>.old`（`.old` 當時
-      被佔著而改用的備用名）、`.new` / `.part`（下載到一半或換檔失敗留下的）。
-      少收哪一種，那個檔案就會一直躺在 EXE 旁邊讓使用者猜它是什麼。
+    三種都要清：`.old`、`*.<時間戳>.old`（`.old` 被佔用時的備用名）、`.new` / `.part`。
     """
     leftovers = (list(ROOT.glob("*.exe.old")) + list(ROOT.glob("*.exe.*.old"))
                  + list(ROOT.glob("*.new")) + list(ROOT.glob("*.part")))
@@ -385,32 +340,15 @@ def cleanup() -> None:
         try:
             leftover.unlink()
         except OSError:
-            pass                          # 還被佔著就下次再說，不值得吵使用者
+            pass                          # 還被佔用就下次再清
 
 
 def sweep_temp() -> int:
-    """清掉自己留在 %TEMP% 的 `_MEI` 殘骸，回傳清掉幾個。
+    """清掉自己留在 %TEMP% 的 `_MEI` 暫存目錄（行程被強制結束時留下的），回傳清掉幾個。
 
-    單檔打包的程式每次執行都會把自己解壓到 `%TEMP%\\_MEI******`，正常結束時
-    bootloader 會刪掉。但**行程被強制結束就不會**（工作管理員、Stop-Process、
-    當機），而每一份都有一百多 MB。bootloader 也會跳出警告：
-
-        Failed to remove temporary directory: ...\\_MEI576122
-
-    ⚠ **只清「確定是我們的」那些。** `%TEMP%` 底下別的 PyInstaller 程式也叫
-      `_MEI*`，判準是裡面有沒有 `config.example.yaml`（那是我們打包進去的）。
-
-    ⚠ **刪之前要先確認沒有人在用，不能直接 `rmtree(ignore_errors=True)`。**
-      唯讀工具（doctor、selftest）不上防多開的鎖，可能正有一份在跑；忽略錯誤地
-      刪下去會把它**刪成半殘**而當場炸掉。
-
-    ⚠ **探測方式是「試著刪掉 python3XX.dll」，不是「試著開啟」。** 開啟沒有用——
-      Windows 的預設共用模式允許再開一次，`open("ab")` 對正被使用的檔案也會成功。
-      映射中的 DLL 刪不掉，所以刪得掉才代表沒有人在用。失敗的話整個目錄跳過。
-
-    ⚠ **一定要試刪 Python 本體那支，不能隨便挑一個 DLL。** bootloader 一啟動就
-      載入它，活著的行程必定鎖著；其他 DLL 要等用到才載入（`libcrypto-3.dll` 在
-      還沒連過網路的行程上刪得掉）。這一步排在防多開之前，再雙擊一次 EXE 就會跑到。
+    ⚠ 只清裡面有 `config.example.yaml` 的目錄，別的 PyInstaller 程式也叫 `_MEI*`。
+    ⚠ 刪除前先試刪 `python3XX.dll`：活著的行程必定鎖著它，刪得掉才代表沒有人在用。
+      不可用開啟檔案探測（預設共用模式允許再開一次），也不可挑其他 DLL（要用到才載入）。
     """
     if not getattr(sys, "frozen", False):
         return 0
@@ -427,14 +365,14 @@ def sweep_temp() -> int:
             if not folder.is_dir() or folder.resolve() == keep:
                 continue
             if not (folder / "config.example.yaml").is_file():
-                continue                  # 別人的程式，不要碰
+                continue                  # 別的程式的目錄
             probe = next(folder.glob("python3[0-9]*.dll"), None)
             if probe is not None:
-                probe.unlink()             # 刪得掉就代表沒有行程在用
+                probe.unlink()             # 刪得掉代表沒有行程在用
             shutil.rmtree(folder)
             swept += 1
         except OSError:
-            continue                       # 鎖著或刪不掉就跳過，下次再說
+            continue                       # 鎖著或刪不掉就跳過
 
     if swept:
         log.info("清掉 %d 份上次沒收拾乾淨的暫存資料", swept)
@@ -442,44 +380,23 @@ def sweep_temp() -> int:
 
 
 def _clean_env() -> dict[str, str]:
-    """複製一份環境變數，把 PyInstaller 的私有那幾個拿掉。
+    """複製一份環境變數，移除 PyInstaller 的私有變數。
 
-    ⚠ **啟動自己的 EXE 之前一定要清，否則新版根本不會解壓。** 單檔打包的
-      bootloader 靠 `_PYI_PARENT_PROCESS_LEVEL` 與 `_PYI_APPLICATION_HOME_DIR`
-      認出「我是已經解壓好的子行程」，於是**整段解壓被跳過**，直接去載入那個
-      目錄裡的 DLL。而這些變數會被子行程開的每一個行程繼承下去——PowerShell
-      接到，`Start-Process` 再原封不動傳給新版 EXE，新版就對著**舊行程早已刪掉
-      的**目錄找 DLL：
-
-          Failed to load Python DLL '...\\_MEI155122\\python314.dll'.
-          LoadLibrary: 找不到指定的模組。
-
-      雙擊不會有事（Explorer 沒有這些變數），所以只有更新後的重新啟動會遇到。
-
-    ⚠ `_MEIPASS2` 是 PyInstaller 5 以前的名字，一併清掉。
+    ⚠ 啟動自己的 EXE 之前一定要清：bootloader 靠 `_PYI_PARENT_PROCESS_LEVEL` 與
+      `_PYI_APPLICATION_HOME_DIR` 判定已解壓，會跳過解壓而載入舊行程已刪除的目錄。
+      `_MEIPASS2` 是 PyInstaller 5 以前的名字。
     """
     return {k: v for k, v in os.environ.items()
             if not k.startswith("_PYI_") and k != "_MEIPASS2"}
 
 
 def restart() -> bool:
-    """關掉自己並開起新版。
+    """排定一個背景 PowerShell，等這個行程結束後啟動新版。
 
-    ⚠ 不能直接 `Popen` 新的 EXE 就走人：防多開的 mutex 要等這個行程結束才會
-      釋放，新的那個會以為「已經有一份在跑」而立刻退出。所以委託一個背景的
-      PowerShell 等我們結束再啟動。
-
-    ⚠ **旗標只能給 `CREATE_NO_WINDOW`。** 量出來的：`DETACHED_PROCESS`（單獨給
-      或跟 CREATE_NO_WINDOW 一起給）會讓那個 PowerShell 當場死掉——`Popen` 本身
-      不報錯、PID 也拿得到，但它什麼都沒做完。tests/test_updater.py 守著這條。
-
-    ⚠ **環境變數一定要走 `_clean_env()`。** 少了它，新版會跳過解壓去載入舊版
-      那個已經被刪掉的目錄，開不起來——理由見 `_clean_env` 的說明。
-
-    ⚠ 啟動前先等舊版的暫存目錄消失（最多 20 秒），免得兩份一百多 MB 同時佔著
-      `%TEMP%`，也讓舊版的清理跑完再說。
-      ⚠ `Wait-Process` 等的是**跑 Python 的那個子行程**，而清理是**父行程**做的
-        ——所以光等行程結束不夠，一定要等目錄。
+    ⚠ 不可直接 Popen 新版：防多開的 mutex 要等這個行程結束才釋放。
+    ⚠ 旗標只能給 `CREATE_NO_WINDOW`：`DETACHED_PROCESS` 會讓 PowerShell 當場結束（tests/test_updater.py）。
+    ⚠ 環境變數要走 `_clean_env()`。
+    ⚠ 啟動前先等舊版的暫存目錄消失（最多 20 秒）：清理是父行程做的，只等子行程結束不夠。
     """
     exe = Path(sys.executable)
     mei = getattr(sys, "_MEIPASS", "")

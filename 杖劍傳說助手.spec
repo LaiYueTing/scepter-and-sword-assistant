@@ -1,18 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller 打包設定。
+"""PyInstaller 打包設定：單檔、視窗模式，腳本、模板、adb 全部內嵌。
 
     pyinstaller --noconfirm 杖劍傳說助手.spec
 
-⚠ **為什麼需要 .spec 而不是純命令列參數。** `--splash` 從命令列產生的設定裡
-  `text_pos=None`，那會**關掉動態文字**——`pyi_splash.update_text()` 就沒有地方可
-  以畫，進度條也就不存在。只有在這裡明寫 `text_pos` 才拿得到那一行。
-
-⚠ 載入畫面的進度條與動畫在 `assets/splash.tcl`，這裡把它換進 PyInstaller 產生的
-  Tcl 腳本。bootloader 解壓時 Python 還沒開始跑，只有 Tcl 跑得動；原本那條 `text_pos`
-  的文字行關不掉 bootloader 寫進去的檔名，也畫不出真正的進度條。底圖由
-  `tools/make_splash.py` 產生。
-
-其餘設定和原本的命令列參數一一對應：單檔、視窗模式、腳本／模板／adb 全部內嵌。
+⚠ 不可改用純命令列參數：`--splash` 的 `text_pos=None` 會關閉動態文字。
+⚠ 載入畫面的進度條與動畫在 `assets/splash.tcl`，由這裡併進 Tcl 腳本。底圖由 `tools/make_splash.py` 產生。
 """
 
 BUNDLE = [
@@ -21,14 +13,11 @@ BUNDLE = [
     ("platform-tools", "platform-tools"),
     ("config.example.yaml", "."),
     ("assets/icon.ico", "."),
-    # 介面的前端。⚠ 這是 `npm run build` 的產物，**不在版本控制裡**——build.bat 會
-    #   先跑它並在失敗時中止，漏跑的話這裡會找不到檔案而編不下去。那正是要的：
-    #   寧可編不出來，也不要打包出一個載入空白頁的 EXE。
+    # 介面的前端，`npm run build` 的產物（不進版控），build.bat 會先建置。
     ("gui/web", "gui/web"),
 ]
 
-# ⚠ tkinter 只有啟動畫面那一層在用（PyInstaller 的 Splash 需要 Tcl/Tk），
-#   我們自己的程式碼一行都沒有 import 它，所以排除掉不影響任何功能。
+# ⚠ 啟動畫面的 Tcl/Tk 由 PyInstaller 的 Splash 帶入，程式碼不 import tkinter。
 EXCLUDES = ["tkinter"]
 
 a = Analysis(
@@ -67,7 +56,7 @@ splash = Splash(
     "assets/splash.png",
     binaries=a.binaries,
     datas=a.datas,
-    # text_pos 要給，update_text 才用得了。實際的文字由 splash.tcl 畫。
+    # text_pos 要給，update_text 才能用；文字由 splash.tcl 畫。
     text_pos=(0, 0),
     text_size=9,
     minify_script=True,

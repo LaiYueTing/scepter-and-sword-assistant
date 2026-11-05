@@ -8,18 +8,13 @@ import { useHostStore } from '../stores/host'
 const props = defineProps({ task: { type: Object, required: true } })
 const host = useHostStore()
 
-/** 執行中不能改設定：引擎是**建立時**才套用開關的，中途改不會生效。 */
+/** 執行中不可改設定：引擎在建立時才套用開關。 */
 const locked = computed(() => host.running || host.closing)
 
 const live = computed(() => host.taskStates[props.task.name] || null)
 
 /**
- * 狀態徽章。
- *
- * ⚠ **顯示的是後端給的中文 `note`，不是 `state`。** 後者是狀態鍵
- *   （running / done / error），只拿來決定顏色——畫上去的話卡片會出現英文的
- *   「running」。這和 adb 的 `offline` 漏到下拉選單上是同一種毛病：狀態鍵是資料，
- *   不是訊息。
+ * 狀態徽章。顯示後端給的中文 `note`；`state` 是狀態鍵，只決定顏色。
  */
 const TONES = { running: 'ok', done: 'accent', error: 'bad' }
 
@@ -31,11 +26,7 @@ const badge = computed(() => {
 })
 
 /**
- * 下一輪什麼時候。
- *
- * ⚠ **用字要壓短，而且是量出來的。** 完整版「下一輪 08/20 08:00，4 小時 23 分後」
- *   在最小視窗下放不進卡片，會折成兩行——而說明換不換行決定卡片高度，五張卡就會
- *   各長各的。日期換成「今天／明天」、倒數只留最大的那個單位，完整版掛 tooltip。
+ * 下一輪的時間。日期寫「今天／明天」、倒數只留最大的單位，完整版放 tooltip。
  */
 const nextText = computed(() => {
   const raw = props.task.next_run
@@ -64,9 +55,7 @@ const nextFull = computed(() => {
   )
 })
 
-// 每週與每日是**兩個不同的鍵**。寫錯地方會讓腳本從「每週一」變成「每天」，
-// 所以模式在後端就決定好，這裡只編它該編的那一個——要改種類就去改設定檔，
-// 那才是明確的意思表示。
+// 每週與每日是兩個不同的鍵，模式由後端決定。
 const timeKey = computed(() => (props.task.mode === 'weekly' ? 'weekly_at' : 'daily_at'))
 const timeParts = computed(() =>
   props.task.mode === 'weekly'
@@ -88,12 +77,11 @@ function startOfDay(d) {
 }
 
 function edit(field, value) {
-  // 路徑指到 tasks 底下那一筆的那個欄位（confedit 認得
-  // `("tasks", "raid", "enabled")` 這種形狀），後端就地改寫那一行。
+  // 路徑指到 tasks 底下那一筆的欄位，後端就地改寫。
   host.save([{ path: ['tasks', props.task.name, field], value }]).catch(() => {})
 }
 
-/** 時間欄要送**陣列**過去，不是那串顯示文字。 */
+/** 時間欄送陣列給後端。 */
 function editTimes(text) {
   edit(timeKey.value, parseTimes(text, props.task.mode === 'weekly', timeParts.value.day))
 }
@@ -101,11 +89,7 @@ function editTimes(text) {
 
 <template>
   <div class="task-card nc-card nc-hover p-2.5 flex flex-col gap-2" style="min-width: 0">
-    <!--
-      ⚠ 名稱與狀態徽章**拆成兩行**。擠在同一行時，最小視窗下卡片只剩 151px 可用，
-        而勾選框要 114px、徽章要 61px——被切掉的正好是名稱最後一個字
-        往下長不必跟任何人搶，寬度每多一份腳本就少一截。
-    -->
+    <!-- 名稱與狀態徽章分成兩行。 -->
     <label class="flex items-center gap-2 cursor-pointer" style="min-width: 0">
       <NCheckbox
         :checked="task.enabled"
@@ -120,10 +104,7 @@ function editTimes(text) {
       </NTooltip>
     </label>
 
-    <!--
-      ⚠ **執行中的那顆點會呼吸，其餘的不會。** 五張卡同時在閃的話，「哪一個真的在
-        跑」反而看不出來——而那正是這顆點存在的理由。
-    -->
+    <!-- 只有執行中的那顆點會呼吸。 -->
     <div class="flex items-center gap-1.5">
       <span class="nc-pill" :class="`nc-pill--${badge.tone}`">
         <span class="nc-dot" :class="{ live: badge.live }" style="--glow: currentColor"></span>
@@ -132,12 +113,10 @@ function editTimes(text) {
       <span v-if="timeParts.day" class="nc-pill nc-pill--idle">{{ timeParts.day }}</span>
     </div>
 
-    <!-- 時間與次數也拆成兩行（grid 讓兩行的標籤對齊成一欄）。擠在同一行時
-         時間欄只剩 56px 可畫字，而「08:00」要 35px。 -->
+    <!-- 時間與次數分成兩行，grid 讓標籤對齊成一欄。 -->
     <div class="grid gap-y-1.5 gap-x-1" style="grid-template-columns: auto 1fr; align-items: center">
       <span class="lab" title="時間"><Clock :size="12" /><span class="lab-text">時間</span></span>
-      <!-- ⚠ 用會長高的多行欄：三個時刻在一排六張的卡片上放不下一行，而被切掉的
-           那一格看起來就像沒有排。Enter 仍然是送出，不是換行。 -->
+      <!-- 會長高的多行欄，Enter 仍然是送出。 -->
       <NInput
         size="tiny"
         type="textarea"
@@ -168,11 +147,7 @@ function editTimes(text) {
       </NTooltip>
     </div>
 
-    <!--
-      ⚠ **一行到底 + 省略號，不要自動換行。** 執行中的狀態本來就時長時短
-        （「BOSS 房戰鬥中　評級 A　5 分 02 秒」），換行會讓五張卡的高度各長各的、
-        還會隨狀態跳動。資訊沒有少——完整版在 tooltip 裡。
-    -->
+    <!-- 單行加省略號，完整內容在 tooltip，卡片高度才不會跳動。 -->
     <NTooltip trigger="hover">
       <template #trigger>
         <div class="truncate" style="font-size: 12.5px; color: var(--text-1)">
@@ -186,12 +161,7 @@ function editTimes(text) {
 
 <style scoped>
 /*
- * ⚠ **欄位標籤用 `--text-1`，不要用 `--text-2`。** 「序號 / 位址 / 連接埠」
- *   「時間 / 次數」是**功能性**的——它們回答「這一格要填什麼」，讀者每次都要看。
- *   `--text-2` 是留給真正次要的東西的（時間戳、規格、補充說明）。
- *
- *   這一條不是對比值的問題（拉到 5.7:1 之後使用者仍然說「很多字都是灰色」），
- *   是**階層分錯了**：把太多東西丟進最弱的那一層，畫面看起來就整片發灰。
+ * 欄位標籤是功能性資訊，用 `--text-1`。
  */
 .lab {
   display: inline-flex;
@@ -202,7 +172,7 @@ function editTimes(text) {
   white-space: nowrap;
 }
 
-/* 卡片窄到放不下兩個時刻時，欄位標籤只留圖示，把寬度讓給時間欄。 */
+/* 卡片過窄時，欄位標籤只留圖示。 */
 .task-card {
   container-type: inline-size;
 }
@@ -210,7 +180,7 @@ function editTimes(text) {
   .lab-text {
     display: none;
   }
-  /* ⚠ 輸入區與量高度的 mirror 內距要一樣，否則算出來的行數和畫出來的對不上。 */
+  /* ⚠ 輸入區與量高度的 mirror 內距要相同。 */
   :deep(.n-input__textarea-el),
   :deep(.n-input__textarea-mirror),
   :deep(.n-input__placeholder) {

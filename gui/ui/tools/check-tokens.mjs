@@ -1,33 +1,18 @@
 /**
- * 確認每一個顏色 token 都是 **naive-ui 解得動**的格式。
+ * 確認每一個顏色 token 都是 naive-ui（seemly）解析得了的格式。
  *
  *   node tools/check-tokens.mjs
  *
- * ## 為什麼需要一支專門驗格式的
+ * seemly 接受 `#hex`、`rgb(r, g, b)`、`rgba(r, g, b, a)`、`hsl(h, s%, l%)`，不接受空白分隔的語法：
  *
- * naive-ui 用 seemly 把顏色解析出來，再推導 hover / pressed / disabled 的色階。
- * seemly 認得 `#hex`、`rgb(r, g, b)`、`rgba(r, g, b, a)`、`hsl(h, s%, l%)`，
- * 但**解不了 CSS 新語法的空白分隔版**：
+ *     hsl(221 70% 62%)、rgb(91 108 255)、rgb(91 108 255 / 0.5) → 丟例外
  *
- *     hsl(221 70% 62%)      → 丟例外
- *     rgb(91 108 255)       → 丟例外
- *     rgb(91 108 255 / 0.5) → 丟例外
- *
- * 而這個例外的症狀**極度誤導**：畫面不會整個壞掉，只有需要推導色階的元件
- * （`NCheckbox`、`NInput`、`NInputNumber`、`NDropdown`）靜靜地 render 成空的
- * `<!---->`，按鈕卻好好的。實際看到的是三個看起來毫不相干的毛病：
- *
- *   - 玩法設定的勾選框「全部不見了」
- *   - 裝置面板的欄位錯位（輸入框沒 render，grid 於是塌掉）
- *   - 紀錄的右鍵選單按了沒反應
- *
- * ⚠ 用眼睛是驗不出來的——**顏色本身是對的**，錯的只有寫法。所以這支要跟著
- *   `check-contrast.mjs` 一起跑。
+ * 丟例外時，需要推導色階的元件（NCheckbox、NInput、NInputNumber、NDropdown）會 render 成空的。
  */
 import { rgba } from 'seemly'
 import { BG_THEMES, appearanceFor } from '../src/data/gradients.js'
 
-/** 這些 token 是漸層或陰影，本來就不是單一顏色，naive-ui 也不會拿去推色階。 */
+/** 這些 token 是漸層或陰影，不是單一顏色。 */
 const NOT_A_COLOR = new Set(['--card-hi', '--shadow-card', '--shadow-pop', '--accent-grad'])
 
 const bad = []
@@ -45,7 +30,7 @@ for (const isDark of [true, false]) {
         bad.push(`${isDark ? '深' : '淺'} ${t.name}　${name}: ${value}`)
       }
     }
-    // 這兩個只餵給 CSS，但同一份規則寫兩種格式，總有一天會有人把它接到 naive-ui 上
+    // 這兩個只用於 CSS，格式規則相同
     for (const [name, value] of [['cardBg', a.cardBg], ['appBg', a.appBg]]) {
       if (!value || name === 'appBg') continue
       checked++

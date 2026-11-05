@@ -1,18 +1,10 @@
-"""探索可用的模擬器，讓使用者不必自己去模擬器的設定裡翻 ADB 連接埠。
+"""探索可用的模擬器，命令列的 `devices` 與介面的「探索」共用。
 
-`adb devices` 只列得出**已經連上**的裝置，跨機器的模擬器在 `adb connect`
-之前不會出現在那份清單裡，所以要主動去找。
+分三段，慢的那段盡量少做：
 
-⚠ 放在 core/ 而不是 gui/：命令列的 `devices` 與圖形介面的「探索」共用這一份，
-  不要各做一套。
-
-流程分三段，慢的那段盡量少做：
-
-1. `adb devices`——已經連上的，最可靠，零成本。
-2. **TCP 探測**候選的 host:port。純 socket、逾時 0.3 秒、並行送出，
-   所以掃幾十個組合也只花不到一秒。
-3. 只對「探測得通、但還沒連上」的做 `adb connect`——這一步才會真的花時間
-   （逾時要自己壓短，預設的 20 秒乘上候選數量會讓介面像當掉）。
+1. `adb devices`：已經連上的。
+2. TCP 探測候選的 host:port：純 socket、逾時 0.3 秒、並行送出。
+3. 只對探測得通、還沒連上的做 `adb connect`，逾時壓短。
 
 ⚠ 全程唯讀：只有 connect / getprop / wm size，不會點擊或啟動任何 App。
 """
@@ -32,20 +24,16 @@ log = logger.get("adb")
 # MuMu Player 的 ADB 埠：12 代預設 16384，每多開一個實例 +32（16480 = 16384 + 32×3）。
 # 掃前 8 個實例，涵蓋常見的多開數量。
 _MUMU_PORTS = [16384 + 32 * i for i in range(8)]
-# 其他常見的：MuMu 舊版與通用 Android 走 7555 / 5555，另含夜神、雷電；TCP 探測的成本很低。
+# 其他常見的埠：MuMu 舊版與通用 Android（7555 / 5555）、夜神、雷電。
 _OTHER_PORTS = [7555, 5555, 62001, 21503, 5554]
 
 CANDIDATE_PORTS = _MUMU_PORTS + _OTHER_PORTS
 
-# 這幾個位址的掃描不出網卡，所以不受「不要自動掃」的限制
+# 這幾個位址的掃描不出網卡，可以掃多埠
 _LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
-# adb 回報的狀態 → 中文。那是**資料**不是訊息，不翻的話會一路印到下拉選單、
-# tooltip 與紀錄上。
-#
-# ⚠ 認不得的狀態要**原樣寫出來**，不要吞掉或寫成「未知」。adb 還會回
-#   authorizing、no permissions 這些，翻不到的至少要讓人拿原文去搜。
+# adb 回報的狀態 → 中文。⚠ 無法辨識的狀態原樣顯示。
 _STATE_TEXT = {
     "device": "正常",
     "offline": "離線",
@@ -54,8 +42,7 @@ _STATE_TEXT = {
     "connecting": "連線中",
 }
 
-# 只有紀錄寫得下這一句。下拉與 tooltip 的空間有限，而「離線」兩個字已經夠讓人
-# 知道不能用了；真的要查原因才需要知道「連得上但沒回應」是什麼意思。
+# 只寫在紀錄裡的狀態補充說明。
 _STATE_HINT = {
     "offline": "adb 連得上但裝置沒有回應，通常是模擬器還沒開完，或這是一筆舊的連線",
     "unauthorized": "模擬器那邊要按下「允許 USB 偵錯」",
@@ -63,7 +50,7 @@ _STATE_HINT = {
 
 
 def state_text(state: str) -> str:
-    """把 adb 的狀態字串換成中文，認不得的原樣回傳。"""
+    """把 adb 的狀態字串換成中文，無法辨識的原樣回傳。"""
     return _STATE_TEXT.get(state, state)
 
 
@@ -84,25 +71,15 @@ class Found:
         return self.state == "device"
 
     def matches_spec(self, want_size: str, want_dpi: int) -> bool:
-        """規格符不符合腳本的硬性要求（模板全依 720x1280 裁）。
-
-        ⚠ 兩邊都轉成字串再比。`dpi` 是從 adb 的輸出解析出來的字串，但呼叫端
-          給的是設定檔裡的整數——只轉一邊的話 320 對不上 "320"，會把規格正確的
-          裝置誤報成「解析度不符」。
-        """
+        """規格是否符合腳本要求（模板全依 720x1280 裁）。⚠ 兩邊都轉成字串再比。"""
         return str(self.size) == str(want_size) and str(self.dpi) == str(want_dpi)
 
     def label(self, want_size: str = "", want_dpi: int = 0) -> str:
-        """給下拉選單用的一行說明。"""
+        """下拉選單用的單行說明。"""
         return "　".join(self._bits(want_size, want_dpi))
 
     def describe(self, want_size: str = "", want_dpi: int = 0) -> str:
-        """帶欄位名稱的說明，給紀錄用。
-
-        紀錄裡只有一長串「192.168.1.108:16480 SM-S938U 720x1280 / 320dpi」的話，
-        要自己分辨哪一段是什麼。標上名稱就不必猜——而且位址有兩種形態，
-        跨機器是 IP:埠、同一台是 adb 序號，講清楚是哪一種比較好懂。
-        """
+        """帶欄位名稱的說明，給紀錄用。"""
         head = "IP" if ":" in self.serial and not self.serial.startswith("emulator-") \
             else "序號"
         parts = [f"{head}：{self.serial}"]
@@ -120,18 +97,9 @@ class Found:
         return "　".join(parts)
 
     def detail(self, want_size: str = "", want_dpi: int = 0) -> str:
-        """下拉清單與 tooltip 共用的多行版本，**固定兩行**。
+        """下拉清單與 tooltip 用的兩行說明：第一行旗標與位址，第二行型號與解析度。
 
-        ⚠ 不要把 `label()` 直接拿去當下拉的標籤或 tooltip。那一行很長（旗標＋
-          序號＋型號＋解析度），而清單與 tooltip 都是由 view 畫的、會沿用它的
-          省略設定——結果被吃掉中間變成「192.168.1.108:1...0x1280 / 320dpi」，
-          最重要的埠號與解析度剛好都在省略號裡。
-
-        ⚠ **分成兩行而不是四行，也不加欄位名稱。** 第一行是「要連去哪裡」（旗標
-          與位址），第二行是「那是什麼機器」（型號與解析度）——這兩件事的答案
-          從格式就看得出來，補上「IP：」「型號：」只會讓每一項變成兩倍長，而
-          下拉裡通常不只一台。帶欄位名的版本是 `describe()`，那是給紀錄用的：
-          紀錄是一整片文字，沒有版面可以分欄。
+        ⚠ 不可用 `label()`：單行會被省略號吃掉埠號與解析度。
         """
         bits = self._bits(want_size, want_dpi)
         flag = bits[0] if bits and bits[0].startswith("［") else ""
@@ -140,17 +108,12 @@ class Found:
         return chr(10).join([x for x in (head, "・".join(rest[1:])) if x])
 
     def _bits(self, want_size: str, want_dpi: int) -> list[str]:
-        """下拉與 tooltip 共用的欄位，**旗標排最前面**。
-
-        ⚠ 旗標不能排在尾端。下拉收起來時寬度有限（見 DevicePanel 的說明），
-          而序號本身就佔掉大半——排在後面的話「［離線］」正好落在被切掉的那一段，
-          「這台不能用」變成最看不見的資訊。沒有旗標的正常裝置不受影響。
-        """
+        """下拉與 tooltip 共用的欄位。⚠ 旗標排最前面，收起來時不會被截掉。"""
         bits = []
         if self.state != "device":
             bits.append(f"［{state_text(self.state)}］")
         elif want_size and not self.matches_spec(want_size, want_dpi):
-            # 解析度不對的話整套模板都會比不中，這比「連得上」重要得多
+            # 解析度不符時模板全部比不中
             bits.append("［解析度不符］")
         bits.append(self.serial)
         if self.model:
@@ -164,7 +127,7 @@ class Found:
 
 
 def _tcp_open(host: str, port: int, timeout: float) -> bool:
-    """純 socket 探測。比 adb connect 快兩個數量級，用來篩掉不存在的組合。"""
+    """純 socket 探測，用來篩掉不存在的組合。"""
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -176,10 +139,8 @@ def probe_ports(host: str, ports: list[int] | None = None,
                 timeout: float = 0.3) -> list[int]:
     """回傳 host 上有在監聽的候選埠。
 
-    ⚠ 最後手段，只在「不知道埠號」時呼叫。對同一台主機連敲十幾個埠，在防毒的
-      IDS 眼裡就是連接埠掃描，會被封鎖到整台機器 TCP 全滅（見 CLAUDE.md）。
-    ⚠ 執行緒 8 條就好：32 條會讓十幾個 SYN 幾乎同時到達，那個突發特徵正是 IDS
-      在看的，而 8 條只慢 0.3 秒。
+    ⚠ 只在不知道埠號時呼叫：連續探測同一台主機會被防毒的 IDS 判定成連接埠掃描（見 CLAUDE.md）。
+    ⚠ 執行緒 8 條：32 條的突發特徵正是 IDS 偵測的對象，8 條只慢 0.3 秒。
     """
     ports = ports or CANDIDATE_PORTS
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -218,21 +179,14 @@ def scan(device, hosts: list[str] | None = None, connect_new: bool = True,
          deep: bool = True) -> list[Found]:
     """探索可用的模擬器。
 
-    `device` 是一個已建立的 core.adb.Device（只借它的 adb 路徑與設定，
-    不會用它去操作畫面）。`hosts` 沒給時，掃「設定檔裡的 host」與本機。
+    `device` 是已建立的 core.adb.Device（只用它的 adb 路徑與設定）。
+    `hosts` 沒給時，掃設定檔裡的 host 與本機。
+    `deep` 決定遠端主機是否做多埠掃描：
 
-    `deep` 決定**遠端**主機要不要做多埠掃描：
+        True   掃候選埠清單，使用者按下「探索」時使用。
+        False  只敲設定檔裡的那一個埠，開視窗的自動探索使用。
 
-        True   掃候選埠清單，用來找出「埠號到底是多少」。使用者按下「探索」
-               屬於這一種——那是明確的意思表示。
-        False  只敲設定檔裡那一個埠。自動觸發的探索（開視窗時）走這條。
-
-    ⚠ 自動探索**不可以**用 deep=True。對同一台主機連敲十幾個埠會被防毒判定成
-      連接埠掃描而封鎖整台機器，而開視窗是會反覆發生的動作
-      （三分鐘內六次就會觸發）。
-
-    ⚠ 本機 127.0.0.1 不受這個限制，照樣掃。loopback 不出網卡，對方的防毒
-      看不到，第一次執行時也要靠它找出本機模擬器。
+    ⚠ 自動探索不可以用 deep=True。本機 127.0.0.1 不受限制（loopback 不出網卡）。
     """
     adb = str(device.adb)
 
@@ -241,7 +195,7 @@ def scan(device, hosts: list[str] | None = None, connect_new: bool = True,
     try:
         for serial, state in device.list_devices():
             found[serial] = Found(serial=serial, state=state)
-    except Exception as e:                       # adb server 起不來也不該中斷探索
+    except Exception as e:                       # adb server 起不來時繼續探索
         log.warning("列出已連線裝置失敗：%s", e)
 
     # ---- 2. TCP 探測 ----
@@ -254,8 +208,7 @@ def scan(device, hosts: list[str] | None = None, connect_new: bool = True,
             if local not in hosts:
                 hosts.append(local)
 
-    # ⚠ 設定檔已經指名埠號的那一台只敲那一個埠。掃描是給「還不知道埠號」用的，
-    #   而設定好之後每次開視窗都會自動探索一次（見 CLAUDE.md）。
+    # ⚠ 設定檔已指名埠號的主機只敲那一個埠。
     configured_host = (device.cfg.device.host or "").strip()
     configured_port = int(device.cfg.device.port or 0)
 

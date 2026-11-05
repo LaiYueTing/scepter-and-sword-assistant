@@ -1,18 +1,10 @@
-"""玩法設定不能少列選項——而「少列」不會有任何徵兆。
+"""玩法設定要列出全部選項（`_options_json` 用範本補舊設定檔缺少的鍵）：
 
-舊的 `config.yaml` 不會自己長出新的鍵，所以 `_options_json` 要用範本補底。
-少列時畫面看起來完全正常，沒有錯誤也沒有警告。
+  1. 每一個開關都出現在介面上（即使設定檔一個都沒有）
+  2. 沒有鍵歸到「其他」分頁
+  3. 範本的預設值和腳本的 `${鍵:預設}` 一致
 
-這支守三件事：
-
-  1. 程式認得的每一個開關都會出現在介面上（**即使設定檔一個都沒有**）
-  2. 沒有任何鍵掉進「其他」分頁（那代表 `OPTION_GROUPS` 漏登記了）
-  3. 設定範本的預設值和腳本裡 `${鍵:預設}` 的預設一致
-
-第 3 條是第 1 條的前提：介面拿範本當「不填的話會怎樣」，兩邊對不上的話，顯示出來的
-就是一個假的值——比不顯示更糟。
-
-直接跑：`python tests/test_options_complete.py`
+    python tests/test_options_complete.py
 """
 
 from __future__ import annotations
@@ -25,8 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import yaml
@@ -50,9 +41,7 @@ def main() -> int:
     cfg = Config.load()
 
     # ---- 1. 設定檔一個開關都沒有時，介面仍然要列出全部 ----
-    #
-    # ⚠ 直接把 options 清空來測，不要依賴「使用者現在那份剛好缺幾個」——那樣測試
-    #   會隨著別人的設定檔而時好時壞。
+
     empty = Config.load()
     empty.options = {}
     result = Api._options_json(empty)
@@ -79,7 +68,7 @@ def main() -> int:
         or {}).get("options") or {}
 
     script_defaults: dict[str, set[str]] = {}
-    # ⚠ 走 `resource_files`，不要自己拼路徑——打包之後腳本在 BUNDLE 裡
+    # 走 `resource_files`，打包後腳本在 BUNDLE
     for path in sorted(resource_files("scripts", "*.yaml")):
         for m in re.finditer(r"\$\{([a-z_0-9]+):([^}]*)\}", path.read_text(encoding="utf-8")):
             script_defaults.setdefault(m.group(1), set()).add(m.group(2))

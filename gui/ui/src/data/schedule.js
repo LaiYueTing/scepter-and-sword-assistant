@@ -28,10 +28,9 @@ export function splitWeekly(items) {
 /**
  * 時間欄的文字轉成要寫回設定檔的陣列。
  *
- * ⚠ 分隔符全部收：使用者會打頓號、逗號或空白，而「打錯一個符號就整段變成一個
- *   時刻」是無聲的錯。
- * ⚠ 每週的時刻沒寫星期就沿用前一個，最前面的沿用 `defaultDay`（膠囊上的星期）。
- *   星期後面沒有時刻時原樣送出，由後端回報格式錯誤。
+ * ⚠ 分隔符接受頓號、逗號與空白。
+ * ⚠ 每週的時刻沒寫星期就沿用前一個，最前面的沿用 `defaultDay`。星期後面沒有時刻時原樣送出，
+ *   由後端回報格式錯誤。
  */
 export function parseTimes(text, weekly, defaultDay = '') {
   const parts = String(text)

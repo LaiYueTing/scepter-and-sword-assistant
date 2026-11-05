@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-"""競技場「週一有券就打完」與引擎 `when_weekday` 的回歸測試：
+"""競技場「週一有券就全部使用」與引擎 `when_weekday` 的回歸測試：
 
     python tests/test_monday_use_all.py
 
-⚠ selftest 驗不到——它的引擎沒有旗標，`when_weekday` 一律當成立（否則結果會
-跟著跑測試那天是星期幾變），而這裡要驗的正是「週一和其他天走不同條規則」。
-
-把 `core.engine.datetime` 換成固定日期的版本，同一張排位挑戰對話框在週一／週二、
-開關開／關、今天已經打滿／還沒打之下，各自該由哪條規則接手。
+把 `core.engine.datetime` 換成固定日期，驗同一張排位挑戰對話框在週一／週二、
+開關開／關、今天打滿／還沒打之下由哪條規則接手。
 """
 import os
 import sys
@@ -18,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core import engine as engine_mod, vision
@@ -62,7 +59,7 @@ def winner(day: datetime, battled_today: int, **opts) -> str:
     apply_options(sc.rules, options)
     e = Engine.__new__(Engine)
     e.script, e.cfg = sc, cfg
-    e._flags = set()            # 有旗標的引擎才會看星期幾（selftest 那種不看）
+    e._flags = set()            # 有旗標的引擎才會判斷星期
     engine_mod.datetime = fixed(day)
     try:
         hit = e._match_rule(vision.imread_unicode(SAMPLE))
@@ -84,7 +81,7 @@ print("=== 2. 其他天照每日上限 ===")
 check("週二、已打 3 場 → 結束本輪", winner(TUESDAY, 3, arena_monday_use_all=True) == DONE_RULE)
 check("週二、還沒打 → 一般那條", winner(TUESDAY, 0, arena_monday_use_all=True) == CAP_RULE)
 
-print("=== 3. 開關沒開（或設定檔沒有這個鍵）就和原本一樣 ===")
+print("=== 3. 開關沒開（或設定檔沒有這個鍵）就維持每日上限 ===")
 check("週一、開關 false → 結束本輪", winner(MONDAY, 3, arena_monday_use_all=False) == DONE_RULE)
 opts = {k: v for k, v in cfg.options.items() if k != "arena_monday_use_all"}
 cfg.options = opts

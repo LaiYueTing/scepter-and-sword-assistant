@@ -3,9 +3,7 @@
 
     python tests/test_confedit.py
 
-改設定檔那條路沒有實機畫面可驗，selftest 也涵蓋不到（那支是驗規則的），
-所以這裡自己守。重點在「空值的鍵」——`serial:` 這種冒號後面沒東西的寫法，
-和「容器」在 YAML 裡長得一模一樣，分不出來就會每改一次往設定檔多插一行。
+重點是空值的鍵（`serial:`）：形狀和容器相同，分不出來會每次多插一行。
 """
 import os
 import sys
@@ -14,8 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import yaml
@@ -51,7 +48,7 @@ def check(name, cond):
     return cond
 
 ok = True
-print("=== 1. 改空值的 serial（原本的 bug）===")
+print("=== 1. 改空值的 serial===")
 out = confedit.apply(SRC, {("device", "serial"): "auto"})
 data = yaml.safe_load(out)
 ok &= check("serial 變成 auto", data["device"]["serial"] == "auto")

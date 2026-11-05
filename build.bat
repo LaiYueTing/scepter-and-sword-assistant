@@ -26,8 +26,7 @@ if not exist "%VERSION_FILE%" (
 )
 
 rem 打包設定寫在 .spec 裡（圖示、啟動畫面、要內嵌哪些資料夾）。
-rem ※ 啟動畫面的動態進度文字一定要走 .spec：命令列的 --splash 產生的
-rem    設定是 text_pos=None，那會關掉 update_text，進度條就不存在。
+rem ※ 一定要走 .spec：命令列 --splash 的 text_pos=None 會關閉動態文字。
 if not exist "%SPEC_FILE%" (
     echo [錯誤] 找不到打包設定：%SPEC_FILE%
     goto :error
@@ -48,8 +47,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 rem 網頁介面的前端要先建置。
-rem ※ 這一步**失敗就必須中止**：.spec 會把 gui\web 整個內嵌進 EXE，而那是 npm 的
-rem    產物、不在版本控制裡。漏跑的話打包出來的是上一版的介面或沒有介面。
+rem ※ 失敗就中止：.spec 會把 gui\web（npm 的產物，不進版控）內嵌進 EXE。
 where npm >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [錯誤] 找不到 npm。網頁介面的前端需要 Node.js 才能建置。
@@ -85,14 +83,10 @@ if %ERRORLEVEL% neq 0 (
 echo [資訊] 啟動 PyInstaller 編譯程序 ...
 
 rem 執行編譯指令
-rem 註：--windowed 是刻意的。雙擊 EXE 開介面時完全不會有黑視窗——
-rem     onefile 解壓那幾秒我們的程式還沒開始跑，藏視窗再早都追不上。
-rem     命令列模式仍然可用：main.py 會 AttachConsole 接上呼叫者的
+rem 註：--windowed：雙擊不出現主控台。命令列模式由 main.py 接上呼叫者的
 rem     終端機（見 core/logger.py 的 attach_console）。
-rem 註：腳本 / 模板 / adb / 設定範本全部打包進 EXE，發布時只需要那一個檔案。
-rem     唯一留在外面的是 config.yaml（含個人 IP），程式第一次執行會自動產生。
-rem     想改腳本或換掉某個模板，在 EXE 旁邊放 scripts\ 或 templates\ 同名檔案
-rem     即可覆蓋內建的那份，不必重新編譯（逐檔覆蓋，見 core/config.py）。
+rem 註：腳本 / 模板 / adb / 設定範本全部打包進 EXE，config.yaml 第一次執行時自動產生。
+rem     在 EXE 旁邊放 scripts\ 或 templates\ 同名檔案可以覆蓋內建的（見 core/config.py）。
 pyinstaller ^
     --noconfirm ^
     --clean ^
@@ -111,8 +105,7 @@ if not exist "dist\%PROJECT_NAME%.exe" (
 )
 
 rem 清掉上一次打包殘留在 dist 的東西。
-rem 個人設定檔絕對不能留（含 IP）；舊的外部 scripts / templates 也要清——
-rem 它們會覆蓋 EXE 內建的新版本，造成「明明改了卻沒生效」的怪問題。
+rem 個人設定檔不可留（含 IP）；外部的 scripts / templates 也要清，否則會覆蓋內建的新版本。
 echo [資訊] 清理 dist 的殘留檔案 ...
 if exist "dist\config.yaml"         del /q "dist\config.yaml"
 if exist "dist\config.example.yaml" del /q "dist\config.example.yaml"

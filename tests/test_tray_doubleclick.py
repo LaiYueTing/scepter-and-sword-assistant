@@ -3,13 +3,7 @@
 
     python tests/test_tray_doubleclick.py
 
-⚠ 這條路沒有實機畫面可驗，selftest 也涵蓋不到（那支是驗規則的），而它壞掉的樣子
-  特別安靜：`NotifyIcon` 的 `MouseUp` 帶的 `Clicks` **永遠是 0**（單擊、雙擊都
-  一樣），所以 `Clicks == 2` 從來不成立——圖示在、選單也按得動，只有雙擊沒反應，
-  紀錄上什麼都看不到。
-
-作法是直接對 `NotifyIcon` 內部那個隱藏視窗送 `WM_TRAYMOUSEMESSAGE`
-（`WM_USER + 1024`、lParam 帶真正的滑鼠訊息），那正是通知區域送給它的東西。
+對 `NotifyIcon` 內部的隱藏視窗送 `WM_TRAYMOUSEMESSAGE`（`WM_USER + 1024`、lParam 帶滑鼠訊息）。
 """
 import ctypes
 import os
@@ -21,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 if sys.platform != "win32":
@@ -73,11 +67,7 @@ send = ctypes.windll.user32.SendMessageW
 
 
 def clicks(*msgs) -> int:
-    """送一串滑鼠訊息，回報「顯示視窗」被叫了幾次。
-
-    ⚠ **要等一下再數。** 系統匣的動作是丟到背景執行緒跑的（`Tray._off_ui`），
-      在 UI 執行緒上做會把整個程式鎖死。所以送完訊息的當下還沒有人動作。
-    """
+    """送一串滑鼠訊息，回報「顯示視窗」被呼叫幾次。⚠ 動作在背景執行緒（`Tray._off_ui`），要等一下再數。"""
     shown.clear()
     for msg in msgs:
         send(hwnd, WM_TRAY, 1, msg)
@@ -97,7 +87,7 @@ try:
         WM_LBUTTONDOWN, WM_LBUTTONUP, WM_LBUTTONDBLCLK, WM_LBUTTONUP) == 1)
     check("左鍵單擊不動作（那是選取，不是開啟）",
           clicks(WM_LBUTTONDOWN, WM_LBUTTONUP) == 0)
-    # 右鍵是叫選單的，連按兩下不該把視窗也開出來
+    # 右鍵連按兩下不開視窗
     check("右鍵雙擊不動作",
           clicks(WM_RBUTTONDOWN, WM_RBUTTONUP, WM_RBUTTONDBLCLK, WM_RBUTTONUP) == 0)
 finally:

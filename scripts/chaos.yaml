@@ -4,9 +4,9 @@
 # 1 次。活動沒開放的那一週家園沒有入口，看一眼就結束本輪。
 #
 # 流程：家園右側「混沌侵襲」→ 活動頁領累積獎勵 →「前往」→ 世界地圖找灰色小怪
-#      → 點小怪 →「開始戰鬥」→ 自動打完回地圖，碎晶 +5 → 再點小怪，到 100/100
+#      → 點小怪 →「開始戰鬥」→ 自動戰鬥結束回地圖，碎晶 +5 → 再點小怪，到 100/100
 #      → 地圖找傳送門 → 面板「進入裂縫」→ BOSS 房往上走 → 單人模式確認
-#      →「開始戰鬥」→ 打到結算頁 → 點空白處 → 重傷框「返回家園」→ 家園
+#      →「開始戰鬥」→ 戰鬥到結算頁 → 點空白處 → 重傷框「返回家園」→ 家園
 #
 # 畫面性質：
 # 1. 小怪有呼吸動畫，整隻的模板只在相近的相位才高（同相位 0.77～1.00，其他相位 ≤0.59），
@@ -16,8 +16,8 @@
 # 3. 傳送門是一大塊深紫色：色塊約 30000 像素，其他地圖（含虛空裂縫的地圖）都不到 15000。
 # 4. 本期打過與否：活動頁「目前排名：未上榜」（打過 0.486）；面板的收益次數只裁第一個字元。
 #
-# ⚠ 重傷框一律按「返回家園」：收益次數只有一次，打完之後治療只是多花料理。
-# ⚠ 打完之後碎晶仍是 100/100，所以「打完了」旗標之後不可以再點傳送門。
+# ⚠ 重傷框一律按「返回家園」：收益次數只有一次，結束後治療只是多花料理。
+# ⚠ 完成後碎晶仍是 100/100，所以旗標「已完成」之後不可以再點傳送門。
 #
 # 共通約束與共用規則的說明見 dungeon.yaml 檔頭。
 
@@ -29,7 +29,7 @@ stuck_timeout: 300
 # 正常一輪約 9 分鐘（小怪 20 場約 5 分鐘、BOSS 約 2 分鐘）。
 max_minutes: 25
 
-# 結束程序：世界地圖與 BOSS 房按返回回到家園；打完的路徑已經在家園，不經過這裡。
+# 結束程序：世界地圖與 BOSS 房按返回回到家園；完成的路徑已經在家園，不經過這裡。
 on_finish:
   - log: 本輪結束，返回家園待命
   - wait: 2
@@ -48,7 +48,7 @@ rules:
     template: label_chaos_result
     cooldown: 5
     do:
-      - set_flag: 打完了
+      - set_flag: 已完成
       - log_text:
           造成傷害: {region: [280, 660, 160, 34], scale: 4}
       - count:
@@ -63,9 +63,9 @@ rules:
       - tap_template: btn_heal_home
       - wait: 3
 
-  - name: 單人模式確認框 → 已打完，取消
+  - name: 單人模式確認框 → 本期已完成，取消
     template: label_chaos_solo
-    when_flag: [打完了]
+    when_flag: [已完成]
     cooldown: 3
     do:
       - tap_template: btn_cancel
@@ -96,9 +96,9 @@ rules:
 
   # ==================== 傳送門面板 ====================
 
-  - name: 傳送門面板 → 本期已打完，關閉
+  - name: 傳送門面板 → 本期已完成，關閉
     template: btn_chaos_enter
-    when_flag: [打完了]
+    when_flag: [已完成]
     cooldown: 3
     do:
       - tap: [360, 1200]
@@ -122,7 +122,7 @@ rules:
     cooldown: 3
     do:
       - log: 本期的收益次數已用完，不進入裂縫
-      - set_flag: 打完了
+      - set_flag: 已完成
       - tap: [360, 1200]
       - wait: 2
 
@@ -159,7 +159,7 @@ rules:
     # ⚠ 要有「未上榜」才前往：打過之後排名有數字，再進去也沒有收益。
     template: btn_chaos_go
     require: [label_chaos_page, label_chaos_unranked]
-    when_flag: ["!打完了"]
+    when_flag: ["!已完成"]
     cooldown: 5
     do:
       - tap_match: []
@@ -173,16 +173,16 @@ rules:
     cooldown: 3
     do:
       - log: 本期已經打過混沌侵襲
-      - set_flag: 打完了
+      - set_flag: 已完成
       - tap_template: btn_back_arrow
       - wait: 3
 
-  # ==================== 打完之後 ====================
+  # ==================== 完成之後 ====================
 
-  - name: 打完後仍在地圖或 BOSS 房 → 按返回回家園
+  - name: 完成後仍在地圖或 BOSS 房 → 按返回回家園
     # 沒有倒下時不會跳重傷框，結算頁關掉後留在 BOSS 房。
     require: [label_chaos_widget, btn_back_arrow]
-    when_flag: [打完了]
+    when_flag: [已完成]
     cooldown: 4
     do:
       - tap_template: btn_back_arrow
@@ -190,7 +190,7 @@ rules:
 
   - name: 家園 → 本期已完成，結束本輪
     template: nav_home
-    when_flag: [打完了]
+    when_flag: [已完成]
     sustain: 2
     do:
       - finish: skip_cleanup
@@ -483,7 +483,7 @@ rules:
     template: label_chaos_widget
     region: [590, 150, 130, 600]
     require: [nav_home]
-    when_flag: ["!打完了"]
+    when_flag: ["!已完成"]
     max_fires: 3
     cooldown: 5
     do:
@@ -586,7 +586,7 @@ rules:
 
   # ==================== 後備規則（共用規則，說明見 dungeon.yaml） ====================
 
-  - name: 限時禮包彈窗 → 按系統返回鍵關閉
+  - name: 限時禮包對話框 → 按系統返回鍵關閉
     # 升級或達成條件時跳的付費禮包（好感倍增禮包等）。沒有關閉鈕，系統返回鍵關得掉。
     # 模板取「購買禮包後立即獲得獎勵」那行字：1.000、其餘 ≤0.564。
     # ⚠ 不要點下面的黃色按鈕，那是購買。

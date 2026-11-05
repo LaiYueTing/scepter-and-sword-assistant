@@ -1,17 +1,13 @@
 """`finish: skip_cleanup` 要真的跳過 on_finish，而且只跳這一輪。
 
-伺服器維護中時遊戲根本進不去，而結束程序是「逐層退回家園」——每一步都先 wait_for
-25 秒，在一張沒有導覽列也沒有返回鍵的畫面上那是純粹的空等，還會留下三行
-「畫面上找不到任何模板」看起來像出了事。
-
-selftest 驗不到這條：它一張畫面一張畫面地判斷規則，不會跑到結束程序。
+用於伺服器維護中：結束程序的每一步都會等 25 秒。
 """
 import os
 import tempfile
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-# ⚠ 測試不能寫進真正的 assistant.log，要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core.engine import Engine, Script, ScriptError
@@ -26,7 +22,7 @@ def check(label, cond):
 
 
 class FakeDevice:
-    """結束程序只要一張畫面就跑得起來，內容不重要——這裡驗的是「有沒有跑」。"""
+    """回傳固定畫面，只驗結束程序有沒有執行。"""
 
     def __init__(self):
         self.calls = 0
@@ -66,8 +62,7 @@ e._run_on_finish()
 check("skip_cleanup 不會去抓畫面，也就不會跑結束程序", e.device.calls == 0)
 
 # ---------- 只跳這一輪 ----------
-# ⚠ 排程會拿同一個引擎跑下一輪（Engine.reset()）。旗標沒歸零的話，之後每一輪
-#   都不會回家園待命，而紀錄上完全看不出來。
+# 排程用同一個引擎跑下一輪，reset() 要把旗標歸零。
 e.completed = 1
 e.yielded = False
 e._last_change = 0.0
@@ -83,7 +78,7 @@ e._options_logged = True
 Engine.reset(e)
 check("reset() 會把旗標清掉", e._skip_cleanup is False)
 
-# ---------- 打錯字要在載入時就報錯 ----------
+# ---------- 參數錯誤在載入時報錯 ----------
 try:
     Script.load("dungeon")
     loaded = True

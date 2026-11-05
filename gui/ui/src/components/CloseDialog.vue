@@ -14,10 +14,7 @@ const ui = useUiStore()
 const remember = ref(false)
 
 /**
- * ⚠ **這個對話框是自繪的，不用系統原生的。** 系統對話框是強制回應的，會把整個
- *   視窗凍住——而按下「直接結束」之後還要跑十幾秒的結束程序，那段期間狀態列與日誌
- *   面板都要繼續更新。用文字說明「不是當掉」，卻被自己造成的當掉蓋掉，是同一
- *   條路上最容易犯的錯。
+ * ⚠ 自繪對話框，不用系統原生的：強制回應會凍結視窗，而結束程序期間介面要繼續更新。
  */
 
 async function choose(action) {
@@ -44,11 +41,7 @@ async function choose(action) {
     :mask-closable="false"
     @update:show="(v) => emit('update:show', v)"
   >
-    <!--
-      ⚠ **問句要把兩個選項都講出來**（「結束，還是縮到系統匣」），不要只問
-        「要結束嗎？」。後者把「縮到系統匣」變成一個要自己在按鈕列上發現的東西，
-        而那才是這個對話框存在的理由——執行中直接結束會中斷正在打的副本。
-    -->
+    <!-- 問句要寫出兩個選項：結束，或縮到系統匣。 -->
     <div class="ask">
       <span class="ic"><Power :size="20" /></span>
       <div>
@@ -62,11 +55,7 @@ async function choose(action) {
       </div>
     </div>
 
-    <!--
-      ⚠ **對齊交給版面，不要用 em 去推別的元件的尺寸。** 說明的字級比標籤小，
-        同樣的 `em` 換算出來比較短，說明會跑到標籤左邊去。作法是把說明**放進
-        NCheckbox 自己的內容區**，對齊由它負責，一個像素都不必推算。
-    -->
+    <!-- 說明放在 NCheckbox 的內容區，對齊由元件處理。 -->
     <NCheckbox v-model:checked="remember" class="remember">
       <div>記住我的選擇，下次不要再問</div>
       <div class="hint">之後在標題列的調色盤圖示 →「按下視窗的 ✕ 時」改得回來</div>
@@ -95,7 +84,7 @@ async function choose(action) {
   gap: 12px;
   align-items: flex-start;
 }
-/* 對話框的圖示：主色淡底的圓角方塊。全站的對話框用同一種形狀。 */
+/* 對話框的圖示：主色淡底的圓角方塊 */
 .ic {
   width: 40px;
   height: 40px;
@@ -126,9 +115,8 @@ async function choose(action) {
   align-items: flex-start;
 }
 /*
- * ⚠ **兩行的標籤要讓核取方塊對齊「第一行」，不是整塊的垂直中央。** naive-ui 的
- *   核取方塊預設是 `align-items: center`，標籤一變成兩行，方塊就掉到兩行中間。
- *   把方塊那一格改成靠上、再用和第一行同高的 `min-height` 把它推回那一行的中線。
+ * ⚠ 兩行的標籤，核取方塊要對齊第一行：naive-ui 預設 `align-items: center`，
+ *   方塊靠上，再用和第一行同高的 `min-height` 對齊中線。
  */
 .remember :deep(.n-checkbox-box-wrapper) {
   display: flex;

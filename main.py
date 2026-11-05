@@ -12,9 +12,7 @@
 
 from __future__ import annotations
 
-# ⚠ 這兩行要排在所有重量級 import 之前。底下的 core 會拉進 cv2 與 numpy，那是
-#   啟動時間裡看得見的一大段——先讓啟動畫面動起來，使用者才知道程式在跑。
-#   core.splash 只用標準庫，自己不會拖慢啟動。
+# ⚠ 排在所有重量級 import 之前，core.splash 只用標準庫。
 from core import splash                                    # noqa: E402
 splash.step("載入程式庫")
 
@@ -42,8 +40,7 @@ log = logger.get("main")
 def _load_config(args) -> Config:
     cfg = Config.load(args.config)
 
-    # 剛從範本建立設定檔：還沒填過裝置資訊就直接連線，只會得到一個看不懂的
-    # 連線失敗。停下來讓使用者先填。
+    # 剛從範本建立設定檔，裝置資訊還沒填，先停下來。
     if cfg.is_new:
         print(f"\n[資訊] 已建立設定檔：{cfg.path}")
         print("[提示] 請先開啟這個檔案設定要連的模擬器：")
@@ -55,7 +52,7 @@ def _load_config(args) -> Config:
 
     if args.host:
         cfg.device.host = args.host
-        cfg.device.serial = None      # 明確給了 host 就不再走序號
+        cfg.device.serial = None      # 有給 host 就不用序號
     if args.port:
         cfg.device.port = args.port
     if args.serial:
@@ -72,10 +69,7 @@ def _device(args) -> Device:
 def cmd_devices(args) -> int:
     """列出看得到的裝置，多開時用來查序號。
 
-    預設會**主動探索**（掃本機與設定檔的 host 上常見的模擬器埠），而不是只列
-    `adb devices` 的結果——跨機器的模擬器在 `adb connect` 之前根本不會出現在
-    那份清單裡，而「ADB 調試埠是多少」正是最常卡住人的一步。
-    `--no-scan` 可以退回舊行為（只看已連上的）。
+    預設會探索本機與設定檔 host 上常見的模擬器埠；`--no-scan` 只列已連上的。
     """
     from core import discover
 
@@ -97,9 +91,7 @@ def cmd_devices(args) -> int:
         return 1
 
     want = f"{cfg.device.width}x{cfg.device.height}"
-    # ⚠ 對齊要按**顯示**寬度補（logger.pad），不能用 f-string 的 `:<24`——
-    #   那是按字元數算的，而「狀態」「離線」這些漢字在等寬字型下佔兩格，
-    #   整張表的欄位會跟著歪。
+    # ⚠ 用 logger.pad 按顯示寬度對齊，f-string 的 `:<24` 按字元數算。
     print("\n" + logger.pad("序號", 25) + logger.pad("狀態", 11)
           + logger.pad("解析度", 15) + "型號")
     for f in found:
@@ -118,13 +110,9 @@ def cmd_devices(args) -> int:
 
 
 def cmd_update(args) -> int:
-    """檢查並安裝新版。
+    """檢查並安裝新版，供排程與命令列使用者手動執行。
 
-    圖形介面有一顆「檢查更新」，但**排程與命令列使用者沒有視窗可以按**——
-    工作排程器跑的是 `杖劍傳說助手.exe run`，那條路本來完全碰不到更新。
-
-    ⚠ 不要排進自動流程裡。更新會換掉執行檔並要求重新啟動，而排程醒來的時候
-      往往正要去打副本。這個子命令是給人手動跑的。
+    ⚠ 不要排進自動流程：更新會換掉執行檔並要求重新啟動。
     """
     from core import updater
 
@@ -152,9 +140,9 @@ def cmd_update(args) -> int:
     def show(got: int, total: int) -> None:
         nonlocal last
         pct = got * 100 // total if total else 0
-        if pct != last:                  # 每 1% 印一次，不要每個區塊都印
+        if pct != last:                  # 每 1% 印一次
             last = pct
-            # 回到行首覆蓋前一次的百分比，不要每 1% 換一行
+            # 回到行首覆蓋前一次的百分比
             print(chr(13) + f"下載中 {pct:3d}%", end="", flush=True)
 
     path = updater.download(release, show)
@@ -204,13 +192,11 @@ def cmd_doctor(args) -> int:
     n_script = len(resource_files("scripts", "*.yaml"))
     print(f"模板：{n_tmpl} 張　腳本：{n_script} 份")
 
-    # 檢查腳本引用的模板是否齊全。缺模板的規則會被自動停用，流程不會崩潰，
-    # 但會少一段判斷，先講清楚比較好。
+    # 檢查腳本引用的模板是否齊全（缺模板的規則會被停用）。
     print()
     have = {p.stem for p in resource_files("templates", "*.png")}
 
-    # 「沒有任何腳本用到」要對照所有腳本的聯集算。只比對當下這一份的話，
-    # 被另一份腳本使用的模板都會被誤報成沒人用。
+    # 「沒有任何腳本用到」要對照所有腳本的聯集。
     used_by_any: set[str] = set()
     for path in resource_files("scripts", "*.yaml"):
         try:
@@ -286,14 +272,14 @@ def cmd_record(args) -> int:
         interval=args.interval,
         threshold=args.threshold,
         max_frames=args.max_frames,
-        save_dir=folder,          # 邊錄邊寫檔，中途中斷也不會丟資料
+        save_dir=folder,          # 邊錄邊寫檔
     )
     if not frames:
         print("這段期間畫面完全沒有變化，沒有可用的關鍵幀")
         return 1
 
     total = len(frames)
-    # 錄製時影像沒留在記憶體，總覽圖從檔案重新讀（只讀抽樣後需要的那幾張）
+    # 總覽圖從檔案重新讀（只讀抽樣需要的幾張）
     frames = recorder.load_frames(folder, max_frames=args.max_frames)
     sheet_path = LOG_DIR / "records" / f"{name}_總覽.png"
     vision.imwrite_unicode(sheet_path, recorder.contact_sheet(frames, cols=args.cols))
@@ -304,7 +290,7 @@ def cmd_record(args) -> int:
 
 
 def cmd_sheet(args) -> int:
-    """從已存檔的錄製資料夾重做總覽圖（錄製被中斷時用得上）。"""
+    """從已存檔的錄製資料夾重做總覽圖。"""
     folder = recorder.record_dir(args.name)
     if not folder.is_dir():
         print(f"[失敗] 找不到錄製資料夾：{folder}")
@@ -325,11 +311,7 @@ def cmd_sheet(args) -> int:
 
 
 def cmd_scan(args) -> int:
-    """掃描整段錄製，找出哪些幀出現了指定模板。
-
-    用來在幾百張幀裡定位特定畫面（例如「哪幾張有齒輪按鈕」），
-    比一批批翻總覽圖快得多。
-    """
+    """掃描整段錄製，找出出現指定模板的幀。"""
     folder = recorder.record_dir(args.name)
     if not folder.is_dir():
         print(f"[失敗] 找不到錄製資料夾：{folder}")
@@ -350,7 +332,7 @@ def cmd_scan(args) -> int:
             print(f"[失敗] {e}")
             return 1
         if args.absent:
-            # 反向找：列出「沒有」這個模板的幀，用來挑出非戰鬥畫面
+            # 反向：列出沒有這個模板的幀
             if m is None:
                 hits += 1
                 print(f"  {p.stem}")
@@ -365,11 +347,7 @@ def cmd_scan(args) -> int:
 
 
 def cmd_explain(args) -> int:
-    """對當前畫面逐條評估腳本規則，說明會觸發哪一條。
-
-    寫規則時最常見的問題是「順序錯了」或「模板認不出來」，這個指令把每條規則的
-    判斷結果攤開，一眼看得出是哪一種。
-    """
+    """對當前畫面逐條評估腳本規則，說明會觸發哪一條。"""
     from core import vision as _v
 
     cfg = _load_config(args)
@@ -377,7 +355,7 @@ def cmd_explain(args) -> int:
     name = args.task or (cfg.enabled_tasks or cfg.tasks)[0].name
 
     script = Script.load(name, cfg.options)
-    # 套用 config 開關，讓這裡的結論跟實際執行完全一致
+    # 套用 config 開關，與實際執行一致
     from core.engine import apply_options
     for rule in apply_options(script.rules, cfg.options):
         print(f"（已依設定停用：{rule.name} — {rule.when_option}）")
@@ -415,7 +393,7 @@ def cmd_explain(args) -> int:
                 ok = False
 
         if rule.measure:
-            # 不模擬 smooth（滑動中位數）：只有一張畫面可看，平滑沒有意義。
+            # 不模擬 smooth：只有一張畫面。
             from core.engine import (_measure_text, describe_measure,
                                      measure_ok, measure_raw)
             value = measure_raw(screen, rule.measure)
@@ -461,7 +439,7 @@ def cmd_explain(args) -> int:
         mark = "→ 觸發" if ok and fired is None else ("  可成立" if ok else "  -")
         if ok and fired is None:
             fired = rule
-        # 對齊要按顯示寬度算：規則名稱是中文，ljust 按字元數補會讓欄位歪掉
+        # 按顯示寬度對齊
         print(f"{logger.pad(mark, 8)} {logger.pad(rule.name, 34)} {'  '.join(notes)}")
 
     print()
@@ -469,17 +447,14 @@ def cmd_explain(args) -> int:
         print(f"結論：會執行「{fired.name}」")
         for action in fired.actions:
             for verb, arg in action.items():
-                # 沒有參數的動作（count、finish）寫成 `- count:`，
-                # YAML 讀出來是 None，直接印會變成「count: None」
+                # 沒有參數的動作（count、finish）讀出來是 None，不印參數
                 print(f"   {verb}" + (f": {arg}" if arg is not None else ""))
     else:
         print("結論：沒有規則成立，引擎會停在等待狀態")
     return 0
 
 
-# selftest 用的固定設定，刻意不跟著使用者當下的 config 跑——否則暫時改了某個
-# 開關，測試結果就會跟著變，失去比對基準的意義。各腳本的開關列在一起，
-# 用不到的不影響。
+# selftest 用的固定設定，不跟著使用者當下的 config，比對基準才穩定。
 SELFTEST_OPTIONS = {
     # 自動副本
     "claim_reward": True,
@@ -518,22 +493,12 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
             continue
 
         screen = vision.imread_unicode(path)
-        # 每個樣本都從乾淨狀態判斷。開關每次重新套用，這樣個別案例可以用
-        # options: 覆寫標準設定，驗證不同開關組合下的行為。
+        # 每個樣本都從乾淨狀態判斷。案例欄位：
+        #   options:  覆寫標準設定，驗證不同開關組合
+        #   fired:    走到這張畫面之前已用完的規則（每輪只做一次的附帶動作）
+        #   flags:    走到這張畫面時已設定的旗標；沒寫就視為一律成立
         #
-        # ⚠ **`_today` 也要歸零。** 它是 `Script.load` 從**正式的** `state.json`
-        #   讀進來的，所以少了這一行，selftest 的結果會跟著「使用者今天實際跑了
-        #   幾次」而變——晨星捐獻在早上那輪用滿 4 次之後，下午再跑就會報
-        #   「捐獻面板 → 花晨星捐贈」不符預期，看起來完全像是規則被改壞了。
-        #   `tests/test_arena_retry.py` 是備份／清空／還原整個檔案；這裡只要在
-        #   記憶體裡歸零就好，**不要去動使用者的 state.json**。
-        #
-        # `fired:` 列出「走到這張畫面之前已經用完」的規則名稱：每輪只做一次的
-        # 附帶動作（公會島的累積獎勵）在每張島上都成立，不列的話它會蓋掉
-        # 這張樣本真正要驗的那條。
-        #
-        # `flags:` 指定走到這張畫面時已經設好的旗標，用來驗旗標的分岔；
-        # 沒寫就維持「旗標一律當成立」。
+        # ⚠ `_today` 要歸零：Script.load 從正式的 state.json 讀入，不可讓結果隨當天次數改變。
         engine._flags = set(case["flags"]) if "flags" in case else None
         used = set(case.get("fired") or [])
         for rule in script.rules:
@@ -545,9 +510,7 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
         hit = engine._match_rule(screen)
         actual = hit[0].name if hit else ""
 
-        # 有 sustain 的規則第一輪本來就不該成立（要先連續成立一段時間）。
-        # 若預期的正是這種規則，就把計時往前調再判一次，
-        # 驗證「等夠久之後會動作」這件事。
+        # 有 sustain 的規則第一輪不會成立。預期的正是這種規則時，把計時調滿再判一次。
         if actual != want and want:
             for rule in script.rules:
                 if rule.name == want and rule.sustain:
@@ -568,12 +531,9 @@ def _selftest_one(task: str, expected_file: Path, cfg: Config) -> tuple[int, lis
 
 
 def cmd_selftest(args) -> int:
-    """拿 samples/ 的實機畫面驗證規則判斷有沒有被改壞。
+    """拿 samples/ 的實機畫面驗證規則判斷。
 
-    模板重裁、規則調順序之後跑一次，比再開一次遊戲快得多。
-
-    不指定 -t 時會把每個有預期結果檔的腳本都跑一遍。模板是所有腳本共用的，
-    改一個模板可能同時影響好幾份腳本，所以預設就全部驗。
+    不指定 -t 時驗證每一份有預期結果檔的腳本（模板是共用的）。
     """
     sample_dir = SAMPLE_DIR
     cfg = _load_config(args)
@@ -616,11 +576,7 @@ def cmd_selftest(args) -> int:
 
 
 def cmd_clean(args) -> int:
-    """清掉執行過程產生的截圖與錄製。
-
-    錄製很佔空間（一段十分鐘的錄製可以到幾百 MB），但 samples/ 裡的
-    回歸測試樣本是專案的一部分，不會被清掉。
-    """
+    """清掉執行過程產生的截圖與錄製，samples/ 不受影響。"""
     targets = [
         (LOG_DIR / "records", "流程錄製"),
         (LOG_DIR / "frames", "除錯截圖"),
@@ -707,11 +663,7 @@ def _find_shot(source: str) -> Path | None:
 
 
 def cmd_text(args) -> int:
-    """用系統內建的 OCR 讀一塊區域，用來調 log_text 的參數。
-
-    和 `find` 之於模板是同一個定位：參數不要猜，量出來再寫進腳本。OCR 對放大倍率
-    與前處理很敏感（同一行字 x2 讀成「亞本獎勵」、x4 才讀對），一定要先試過。
-    """
+    """用系統內建的 OCR 讀一塊區域，用來調 log_text 的參數。"""
     from core import ocr
 
     if args.source:
@@ -741,7 +693,7 @@ def cmd_text(args) -> int:
 
 
 def cmd_crop(args) -> int:
-    """從截圖裁一塊區域存成模板，省去開繪圖軟體的麻煩。"""
+    """從截圖裁一塊區域存成模板。"""
     src = _find_shot(args.source)
     if src is None:
         print(f"[失敗] 找不到截圖：{args.source}")
@@ -769,30 +721,24 @@ def cmd_tap(args) -> int:
 
 
 def _claim_single_instance(gui: bool) -> bool:
-    """確認沒有另一個助手在跑。已經有的話把那個視窗叫回前景，並回報 False。
+    """確認沒有另一個助手在跑。已經有的話把那個視窗叫回前景，回傳 False。
 
-    `gui` 有兩個作用：決定訊息去對話框還是終端機，以及**要不要開門讓別人叫**——
-    命令列的 run 沒有視窗可叫回，第二個實例要敲不到才知道該自己說明。
-
-    ⚠ 只給**會操作裝置**的命令用（兩種介面與 run）。doctor、explain、find、
-      selftest 是唯讀工具，擋了只會妨礙除錯。
+    `gui` 決定訊息去對話框還是終端機，以及是否開門讓別人叫。
+    ⚠ 只給會操作裝置的命令用（介面與 run）。
     """
     if singleton.acquire(windowed=gui) is not None:
         return True
 
     woke = singleton.wake_existing()
     if gui and woke:
-        return False        # 既有的視窗會跳到前面自己說明，這裡不必再出聲
+        return False        # 既有的視窗會自己說明
 
-    # ⚠ 命令列這邊即使敲到了也要說一句。視窗跳出來的是**另一個**畫面，
-    #   打指令的人看著終端機，什麼都不印就等於沒有反應。
-    # 只說「發生了什麼、是哪一個」。為什麼只能開一個寫在 core/singleton.py，
-    # 這句話每次重複執行都會出現，不該把設計理由夾在裡面。
+    # ⚠ 命令列敲到了也要印一行：視窗跳出來的是另一個畫面。
     text = ("助手已經在執行中"
             + ("，已切換到原本那個視窗。" if woke
                else "（可能是工作排程器在背景跑的那一份）。"))
     if gui:
-        splash.close()      # 載入視窗是 always on top，留著會蓋住提示框
+        splash.close()      # 啟動畫面是 always on top，會蓋住提示框
         logger.message_box("杖劍傳說助手", text, logger.MB_INFO)
     else:
         print(f"[失敗] {text}")
@@ -800,12 +746,10 @@ def _claim_single_instance(gui: bool) -> bool:
 
 
 def cmd_gui(args) -> int:
-    """開圖形介面。不帶任何參數執行時走的也是這裡。
+    """開圖形介面，不帶參數執行時走這裡。
 
-    ⚠ 前端資源要先建置：`cd gui/ui && npm run build`。沒建的話這裡會跳一個講清楚
-      該打什麼指令的對話框，而不是開一個空白視窗。
-
-    ⚠ 啟動畫面留到視窗內容載好才收掉（`gui/app.py`），這裡只收開不了視窗的那幾條路。
+    ⚠ 前端資源要先建置（`cd gui/ui && npm run build`），沒建置時跳對話框說明。
+    ⚠ 啟動畫面由 `gui/app.py` 在視窗載好時關閉，這裡只處理開不了視窗的路徑。
     """
     if not _claim_single_instance(gui=True):
         splash.close()
@@ -822,12 +766,12 @@ def cmd_gui(args) -> int:
     return gui_main()
 
 def cmd_run(args) -> int:
-    """依排程輪流執行啟用的腳本。排程本身在 core/runner.py，CLI 與 GUI 共用。"""
+    """依排程輪流執行啟用的腳本，排程在 core/runner.py。"""
     if not _claim_single_instance(gui=False):
         return 1
     cfg = _load_config(args)
 
-    # 指定 -t 就只跑那一個、跑完結束，方便手動補跑或除錯
+    # 指定 -t 就只跑那一個，跑完結束
     if args.task:
         tasks = [cfg.task_of(args.task)]
         one_shot = True
@@ -984,7 +928,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _pause() -> None:
-    """雙擊執行時視窗會隨程式結束一起關掉，先停住讓人看得到訊息。"""
+    """雙擊執行時先停住，讓人看得到訊息。"""
     try:
         input("\n按 Enter 關閉視窗 ...")
     except (EOFError, KeyboardInterrupt):
@@ -994,38 +938,36 @@ def _pause() -> None:
 def main() -> int:
     argv = sys.argv[1:]
 
-    # 上一次更新留下的 `杖劍傳說助手.exe.old` 在這裡清掉。
-    # ⚠ 只能在**下一次啟動**刪：換檔當下那個檔案還是執行中的自己。
+    # 清掉上次更新留下的 `.old`。⚠ 只能在下一次啟動刪，換檔當下那個檔案還在執行。
     try:
         from core import updater
         updater.cleanup()
-        # 清掉上次被強制結束時留下的解壓殘骸。
+        # 清掉上次被強制結束時留下的解壓目錄。
         updater.sweep_temp()
     except Exception:
-        pass                    # 清不掉不影響任何功能，不值得讓程式起不來
+        pass                    # 清不掉不影響功能
 
-    # 沒有任何參數就開圖形介面，帶參數則走命令列。同一個執行檔兩種用法。
+    # 沒有參數就開圖形介面，帶參數走命令列。
     if not argv:
-        # 未打包時 `python main.py` 有主控台可以藏；打包版是 --windowed，本來就沒有。
+        # 未打包時 `python main.py` 有主控台可以藏；打包版是 --windowed，沒有主控台。
         hidden = logger.hide_console()
         code = cmd_gui(None)
         if code and hidden:
-            logger.show_console()    # 藏起來的話，失敗訊息就沒有人看得到
+            logger.show_console()    # 失敗訊息要看得到
         return code
 
-    # 命令列模式：--windowed 打包後 stdout 是 None，要先借用呼叫者的主控台，
-    # 否則 run / explain 那些命令會什麼都印不出來。
-    # ⚠ 啟動畫面是給雙擊開視窗用的，命令列這條路沒有視窗會接手，要當場收掉。
+    # 命令列模式：--windowed 的 stdout 是 None，借用呼叫者的主控台。
+    # ⚠ 命令列沒有視窗會接手，啟動畫面當場關閉。
     splash.close()
     logger.attach_console()
-    # 打包成 EXE 之後，視窗標題預設是那一長串執行檔路徑，看不出在跑什麼
+    # 打包版的視窗標題預設是執行檔路徑
     logger.set_console_title(f"杖劍傳說助手 v{VERSION}")
 
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
     except (AdbError, ConfigError, ScriptError) as e:
-        # 這些例外的訊息都是寫給使用者看的，直接顯示，不要吐 traceback
+        # 這些例外的訊息本身就是給使用者看的
         print(f"\n[錯誤] {e}")
         return 1
     except FileNotFoundError as e:

@@ -1,10 +1,6 @@
 """視窗外殼：建視窗、掛系統匣、把方法表交給 pywebview。
 
-前端是 `gui/ui` 那份 Vue，建置產物在 `gui/web`；用系統內建的 WebView2 引擎，
-所以整個程式仍然是單一行程、單一 EXE。
-
-**介面只是另一張臉**——連線、規則引擎、排程全部沿用 `core/` 底下同一份程式，
-這裡不重新實作任何判斷邏輯。
+前端是 `gui/ui` 的 Vue，建置產物在 `gui/web`，用系統內建的 WebView2 引擎。不實作任何判斷邏輯。
 """
 
 from __future__ import annotations
@@ -31,40 +27,22 @@ log = logger.get("gui")
 
 
 def web_dir() -> Path:
-    """前端資源的位置。打包後在 BUNDLE（唯讀），開發時在專案裡。"""
+    """前端資源的位置：打包後在 BUNDLE，開發時在專案裡。"""
     packed = BUNDLE / "gui" / "web"
     return packed if packed.exists() else Path(__file__).parent / "web"
 
 
-# 「已經在執行中」的說明正開著嗎。系統對話框是阻塞的，連按好幾次會在關掉一個之後
-# 又跳一個；多的那幾次只把視窗叫到前面就好，那本來就是使用者要的。
+# 「已經在執行中」的對話框是否開著。系統對話框是阻塞的，開著時不再跳第二個。
 _explaining = threading.Event()
 
 
 def _quiet_disposed(record: logging.LogRecord) -> bool:
-    """擋掉關視窗那一瞬間的 `ObjectDisposedException`。
+    """過濾 pywebview 的兩種已知雜訊，其他錯誤照常留著：
 
-    WebView2 被處置之後，還在路上的那一則事件會讓 `evaluate_js` 丟 .NET 例外。
-    `Channel._emit` 接得住也只會失敗一次（之後 `_closed` 就擋下來了），但**那個例外是
-    pywebview 自己 log 完才吞掉的**——我們的 try/except 根本沒機會碰到它，而 root
-    logger 的檔案 handler 收得到所有人的紀錄，於是二十幾行 .NET traceback 一路寫進
-    `assistant.log`，把使用者真正要查的東西擠掉。
+    關閉視窗瞬間的 `ObjectDisposedException`，以及結束時的「Failed to delete user data folder」。
 
-    ⚠ **要比對的是例外的「型別名稱」，兩個直覺的作法都沒有用：**
-
-      - `record.getMessage()` → pywebview 記的訊息只有「Error occurred in script」，
-        一個字都對不上。
-      - `str(exc_info[1])` → .NET 例外的字串形式是**本地化過的訊息**
-        （「無法存取已處置的物件。」），也沒有那串英文。
-
-      畫面上看到的 `System.ObjectDisposedException:` 是 traceback **格式化時**才補上的
-      型別名稱。所以要問 `exc_info[0].__name__`。兩次修錯的症狀完全一樣：
-      「明明加了過濾，traceback 還是每次都印」。
-
-    另一則是結束時的「Failed to delete user data folder」：WebView2 的行程還沒結束，
-    暫存資料夾刪不掉，下次啟動照常使用，不影響功能。
-
-    ⚠ 只擋這兩種已知的雜訊，pywebview 其他的錯誤照樣留著。
+    ⚠ 比對例外的型別名稱（`exc_info[0].__name__`）：訊息只有「Error occurred in script」，
+      `str(exc_info[1])` 是本地化過的文字。
     """
     exc = record.exc_info
     if exc and exc[0] is not None:
@@ -76,15 +54,11 @@ def _quiet_disposed(record: logging.LogRecord) -> bool:
 
 
 def _allow_taskbar_minimize(window) -> None:
-    """讓「點工作列上的圖示」也能把視窗縮小，和別的視窗一樣。
+    """補上 `WS_MINIMIZEBOX`，讓點工作列圖示可以縮小視窗。
 
-    無邊框視窗（`frameless=True` → WinForms 的 `FormBorderStyle.None`）建出來的
-    樣式**沒有 `WS_MINIMIZEBOX`**（0x16010000），而 Windows 的工作列是看這個
-    旗標決定點圖示要不要縮小——沒有它就只會把視窗叫到前面，於是只剩自繪的那顆
-    縮小鍵能用。WinForms 對 None 這種邊框不理會 `MinimizeBox` 屬性，只能自己補
-    樣式位元，最大化／還原／縮小之後都留得住。
+    無邊框視窗（FormBorderStyle.None）沒有這個樣式位元，WinForms 也不理會 `MinimizeBox`。
 
-    ⚠ 要等 handle 建好（接在 `shown` 上），太早叫 `Handle` 會把視窗提前建出來。
+    ⚠ 要等 handle 建好（接在 `shown` 上）。
     """
     try:
         handle = window.native.Handle.ToInt64()
@@ -102,11 +76,7 @@ def _allow_taskbar_minimize(window) -> None:
 
 
 def _restore(window) -> None:
-    """把視窗叫回前景。
-
-    ⚠ **`restore()` 與 `show()` 兩個都要，順序也不能反。** 被縮到系統匣的視窗是
-      「隱藏」，被最小化的是「minimized」——只做其中一個，另一種情況就叫不回來。
-    """
+    """把視窗叫回前景。⚠ `restore()` 與 `show()` 都要，順序不可反（最小化與隱藏是兩種狀態）。"""
     try:
         window.restore()
         window.show()
@@ -115,18 +85,13 @@ def _restore(window) -> None:
 
 
 def _wake(window) -> None:
-    """有人又啟動了一次助手：把這個視窗叫回前景並說明原因。
-
-    ⚠ 這是在 singleton 的背景執行緒上跑的。pywebview 的視窗方法會自己 marshal
-      回 UI 執行緒，而 MessageBoxW 擋住的也只是這條執行緒。
-    """
+    """另一個行程要求叫回視窗：叫回前景並說明原因。⚠ 跑在 singleton 的背景執行緒上。"""
     _restore(window)
 
     if _explaining.is_set():
         return
     _explaining.set()
     try:
-        # 理由寫在 core/singleton.py，不放進每次都會跳的對話框裡。
         logger.message_box("杖劍傳說助手",
                            "助手已經在執行中，已切換到原本那個視窗。",
                            logger.MB_INFO)
@@ -134,29 +99,22 @@ def _wake(window) -> None:
         _explaining.clear()
 
 
-# 縮到系統匣時跳的那一則。三句話對應三件事：**去哪了、還在不在做事、怎麼回來**，
-# 最後一行是「點下去會怎樣」——沒有它就沒有人知道這則可以點擊。
-#
-# ⚠ **要自己斷行**，否則會擠成一團（`\n` 在 Windows 11 的 toast 上有效）。
+# 縮到系統匣時的通知：去哪了、還在不在執行、怎麼回來，以及點擊通知的效果。
+# ⚠ 要自己斷行（`\n` 在 Windows 11 的 toast 上有效）。
 TRAY_HINT_TEXT = ("已縮到系統匣，排程與腳本繼續執行。\n"
                   "雙擊右下角的圖示可以叫回視窗。\n"
                   "（點擊這則通知將不再提醒）")
 
 
 def dismiss_tray_hint(channel) -> None:
-    """使用者點了那則通知：以後就不再跳。
-
-    ⚠ **只寫檔案不夠，畫面也要跟著換。** 「介面設定」那一列讀的是前端載入時抓下來
-      的值，不推事件的話它會一直停在「提醒」，要重新啟動助手才會更新，
-      看起來就像「點了沒有記住」。
-    """
+    """使用者點了通知：不再提醒。⚠ 要推事件更新介面上的設定值，只寫檔案畫面不會變。"""
     uistate.set("tray_hint", False)
     channel.send("ui_pref", {"key": "tray_hint", "value": False})
 
 
 def main() -> int:
-    """開視窗。回傳結束碼，讓 `main.py` 直接拿去 sys.exit。"""
-    # 同一時間只能有一個助手在操作模擬器。
+    """開視窗，回傳結束碼。"""
+    # 同一時間只能有一個助手操作模擬器。
     lock = singleton.acquire(windowed=True)
     if lock is None:
         splash.close()
@@ -168,13 +126,10 @@ def main() -> int:
     channel = Channel()
     api = Api(channel)
 
-    # 紀錄同時進檔案與介面。⚠ 掛在 root logger 上，`core.*` 每個模組都收得到。
+    # 紀錄同時進檔案與介面。掛在 root logger 上。
     logging.getLogger().addHandler(WebLogHandler(channel))
 
-    # ⚠ **pywebview 的紀錄會落進 assistant.log。** root logger 的檔案 handler 收
-    #   得到所有人的紀錄，而關視窗時那串 .NET traceback 有二十幾行——會把使用者
-    #   真正要查的東西擠掉。上面 `on_closing` 已經治本（先收通道再拆視窗），
-    #   這道濾網是保險：只擋那一種已知的雜訊，pywebview 其他的錯誤照樣留著。
+    # 過濾 pywebview 寫進 assistant.log 的已知雜訊。
     logging.getLogger("pywebview").addFilter(_quiet_disposed)
 
     index = web_dir() / "index.html"
@@ -193,13 +148,7 @@ def main() -> int:
     width = int(bounds.get("width") or 1180)
     height = int(bounds.get("height") or 840)
 
-    # 開在螢幕正中央。
-    #
-    # ⚠ **pywebview 不給預設位置**，交給作業系統決定——而 WinForms 的預設是
-    #   `WindowsDefaultLocation`，也就是每次開都往右下偏一點。使用者的感覺是
-    #   「位置隨機」，尤其在關掉又開的時候特別明顯。
-    #
-    # ⚠ 拿不到螢幕資訊就把 x/y 留成 None（回到系統預設），不要讓外觀問題擋住開窗。
+    # 開在螢幕正中央（pywebview 預設交給系統，每次位置不同）。拿不到螢幕資訊時交給系統。
     pos = {}
     try:
         screen = webview.screens[0]
@@ -216,42 +165,26 @@ def main() -> int:
         height=height,
         min_size=(940, 640),
         **pos,
-        # 自繪標題列。⚠ `easy_drag=False` 是必要的：預設會讓**整個視窗**都能拖，
-        #   於是點紀錄面板、拖捲軸都在搬視窗。拖曳區改由 CSS 的
-        #   `-webkit-app-region: drag` 指定。
+        # 自繪標題列。⚠ `easy_drag=False`：預設整個視窗都能拖，拖曳區由 CSS 指定。
         frameless=True,
         easy_drag=False,
-        # ⚠ **`text_select` 預設是 False，而它會往 body 注入一條**
-        #   `user-select: none`——於是**整個介面一個字都選不起來**，日誌的
-        #   「複製選取的內容」自然按了沒反應（而且那個項目看起來是好的，因為
-        #   選單打開時判斷「有沒有選取」得到的答案永遠是「沒有」）。
-        #   打開之後改由 `styles/main.css` 決定哪裡選得起來：**預設不給選**
-        #   （拖選按鈕與標籤的文字會讓它看起來像網頁），日誌、路徑、輸入框
-        #   這些「內容」才開放。
+        # ⚠ `text_select=True`：預設會在 body 注入 user-select: none。
+        #   可選取的範圍由 `styles/main.css` 決定。
         text_select=True,
-        background_color="#16181D",     # 載入前的底色，避免閃一下白畫面
+        background_color="#16181D",     # 載入前的底色
     )
-    # ⚠ **視窗一定要走 `attach_window()`（它存進底線開頭的屬性），不能直接掛成
-    #   `api.window`。** pywebview 會走訪 js_api 的每一個公開成員，而 window 底下是
-    #   .NET 的 Form——屬性鏈無限長，掃到就一路遞迴到 maximum recursion depth，
-    #   **每秒刷幾十行錯誤而視窗照樣開得起來**，所以很容易被當成只是雜訊。
-    #   ⚠ 「pywebview 只挑 callable，所以掛上去也沒關係」是錯的：它掃的是**成員**，
-    #   不是方法。`Api` 的公開成員必須全部都是方法。
+    # ⚠ 視窗走 `attach_window()`，不可掛成 `api.window`（見 Api.attach_window）。
     api.attach_window(window)
 
     def on_loaded() -> None:
-        """頁面載好了才接通道，並補一則 `ready`。
+        """頁面載好才接通道並送 `ready`。
 
-        ⚠ **不能在 create_window 之後就 attach。** 那時頁面還沒跑，`window.__recv`
-          還不存在——`evaluate_js` 會安靜地什麼都不做，於是開場那幾行紀錄（設定
-          說明、「哪些規則因設定而不啟用」）就這樣不見了。接在 `loaded` 上，
-          等待期間的訊息會留在 `Channel._pending` 裡，attach 時一次補送。
-
-        ⚠ `ready` 是前端「可以去拉狀態了」的信號。
+        ⚠ 不可在 create_window 之後就接：`window.__recv` 還不存在，evaluate_js 不會報錯也不會執行。
+          等待期間的訊息留在 `Channel._pending`。
         """
         channel.attach(window)
         channel.send("ready", {"shell": "web"})
-        # 留一點時間讓前端套用外觀，收掉啟動畫面時看到的才是完整的介面
+        # 等前端套用外觀，再關閉啟動畫面
         splash.step("完成")
         threading.Timer(0.3, splash.close).start()
 
@@ -262,21 +195,13 @@ def main() -> int:
     window.events.loaded += on_loaded
     window.events.shown += on_shown
 
-    # 開發用的診斷出口：把一段 JS 丟進頁面跑，結果印到 stderr。
-    #
-    # ⚠ **只在環境變數存在時才掛**——這是一條可以執行任意程式碼的路。
-    #
-    # 為什麼值得留著：外觀這一類問題「用看的」判斷不了（顏色到底套上去沒有、
-    # 對比夠不夠、某個元素的 computed style 是什麼），而猜錯一次的成本是重編、
-    # 重新啟動、再看一眼。
+    # 開發用的診斷出口：把一段 JS 丟進頁面執行，結果印到 stderr。
+    # ⚠ 只在環境變數 SSA_EVAL 存在時才掛，這條路可以執行任意程式碼。
     if os.environ.get("SSA_EVAL"):
         def _eval() -> None:
-            """跑一段 JS，把結果印到 stderr。
+            """執行一段 JS，把結果印到 stderr。
 
-            ⚠ **`evaluate_js` 不會等 Promise。** 丟一個 async IIFE 進去，拿回來的是
-              序列化過的 Promise——也就是 `{}`，而且不會有任何錯誤。要量的東西幾乎
-              都需要「點一下、等一下、再讀」，所以約定是：**腳本把結果寫進
-              `window.__diag`，這裡輪詢**。同步的腳本則直接用回傳值。
+            ⚠ `evaluate_js` 不等 Promise。非同步腳本把結果寫進 `window.__diag`，這裡輪詢。
             """
             try:
                 out = window.evaluate_js(os.environ["SSA_EVAL"])
@@ -289,23 +214,19 @@ def main() -> int:
                 text = json.dumps(out, ensure_ascii=False)
             except Exception as e:
                 text = f"error {e}"
-            # 固定的標記，呼叫端才 grep 得到——stderr 上還有 pywebview 自己的訊息
+            # 固定的標記，呼叫端用來搜尋
             print(f"[EVAL]{text}[/EVAL]", file=sys.stderr, flush=True)
 
-        # 等頁面自己跑完一輪再問，否則量到的是還沒套用外觀的狀態
+        # 等頁面穩定再執行
         window.events.loaded += lambda: threading.Timer(3.0, _eval).start()
 
     def on_closing() -> bool:
-        """視窗被關掉（系統的關閉、Alt+F4）時，不要把正在執行結束程序的腳本一起帶走。
+        """視窗被系統關閉（Alt+F4）時送出停止要求，結束程序在背景跑完。
 
-        ⚠ 自繪的 ✕ 走的是 `Api.win_close`，不會經過這裡——那條路要先問使用者。
-          這裡接的是「繞過介面的關閉」，所以就地把停止要求送出去。
+        自繪的 ✕ 走 `Api.win_close`，不經過這裡。
 
-        ⚠ **通道要在這裡收，不能等 `closed`。** `closed` 是 WebView2 已經被處置
-          之後才發的，中間那段每一發 `evaluate_js` 都會丟
-          `ObjectDisposedException`——而那是 pywebview **自己 log 完才吞掉**的，
-          我們的 `try/except` 根本接不到，例外就一路寫進 assistant.log——所以在
-          `_emit` 裡接是沒有用的，要在這裡就把通道收掉。
+        ⚠ 通道要在這裡關閉，不可等 `closed`：那時 WebView2 已處置，
+          ObjectDisposedException 由 pywebview 自己寫進紀錄，接不到。
         """
         channel.close()
         if api.is_running():
@@ -315,9 +236,6 @@ def main() -> int:
     window.events.closing += on_closing
 
     # ---------- 系統匣 ----------
-    #
-    # ⚠ **排程工具本來就是掛著跑的**，關掉視窗不該等於結束程式。沒有系統匣的話，
-    #   「縮到背景」隱藏之後畫面上完全沒有痕跡，右下角也找不到它。
     tray = Tray(
         window,
         is_running=api.is_running,
@@ -326,22 +244,17 @@ def main() -> int:
         on_quit=lambda: api.win_quit({}),
     )
     tray.install()
-    # ⚠ 這一則要說完三件事：**去哪了、還在不在做事、怎麼回來**。少了最後一項，
-    #   使用者會再雙擊一次 EXE——而那會被防多開擋下來，看起來就像「按了沒反應」。
-    #
-    # 最後那句是「點下去會怎樣」：沒有它就沒有人知道這則通知可以點擊。
-    # ⚠ 點擊那條路不保證走得到（見 `Tray.notify`），所以「介面設定」裡也有同一個
-    #   開關——關掉之後 `win_hide` 就不會再呼叫這個 hook 了。
+    # 通知內容見 TRAY_HINT_TEXT。點擊通知不一定收得到事件（見 `Tray.notify`），
+    # 所以「介面設定」裡也有同一個開關。
     api.set_hidden_hook(
         lambda: tray.notify(TRAY_HINT_TEXT,
                             on_click=lambda: dismiss_tray_hint(channel)))
 
-    # 之後有人再啟動一次，就把這個視窗叫回前景
+    # 之後有人再啟動一次，把這個視窗叫回前景
     lock.listen(lambda: _wake(window))
     webview.start(debug=False)
 
-    # ⚠ **圖示一定要在這裡拆掉。** `Application.Run` 已經結束，沒處置掉的話
-    #   Windows 會在通知區域留下一顆幽靈圖示。
+    # ⚠ 要在這裡移除圖示，否則通知區域會留下一顆幽靈圖示。
     tray.remove()
     channel.close()
     return 0

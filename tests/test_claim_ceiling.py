@@ -1,28 +1,24 @@
 """副本領獎的天花板閘門：詳情頁看到的事實，靠旗標帶到結算頁去用。
 
-selftest 結構上驗不到——它一張畫面一張畫面地判斷，每一輪的旗標都是空的，
-而這裡要驗的正是**上一個畫面設下的旗標**。
+驗上一個畫面設定的旗標（selftest 沒有跨畫面的旗標）。
 """
 import os
 import tempfile
 import sys, pathlib, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core.config import Config
 from core.engine import Engine, Script, ScriptError, apply_options
 from core import dailystate, vision
 
-# ⚠ 「先把領獎次數買滿」用 max_fires_daily，計數記在 state.json 裡而且**跨執行
-#   保留**——不隔離的話，機器上今天真的買過的次數會把測試擋掉，看起來像回歸。
+# ⚠ 「先把領獎次數買滿」的計數記在 state.json，測試要自己隔離。
 _STATE = dailystate.PATH.read_bytes() if dailystate.PATH.exists() else None
 dailystate.PATH.unlink(missing_ok=True)
 
-# ⚠ like_teammates 關掉：「結算頁 → 幫隊友按讚」排在領獎前面而且沒有 cooldown，
-#   開著的話結算頁永遠停在它那裡，驗不到底下的領獎規則。
+# ⚠ like_teammates 關閉：「幫隊友按讚」排在領獎前面而且沒有 cooldown。
 OPTIONS = {"claim_reward": True, "stop_when_no_count": True,
            "auto_battle_mode": True, "accept_with_partners": True,
            "like_teammates": False,
@@ -69,8 +65,7 @@ def check(got, want, what):
     assert got == want, f"預期 {want}，實際 {got}"
 
 
-# 配對那條排在天花板判斷前面（刻意的：不要搶在配對那一輪前面），所以要把它當成
-# 剛觸發過，才輪得到底下那幾條。
+# 配對那條排在最高難度判斷前面，當成剛觸發過才輪得到底下那幾條。
 MATCHING = "副本詳情頁 → 確認副本後配對"
 
 print("=== 1. 還沒確認天花板時，拿到 S 也不領獎 ===")
@@ -87,8 +82,7 @@ check(step(e, RESULT_S), "結算 S 級 → 領取獎勵", "設了旗標就領獎
 print()
 print("=== 3. 這一級還沒拿到 S 就不算天花板 ===")
 e = new_engine()
-# 配對那條當成剛觸發過，所以會一路落到純攔截——那正好證明三條天花板規則
-# 一條都沒成立（詳情頁上除了它們就只剩攔截了）。
+# 配對那條當成剛觸發過，結果是純攔截，代表三條最高難度規則都不成立。
 check(step(e, DETAIL_A, busy=[MATCHING]), "配對中 → 留在原地等待",
       "只有 A 級：天花板規則全部不成立")
 assert not e._flags, e._flags
@@ -103,7 +97,7 @@ assert not e._flags, f"解鎖後旗標沒清乾淨：{e._flags}"
 print("  [通過] 解鎖後旗標歸零")
 
 print()
-print("=== 5. 新副本明天開放：不領獎、先買次數、打完就結束本輪 ===")
+print("=== 5. 新副本明天開放：不領獎、先買次數、一場結束就結束本輪 ===")
 e = new_engine()
 e._flags.add("明天開新副本")
 check(step(e, DETAIL_S, busy=[MATCHING]), "明天開新副本 → 先把領獎次數買滿",

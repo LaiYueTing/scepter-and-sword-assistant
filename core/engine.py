@@ -47,11 +47,7 @@ def _option_reason(spec: str | list[str]) -> str:
 
 
 def _weekdays(value: Any, rule_name: str) -> list[int]:
-    """把 when_weekday 轉成星期數字（0 是星期一）。
-
-    ⚠ 寫錯就在載入時報錯：認不得的話那條規則會永遠不成立，而紀錄上只會看到
-      「沒有規則成立」。
-    """
+    """把 when_weekday 轉成星期數字（0 是星期一）。⚠ 無法辨識的寫法在載入時就報錯。"""
     if value is None:
         return []
     days = []
@@ -66,19 +62,12 @@ def _weekdays(value: Any, rule_name: str) -> list[int]:
 
 
 def _state_label(rule_name: str) -> str:
-    """把規則名稱縮成狀態標籤，例如「配對中 → 留在原地等待」取「配對中」。
-
-    純攔截規則的名稱前半段本來就是在描述當下的狀態，拿來當等待訊息剛好。
-    """
+    """取規則名稱「→」前面的部分當狀態標籤，例如「配對中」。"""
     return rule_name.split("→")[0].strip() or rule_name
 
 
 def _xy(arg: Any, default: tuple[int, int] | None = None) -> tuple[int | None, int | None]:
-    """從動作參數取出一組座標。
-
-    YAML 裡 `tap_match: []` 和 `tap_match:` 都表示「沒有參數」，
-    這裡統一處理，避免對空清單取索引。
-    """
+    """從動作參數取出一組座標。`tap_match: []` 與 `tap_match:` 都表示沒有參數。"""
     if isinstance(arg, (list, tuple)) and len(arg) >= 2:
         return int(arg[0]), int(arg[1])
     return default if default is not None else (None, None)
@@ -97,47 +86,35 @@ class Rule:
     threshold: float | None = None
     region: tuple[int, int, int, int] | None = None     # 規則級，不能只套在單一模板
     absent: list[str] = field(default_factory=list)     # 全都找不到時才觸發
-    # 前置條件，這些模板必須全部存在。用來表達「在某個畫面上，而且某個東西不在」
-    # ——例如「面板開著但開關沒開」。一律全畫面搜尋，不受 region 限制。
+    # 前置條件：這些模板必須全部存在，一律全畫面搜尋，不受 region 限制。
     require: list[str] = field(default_factory=list)
-    # 量某個顏色在區域裡佔了多少寬度，判斷「長度在講話」的元素（順序條、血條）。
-    # 這種元素裁模板會裁到會變的內容，改量固定的 UI 顏色。欄位見 measure_raw()。
+    # 量顏色寬度的條件（順序條、血條），欄位見 measure_raw()。
     measure: dict[str, Any] | None = None
-    # 找一塊指定顏色的東西，拿它的外框當比對結果（tap_match 就點它的中心）。
-    # 給「沒有固定圖案、只有固定顏色」的元素用——虛空裂縫的門是會動的紫色漩渦，
-    # 模板在各幀只有 0.72～0.85，顏色卻極穩定。欄位見 vision.find_blob()。
-    # ⚠ `absent: true` 反過來表達「那塊顏色不在」。
+    # 找指定顏色的色塊，外框當比對結果（tap_match 點中心），欄位見 vision.find_blob()。
+    # `absent: true` 表示那塊顏色不在。
     blob: dict[str, Any] | None = None
     # 有多個匹配時挑哪一個：best 分數最高（預設）、lowest / highest 最下 / 最上、
     # first / last 最左 / 最右，或直接給數字＝由左數來第幾個（1 起算）。
     pick: str | int = "best"
-    # 給了多個模板時，pick 要不要跨模板一起比。預設 false——那時 template 的
-    # **順序就是優先度**（羈絆那條「紅 ❗ 排前面等於先領完再派」靠的就是這個）。
-    # 只有「這幾個模板是同一種東西的不同長相」時才該打開。
+    # pick 是否跨模板比較。false 時 template 的順序就是優先度。
     pick_across: bool = False
     # 綁定 config 的 options 開關，前面加 ! 表示反向，也可以寫 key=value；
     # 給清單就是全部都要成立。
     when_option: str | list[str] | None = None
-    # 只在星期幾成立（0 是星期一，和 `datetime.weekday()` 對齊）。腳本裡寫
-    # 「週一」或清單，和 weekly_at 收同一套寫法。
+    # 只在星期幾成立（0 是星期一），寫法同 weekly_at。
     when_weekday: list[int] = field(default_factory=list)
-    # 綁定 set_flag 設出來的旗標，前面加 ! 表示反向；給清單就是全部都要成立。
-    # 用來把「在 A 畫面看到的事實」帶到 B 畫面判斷——兩張畫面沒有共同元素時，
-    # 條件本身表達不了（副本的「這一級已經是天花板了嗎」就是這種形狀）。
+    # 綁定 set_flag 設定的旗標，前面加 ! 表示反向；給清單時全部都要成立。
     when_flag: list[str] = field(default_factory=list)
-    # 這幾條規則都用完（停用、max_fires 或 max_fires_daily 到了）才成立。用在「上一條
-    # 做到上限之後才輪到我」：只靠排序的話，上一條在 cooldown 期間就會被搶走。
+    # 這幾條規則都用完（停用或達到 max_fires、max_fires_daily）才成立。
     when_spent: list[str] = field(default_factory=list)
     actions: list[dict[str, Any]] = field(default_factory=list)
     cooldown: float = 0.0                # 觸發後多久內不再觸發（秒）
     once: bool = False                   # 整場只觸發一次
     max_fires: int = 0                   # 最多觸發幾次，0 表示不限
-    # 「今天」最多觸發幾次——和 max_fires 的差別是**跨執行保留**。max_fires 每輪
-    # 重置，拿它當每日上限的話，補跑或手動重跑就會重新計數（設 3 場跑兩輪＝6 場）。
-    # ⚠ 只在「那個數字畫面上看不到」時才用，細節見 core/dailystate.py。
+    # 當日最多觸發幾次，跨執行保留（max_fires 每輪重置）。
+    # ⚠ 只用在畫面上讀不到次數的情況，見 core/dailystate.py。
     max_fires_daily: int = 0
-    # 條件必須「持續成立」這麼多秒才真的觸發。後備規則一定要設，否則畫面轉場
-    # 那一瞬間就會被當成「卡住了」而誤動作。
+    # 條件持續成立這麼多秒才觸發。⚠ 後備規則一定要設，否則畫面轉場時會誤動作。
     sustain: float = 0.0
 
     _last_fired: float = field(default=0.0, repr=False)
@@ -179,29 +156,20 @@ class Script:
     name: str
     package: str | None
     rules: list[Rule]
-    # 一輪結束（腳本結束或達到次數）後無條件執行的動作，例如回到家園待命。
-    # 無條件執行代表沒有 template 守著畫面是什麼，所以裡面只能用 tap_template。
+    # 一輪結束後無條件執行的動作。⚠ 沒有條件保護畫面，只能用 tap_template。
     on_finish: list[dict[str, Any]] = field(default_factory=list)
     # 畫面靜止這麼多秒就按返回鍵脫困
     stuck_timeout: float = 90.0
-    # 一輪最多跑幾分鐘，0 表示不限。這是「規則互相觸發而無限循環」的安全網——
-    # 那種情況畫面一直在變，stuck_timeout 永遠不會成立，排程會被整個擋住。
-    # ⚠ 只給「一輪本來就該很短」的腳本設。副本要打十幾分鐘、討伐等人要半小時，
-    #   設了會在戰鬥中途被切斷。
+    # 一輪最多幾分鐘，0 表示不限。用來終止規則互相觸發的循環（stuck_timeout 偵測不到）。
+    # ⚠ 只給正常流程很短的腳本設，否則會中斷戰鬥。
     max_minutes: float = 0.0
-    # 等待時附在狀態後面的即時資訊，形狀和 log_match 一樣。用在「會一路變動」的
-    # 值（副本戰鬥中的評級）：寫進紀錄只會洗版，附在狀態列剛好。
+    # 等待時附在狀態後面的即時資訊，格式同 log_match。
     status: dict[str, Any] = field(default_factory=dict)
-    # 腳本檔名（不含副檔名）。`tally` 與 `max_fires_daily` 拿它當 state.json 的
-    # 鍵前綴——不同腳本可能有同名的規則，共用一個鍵會互相扣次數。
+    # 腳本檔名（不含副檔名），當 state.json 的鍵前綴，避免不同腳本的同名規則共用計數。
     stem: str = ""
 
     def referenced_templates(self) -> set[str]:
-        """列出腳本用到的所有模板名稱，供 doctor 檢查是否齊全。
-
-        只認真正會拿去比對的欄位，以及 tap_template / tap_all / log_match 的
-        參數；log、screenshot 那些字串參數不是模板。
-        """
+        """列出腳本用到的所有模板名稱，供 doctor 檢查是否齊全。"""
         names: set[str] = set()
         blocks = [r.actions for r in self.rules] + [self.on_finish]
         for rule in self.rules:
@@ -224,8 +192,7 @@ class Script:
         if not path.is_file():
             raise ScriptError(f"找不到腳本：{path}")
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        # ⚠ 代入設定值要排在建立 Rule **之前**：sustain 那些欄位在建 Rule 時就
-        #   會 float()，字串形式的 "${...}" 撐不到那一步。
+        # ⚠ 代入設定值要在建立 Rule 之前：sustain 等欄位建立時就會 float()。
         raw = resolve_vars(raw, options or {})
 
         def as_list(value) -> list[str]:
@@ -263,17 +230,13 @@ class Script:
                 )
             )
 
-        # 每日計數的鍵。⚠ 一定要帶腳本名當前綴——不同腳本可能有同名的規則，
-        # 共用一個鍵的話會互相扣次數，而且從紀錄上完全看不出來。
+        # 每日計數的鍵，帶腳本名前綴。
         for rule in rules:
             if rule.max_fires_daily:
                 rule._daily_key = f"{Path(name).stem}/{rule.name}"
                 rule._today = dailystate.get(rule._daily_key)
 
-        # tally 只數不擋，所以打錯了不會有任何症狀——面板上少一列而已，而那正是
-        # 沒有人會發現的那種錯。在載入時把形狀擋下來。
-        # ⚠ 同一條規則不能既有 tally 又有 max_fires_daily：後者本來就會記一次，
-        #   兩個一起會把同一件事數成兩次。
+        # 載入時檢查 tally 的形狀。⚠ 不可與 max_fires_daily 並用：同一次觸發會計兩次。
         for rule in rules:
             for action in rule.actions:
                 if "tally" not in action:
@@ -286,8 +249,7 @@ class Script:
                         f"規則「{rule.name}」同時有 tally 與 max_fires_daily，"
                         "同一件事會被數兩次")
 
-        # reset_fires 指的是「別條規則的名字」，打錯的話執行時什麼都不會發生，
-        # 而紀錄上完全看不出來——所以在這裡就擋下來。
+        # 載入時檢查 reset_fires 指的規則名稱。
         known = {r.name for r in rules}
         for rule in rules:
             missing = sorted(set(rule.when_spent) - known)
@@ -306,8 +268,7 @@ class Script:
                         f"規則「{rule.name}」的 reset_fires 指到不存在的規則："
                         + "、".join(missing))
 
-        # finish 只收兩種寫法：空的（跑結束程序）與 skip_cleanup（不跑）。打錯字的話
-        # 結束程序照跑，而那正是「看起來沒事」的那種錯——在載入時就擋下來。
+        # finish 只接受空值（跑結束程序）與 skip_cleanup（不跑）。
         for rule in rules:
             for action in rule.actions:
                 if "finish" not in action:
@@ -318,9 +279,7 @@ class Script:
                         f"規則「{rule.name}」的 finish 參數只能留空或 skip_cleanup，"
                         f"目前是：{arg}")
 
-        # when_flag 指的是別條規則用 set_flag 設出來的名字。打錯的話那條規則會
-        # **永遠不成立**，而紀錄上只會看到「沒有規則成立」——和 reset_fires 同一
-        # 個理由，在載入時就擋下來。
+        # 載入時檢查 when_flag 的名稱有對應的 set_flag。
         settable: set[str] = set()
         for rule in rules:
             for action in rule.actions:
@@ -351,10 +310,7 @@ class Script:
 
 
 def _seconds(item: dict[str, Any], key: str) -> float:
-    """取秒數。`sustain: 300` 與 `sustain_minutes: 5` 是同一件事。
-
-    要等好幾分鐘的規則寫成秒很難讀，而那幾條正是使用者最可能想調的。
-    """
+    """取秒數。`sustain: 300` 與 `sustain_minutes: 5` 等價。"""
     if item.get(key) is not None:
         return float(item[key])
     minutes = item.get(f"{key}_minutes")
@@ -365,17 +321,12 @@ _VAR_RE = re.compile(r"^\$\{(\w+)(?::([^}]*))?\}$")
 
 
 def resolve_vars(node: Any, options: dict[str, Any]) -> Any:
-    """把腳本裡的 `${設定名}` / `${設定名:預設值}` 換成實際的值。
-
-    腳本負責說明這個數字是什麼、預設多少，設定檔負責覆蓋它：
+    """把腳本裡的 `${設定名}` / `${設定名:預設值}` 換成設定值。
 
         sustain: "${raid_join_sustain:20}"     設定檔沒填就用 20
 
-    ⚠ 一定要帶預設值。少了的話，還沒有這個鍵的舊 config.yaml 一升級就載入失敗，
-      而使用者根本沒改過任何東西。
-
-    ⚠ 只認「整個字串就是一個變數」，不做字串內嵌（`"等 ${n} 秒"` 不會被代換）。
-      這是為了保留型別：代出來的 20 必須是數字而不是 "20"。
+    ⚠ 一定要帶預設值，否則舊的 config.yaml 會載入失敗。
+    ⚠ 只處理整個字串就是一個變數的情況，才能保留數值型別。
     """
     if isinstance(node, dict):
         return {k: resolve_vars(v, options) for k, v in node.items()}
@@ -396,8 +347,7 @@ def resolve_vars(node: Any, options: dict[str, Any]) -> Any:
     return yaml.safe_load(default)      # 讓 "20" 變成數字而不是字串
 
 
-# `wait_for` 最多等幾秒。這個動作是用來跨過換頁與載入的空檔（討伐加入戰鬥後
-# 的載入約十幾秒），不是用來等一場戰鬥——等不到就往下走，別把結束程序卡住。
+# `wait_for` 的等待上限（秒），用於跨過換頁與載入，不用於等待戰鬥。
 WAIT_FOR_TIMEOUT = 25.0
 
 # `top_up` 先把組數按「−」歸零，按這麼多下。遊戲的組數上限是 20。
@@ -405,11 +355,7 @@ TOP_UP_CLEAR = 25
 
 
 def _as_index(pick: Any) -> int | None:
-    """把 pick 讀成「由左數來第幾個」，不是數字就回 None（交給具名策略處理）。
-
-    ⚠ 要擋掉 bool。Python 的 True 是 int 的子類，不擋的話 `pick: true`
-      會被當成「第 1 個」而不是報無效值。
-    """
+    """把 pick 讀成「由左數來第幾個」，不是數字就回傳 None。⚠ 排除 bool（True 是 int 的子類）。"""
     if isinstance(pick, bool):
         return None
     if isinstance(pick, int):
@@ -419,37 +365,30 @@ def _as_index(pick: Any) -> int | None:
     return None
 
 
-# 順序條的「單位數 ↔ 人數」換算。校準自五個真值點（見 CLAUDE.md 的對照表），
-# 五點都落在 ±1.5 個單位內。⚠ 這是估計值，誤差約 ±2～3 人。
+# 順序條「單位數 ↔ 人數」的換算式，校準資料見 CLAUDE.md。⚠ 估計值，誤差約 ±2～3 人。
 UNITS_PER_PLAYER = 2.25
 UNITS_BASE = 5.75
 
 
 def units_for_players(players: float) -> float:
-    """幾個人 → 順序條上大約幾個單位。使用者填人數，腳本比的是單位數。"""
+    """人數換算成順序條單位數。"""
     return UNITS_PER_PLAYER * float(players) + UNITS_BASE
 
 
 def players_for_units(units: float) -> float:
-    """反過來換算，用在把量到的數字寫成人話。"""
+    """順序條單位數換算成人數。"""
     return (float(units) - UNITS_BASE) / UNITS_PER_PLAYER
 
 
 def _threshold(spec: dict[str, Any], key: str) -> float | None:
-    """取一個門檻值。`at_least` 是單位數，`at_least_players` 是人數（自動換算）。
-
-    讓設定檔可以用「幾個人」表達——「28 個單位」對使用者沒有意義，而那個數字
-    背後就是「大約 10 人」。
-    """
+    """取門檻值。`at_least` 是單位數，`at_least_players` 是人數（自動換算）。"""
     if spec.get(key) is not None:
         return float(spec[key])
     people = spec.get(f"{key}_players")
     return units_for_players(people) if people is not None else None
 
 
-# 具名的挑選策略。`min()` 取最小，所以要往「畫面下方／右邊」挑的就取負值。
-# ⚠ 抽到模組層級是為了讓 pick_across 也用同一份——兩邊各寫一份的話，
-#   「跨模板挑最下面」和「單一模板挑最下面」有一天會不一致。
+# 具名的挑選策略，單一模板與 pick_across 共用。`min()` 取最小，往畫面下方或右邊挑的取負值。
 _PICK_KEYS = {
     "lowest": lambda m: -m.y,      # y 最大 = 畫面最下面
     "highest": lambda m: m.y,
@@ -469,8 +408,7 @@ def measure_raw(screen: np.ndarray, spec: dict[str, Any]) -> float:
         tol       容許誤差，預設 22（畫面有壓縮雜訊，不能要求完全相等）
         fill      一欄要有多少比例接近該色才算命中，預設 0.6
 
-    ⚠ 這個函式與 measure_ok / apply_options 放在模組層級，是為了讓 explain 與
-      實際執行共用同一套判斷。除錯工具若和執行不一致，看到的結論就是假的。
+    ⚠ 放在模組層級，explain 與實際執行共用同一套判斷。
     """
     region = tuple(spec["region"])
     color = tuple(spec["color"])
@@ -500,14 +438,9 @@ def _measure_unit(spec: dict[str, Any]) -> str:
 
 
 def _measure_text(value: float, spec: dict[str, Any]) -> str:
-    """數值加上單位。units 是估計值，留一位小數以免看起來像精確計數。
+    """數值加上單位。units 留一位小數；門檻以人數設定時一併寫出換算人數。
 
-    門檻若是用人數設定的，把換算後的人數一起寫出來——「23 個單位」對讀紀錄的人
-    沒有意義，那是內部指標，而使用者在設定檔裡填的是人數。格式和
-    describe_measure 一致（`約 23.0 個單位／約 7.7 人`）。
-
-    ⚠ 只在門檻用 `*_players` 表達時才換算。那是「這個量測講的是人數」唯一明確
-      的訊號；單看 `metric: units` 不夠，換算式只對公會討伐的順序條校準過。
+    ⚠ 只在 `*_players` 門檻換算：換算式只對公會討伐的順序條校準過。
     """
     if spec.get("metric") != "units":
         return f"{value:.0f} px"
@@ -518,10 +451,7 @@ def _measure_text(value: float, spec: dict[str, Any]) -> str:
 
 
 def describe_measure(spec: dict[str, Any]) -> str:
-    """把 measure 的門檻寫成人看得懂的一句話，給 explain 與紀錄用。
-
-    門檻若是用人數設定的就一併寫出人數，讓紀錄對得上設定檔裡填的數字。
-    """
+    """把 measure 的門檻寫成一句話，給 explain 與紀錄用。"""
     parts = []
     least, most = _threshold(spec, "at_least"), _threshold(spec, "at_most")
     if least is not None:
@@ -536,12 +466,7 @@ def describe_measure(spec: dict[str, Any]) -> str:
 
 
 def _measure_trace(raw: float, filled: int, window: int, spec: dict[str, Any]) -> str:
-    """平滑讀數旁邊那段診斷字串：這一幀量到多少、平滑視窗填了幾格。
-
-    `smooth: N` 取的是最近 N 次的中位數，換算成時間是 N × 每輪的秒數——視窗沒
-    填滿（或剛填滿）時，平滑值裡還混著進畫面之前的低讀數，會比眼睛看到的少一截。
-    少了這兩個數字就分不出「量錯了」和「還在追畫面」，那兩件事的修法完全不同。
-    """
+    """平滑讀數的診斷字串：單幀讀數與平滑視窗的填充度。"""
     if window <= 1:
         return ""
     unit = _measure_unit(spec)
@@ -555,12 +480,9 @@ def apply_options(rules: list[Rule], options: dict[str, Any]) -> list[Rule]:
         like_teammates          該開關為 true 才啟用（設定檔沒有這個鍵也算 true）
         !claim_reward           該開關為 false 才啟用
         buy_counts=2            該設定值等於 2 才啟用
-        buy_arena_tickets=true  同上，但這是布林——用途見下面的 ⚠
+        buy_arena_tickets=true  同上，用於布林
 
-    ⚠ **會花掉資源的規則一定要用 `=` 那種寫法。** 正向寫法在設定檔缺這個鍵時
-      預設為 true（為了讓舊 config.yaml 不必改就能跑），而新增一個「會花晨星」
-      的功能若照這樣預設開啟，使用者根本沒同意就被花掉了。`=` 的語意是
-      「設定檔明確寫成這個值才啟用」，缺鍵就是不啟用。
+    ⚠ 會花費資源的規則一定要用 `=` 寫法：設定檔缺鍵時不啟用。正向寫法缺鍵時預設成立。
     """
     disabled = []
     for rule in rules:
@@ -577,11 +499,8 @@ def apply_options(rules: list[Rule], options: dict[str, Any]) -> list[Rule]:
 def _option_ok(spec: str, options: dict[str, Any]) -> bool:
     """單一個 when_option 條件成不成立，寫法見 apply_options。"""
     if "=" in spec:
-        # 值比較。沒設定這個項目就當作不符合——數值沒有合理的預設值，
-        # 布林則是刻意要「明講才算數」（見 apply_options 的 ⚠）。
-        #
-        # ⚠ 比較要忽略大小寫。YAML 的 true 讀進來是 Python 的 True，
-        #   str() 之後是 "True"，和腳本裡寫的 `=true` 對不起來。
+        # 值比較，沒設定這個項目就不成立。
+        # ⚠ 忽略大小寫：YAML 的 true 經 str() 是 "True"。
         key, _, want_value = spec.partition("=")
         actual = options.get(key.strip())
         return (actual is not None
@@ -606,16 +525,14 @@ class Engine:
         self.dry_run = dry_run          # 只判斷不操作，用來驗證規則
         self.completed = 0
         self.cfg = device.cfg
-        # 兩層停止旗標，語意不同：_stop 是「這一輪跑完了」（次數到或腳本結束），
-        # stop_event 是外部要求整個程式結束（GUI 按下停止、視窗關閉）。
-        # 分開才不會在 reset() 準備下一輪時，把使用者剛按下的停止清掉。
+        # 兩層停止旗標：_stop 是這一輪結束，stop_event 是外部要求整個程式結束。
+        # 分開才不會在 reset() 時清掉使用者的停止要求。
         self.yielded = False        # 上一輪是讓出執行權，而不是腳本自己結束
         self._stop = False
         self._stop_event = stop_event or threading.Event()
         self._finishing = False         # 正在跑 on_finish，此時等待不可被打斷
         self._skip_cleanup = False      # `finish: skip_cleanup` 要求跳過 on_finish
-        # 等待狀態的即時回報。終端機是原地更新那一行，GUI 則是狀態列——
-        # 兩者要的是同一份資訊，所以在同一個地方發出去。
+        # 等待狀態的回報掛鉤，介面用來更新狀態列。
         self._status_hook = status_hook
         self._last_change = time.time()
         self._prev_frame: np.ndarray | None = None
@@ -627,13 +544,11 @@ class Engine:
         self._measure_logged: dict[str, float] = {}   # 各 measure 上次寫紀錄的時間
         # 各 measure 最近幾次的讀數，給 smooth 取中位數用
         self._measure_history: dict[str, deque[float]] = {}
-        # 只有真正的終端機才用 \r 原地更新；輸出被導向檔案或管線時 \r 只會製造
-        # 一堆亂碼，那種情況退回節流寫紀錄。
+        # 只有終端機才用 \r 原地更新；輸出導向檔案或管線時改為節流寫紀錄。
         self._tty = bool(getattr(sys.stdout, "isatty", lambda: False)())
         self._options_logged = False     # 「略過規則」只寫第一輪
         self._last_log_text = ""         # log_text 讀到一樣的就不重寫
-        # 這一輪已經成立的旗標。和 max_fires 一樣是「這一輪發生過什麼」的記憶，
-        # 差別是它記的是**看到的事實**而不是**觸發過幾次**。
+        # 這一輪已成立的旗標（set_flag）。
         self._flags: set[str] = set()
         # 色塊規則要跳過的位置 [(到期時刻, x, y)]，見 avoid_last_blob；以及上一次
         # tap_match 點到的色塊中心。
@@ -642,10 +557,7 @@ class Engine:
         self._apply_options(self.cfg.options)
 
     def _apply_options(self, options: dict[str, bool]) -> None:
-        """依 config 的開關停用不適用的規則。
-
-        ⚠ 只在第一輪寫紀錄。設定在執行中改不了，每輪重印同樣幾行只是佔版面。
-        """
+        """依 config 的開關停用不適用的規則。⚠ 只在第一輪寫紀錄。"""
         disabled = apply_options(self.script.rules, options)
         if self._options_logged:
             return
@@ -674,8 +586,7 @@ class Engine:
         self._measure_history.clear()
         self._last_log_text = ""
         self._skip_cleanup = False
-        # 用指派而不是 clear()：測試常常拿 Engine.__new__ 造一個沒跑過 __init__
-        # 的引擎，那種引擎沒有這個欄位。
+        # 用指派而非 clear()：測試以 Engine.__new__ 建立的引擎沒有這個欄位。
         self._flags = set()
         self._blob_avoid = []
         self._last_blob_tap = None
@@ -683,8 +594,7 @@ class Engine:
             rule._fires = 0
             rule._last_fired = 0.0
             rule._disabled = False
-            # ⚠ 每日上限**不能跟著歸零**——那正是它和 max_fires 的差別。
-            #   從狀態檔取回今天已經觸發的次數。
+            # ⚠ 每日上限不歸零，從狀態檔取回今天已觸發的次數。
             if rule.max_fires_daily:
                 rule._today = dailystate.get(rule._daily_key)
         self._apply_options(self.cfg.options)
@@ -692,19 +602,12 @@ class Engine:
     # ---------- 主迴圈 ----------
 
     def run(self, until: datetime | None = None) -> int:
-        """執行到這一輪結束。`until` 是「下一個排程時刻」，到了就讓出執行權。
+        """執行到這一輪結束。`until` 是下一個排程時刻，到了就讓出執行權。
 
-        ⚠ 沒有 `until` 的話，永遠不會結束的腳本會把排程整個擋住，而紀錄上看起來
-          一切正常。
-
-        ⚠ 讓出執行權的檢查點是 `count` 動作與 `yield_if_due` 動作，不是每一輪。時間到
-          就當場停的話很可能停在戰鬥中途，結束程序會把人退出戰鬥、那次次數就白費了。
-          只靠 `count` 不夠：副本「未達 S → 退出重打」那條路不經過 `count`，
-          連打幾十場都拿不到 S 的日子，時刻過了幾小時它都不知道。所以腳本要在
-          「下一場還沒開始」的位置（按下配對之前）放 `yield_if_due`。
+        ⚠ 讓出執行權的檢查點是 `count` 與 `yield_if_due` 動作，不是每一輪，避免中斷戰鬥。
+          不經過 `count` 的路徑（副本「未達 S → 退出重打」）要在開始下一場之前放 `yield_if_due`。
         """
         self._until = until
-        # 不再寫一行「開始執行腳本 X」：呼叫端的分隔線已經寫了腳本名稱與目標次數。
         if self.script.package:
             self._ensure_app()
 
@@ -735,17 +638,13 @@ class Engine:
                         self._emit_status(rule.name)
                         self._execute(rule.actions, screen, match)
                     else:
-                        # 沒有動作的規則是「純攔截」：配對中、戰鬥中就該待著。
-                        # 規則名稱「→」前面那段就是狀態，拿來當等待訊息。
+                        # 沒有動作的規則是純攔截，規則名稱「→」前面那段當等待訊息。
                         self._log_waiting(_state_label(rule.name), screen)
                 else:
-                    # 沒有任何規則成立。該等的狀態都有攔截規則，所以走到這裡
-                    # 通常是轉場或載入中的短暫空檔。
+                    # 沒有規則成立：通常是轉場或載入中的短暫空檔。
                     self._log_waiting("等待畫面變化", screen)
 
-                # ⚠ tick 是「每輪之間至少隔這麼久」，不是「每輪額外睡這麼久」。
-                #   一輪的截圖與比對本來就要一兩秒，再固定加睡一秒會把反應時間
-                #   拉長一半。
+                # ⚠ tick 是每輪之間的最短間隔，不是每輪額外的等待。
                 self._sleep(max(0.0, self.cfg.runtime.tick
                                 - (time.time() - round_started)))
         except KeyboardInterrupt:
@@ -765,21 +664,14 @@ class Engine:
         self._stop = True
 
     def abort(self) -> None:
-        """使用者中斷這一輪：立刻結束，而且不跑結束程序。
-
-        給「只中斷這一份、排程照常」的按鈕用（虛空裂縫）。中斷是人在旁邊按的，
-        畫面留在哪裡他看得到；結束程序反而會在地圖上空等 25 秒找家園。
-        """
+        """使用者中斷這一輪：立刻結束，不跑結束程序。"""
         self._skip_cleanup = True
         self._stop = True
 
     def _sleep(self, seconds: float) -> bool:
-        """可被中斷的等待，回傳「是否被要求停止」。GUI 沒有 Ctrl+C 可送，
-        所以等待本身要醒得過來。
+        """可被中斷的等待，回傳是否被要求停止。
 
-        ⚠ 結束程序期間例外，一律睡好睡滿。停止的當下 stop_event 已經是 set 的，
-          若結束程序的等待跟著立刻返回，逐層退場的每一步就會擠在一起送出——那些
-          等待正是在讓換頁動畫跑完，少了它會把上一頁的座標點在新頁上。
+        ⚠ 結束程序期間不可中斷：那些等待是給換頁動畫的，否則會把上一頁的座標點在新頁上。
         """
         if self._finishing:
             time.sleep(seconds)
@@ -787,13 +679,7 @@ class Engine:
         return self._stop_event.wait(seconds)
 
     def _run_on_finish(self) -> None:
-        """跑完一輪後的結束程序，例如回到家園待命，方便下一輪或人工接手。
-
-        不另外寫「執行結束程序」：on_finish 的第一個動作就是自己的 log。
-
-        ⚠ **逐步回報進度給狀態列。** 結束程序要 14～18 秒（那些 `wait` 是在讓
-          換頁動畫跑完，省不掉），狀態列的文字不動的話看起來會像當機。
-        """
+        """執行結束程序（例如回到家園），並把進度回報給狀態列。"""
         if not self.script.on_finish or self.dry_run or self._skip_cleanup:
             return
         self._finishing = True
@@ -818,12 +704,7 @@ class Engine:
             self._sleep(8)
 
     def _status_extra(self, screen: np.ndarray | None) -> str:
-        """等待時要附在狀態後面的即時資訊，例如「評級 A」。
-
-        ⚠ 認不出來就整個不顯示，不要寫「評級 （認不出）」。這段每輪都會跑，而
-          大部分時間根本不在那個畫面上。（`log_match` 相反：那是寫紀錄，
-          「讀不到」本身就是要留下的事實。）
-        """
+        """等待時附在狀態後面的即時資訊，例如「評級 A」。認不出來就不顯示。"""
         if screen is None or not self.script.status:
             return ""
         parts = []
@@ -841,18 +722,12 @@ class Engine:
 
     def _log_waiting(self, name: str, screen: np.ndarray | None = None,
                      heartbeat: float = 300.0) -> None:
-        """回報等待狀態。等待可能持續十幾分鐘，兩個輸出各有分工：
+        """回報等待狀態：終端機原地更新同一行；紀錄檔只留心跳與離開等待時的總結。
 
-          終端機　→ 固定在同一行原地更新，狀態與經過時間隨時看得到
-          紀錄檔　→ 只留心跳（預設 5 分鐘一行）與離開等待時的總結
+        輸出導向檔案或管線時沒有原地更新，心跳間隔自動縮短。
 
-        ⚠ 狀態切換不寫紀錄檔。副本裡「戰鬥中 → 載入中 → 選下一關」本來就頻繁
-          交替，每次切換都寫一行會把紀錄刷滿而蓋掉真正的重點。
-
-        ⚠ 經過時間算的是「這一整段等待」而不是「目前這個狀態」。後者會在每次
-          切換狀態時歸零，看起來像打到一半又重新計時。
-
-        沒有原地更新可用時（輸出被導向檔案或管線）只靠心跳，間隔自動縮短。
+        ⚠ 狀態切換不寫紀錄檔，避免戰鬥與載入的交替刷滿紀錄。
+        ⚠ 經過時間算整段等待，切換狀態時不歸零。
         """
         now = time.time()
         if self._waiting_block_start == 0.0:    # 這一整段等待的起點
@@ -866,13 +741,11 @@ class Engine:
 
         if now - self._waiting_logged >= heartbeat:
             self._waiting_logged = now
-            # ⚠ 要先清掉原地更新的那一行，否則心跳會接在沒有換行的進度行後面。
-            #   不能改用 _end_waiting_line：那個會把累計歸零，秒數就重新算了。
+            # ⚠ 先清掉原地更新的那一行。不可用 _end_waiting_line：它會把累計歸零。
             self._clear_waiting_line()
             log.info("等待中　%s（目前狀態：%s）", elapsed, name)
 
-        # 即時資訊只附在「隨時看得到」的兩個地方，不進紀錄檔——心跳是 5 分鐘
-        # 一行的摘要，不該混進會一直變的值。
+        # 即時資訊只附在狀態列與進度行，不進紀錄檔。
         extra = self._status_extra(screen)
         shown = f"{name}　{extra}" if extra else name
         if self._tty:
@@ -880,10 +753,7 @@ class Engine:
         self._emit_status(f"{shown}　{elapsed}")
 
     def _emit_status(self, text: str) -> None:
-        """把目前狀態送給外部觀察者（GUI 狀態列）。
-
-        傳的是已經排好的字串，呼叫端直接顯示。掛鉤壞掉不該拖垮執行，吞掉例外。
-        """
+        """把目前狀態送給外部觀察者（介面狀態列）。掛鉤的例外一律吞掉，不影響執行。"""
         if self._status_hook is None:
             return
         try:
@@ -892,10 +762,7 @@ class Engine:
             pass
 
     def _draw_waiting_line(self, line: str) -> None:
-        """在同一行原地更新等待訊息。
-
-        優先用 ANSI 的「清除到行尾」：補空白會讓游標停在文字後面幾格。
-        """
+        """在同一行原地更新等待訊息，用 ANSI 的「清除到行尾」。"""
         if logger.ansi_ready():
             print(f"\r{line}\x1b[K", end="", flush=True)
         else:
@@ -911,10 +778,7 @@ class Engine:
             print("\r" + " " * 90 + "\r", end="", flush=True)
 
     def _end_waiting_line(self) -> None:
-        """收掉原地更新的那一行，等超過 60 秒才留一筆總結（短暫轉場不值得留紀錄）。
-
-        ⚠ 一定要在輸出其他訊息之前呼叫，否則那些訊息會接在沒有換行的進度行後面。
-        """
+        """結束原地更新的那一行，等超過 60 秒才留一筆總結。⚠ 要在輸出其他訊息之前呼叫。"""
         if self._waiting_block_start == 0.0:
             return
         total = time.time() - self._waiting_block_start
@@ -933,12 +797,9 @@ class Engine:
         self, screen: np.ndarray, rule: Rule, th: float
     ) -> tuple[bool, Match | None]:
         """判斷規則的條件是否成立，回傳（是否成立, 比對結果）。"""
-        # 旗標排在最前面：不成立時連 sustain 的計時都不該累加。
-        # ⚠ selftest 借用這個函式（Engine.__new__，沒跑 __init__），那種引擎沒有
-        #   旗標可查。那支是一張畫面一張畫面地驗規則，本來就沒有「上一頁看到
-        #   什麼」，所以一律當成成立，不要讓它把好規則判成不成立。
+        # 旗標排在最前面：不成立時 sustain 不累加。
+        # ⚠ selftest 的引擎（Engine.__new__）沒有 _flags，旗標、星期與 when_spent 一律視為成立。
         flags = getattr(self, "_flags", None)
-        # 星期幾同理：selftest 的結果不能跟著跑測試那天是星期幾變。
         if (rule.when_weekday and flags is not None
                 and datetime.now().weekday() not in rule.when_weekday):
             return False, None
@@ -969,12 +830,7 @@ class Engine:
 
         if rule.template:
             if rule.pick_across and len(rule.template) > 1:
-                # 每個模板各自挑出的贏家再比一次，就是全域的那一個——
-                # lowest / highest / first / last 都是取極值，所以這樣等價。
-                #
-                # 需要它的形狀是「同一種東西的兩張臉」：副本列表上每張卡片都有
-                # 評級標章，只是打過的是「最高評級」、沒打過的是「暫無評級」，
-                # 而我們要的是「最下面那張卡片」，跟標章是哪一種無關。
+                # 每個模板各自挑出的贏家再比一次，結果等於全域的極值。
                 pool = [m for m in (self._locate(screen, n, th, rule)
                                     for n in rule.template) if m]
                 if not pool:
@@ -995,20 +851,15 @@ class Engine:
             return (not hit), None
 
         if rule.require or rule.measure or rule.blob:
-            # 沒給 template / absent 的規則：前置條件與量測都過就成立。
-            # 色塊找到的外框當比對結果，tap_match 才點得到它。
+            # 沒有 template 與 absent：前置條件與量測都成立就成立；色塊外框當比對結果。
             return True, found
 
         return False, None
 
     def _measure(self, screen: np.ndarray, rule: Rule) -> bool:
-        """評估 measure 條件，並每 30 秒把量到的數值寫進紀錄（門檻要靠實機資料調）。
+        """評估 measure 條件，每 30 秒把數值寫進紀錄。`smooth: N` 取最近 N 次的中位數。
 
-        `smooth: N` 對最近 N 次讀數取中位數。估計值單幀會跳（相鄰可差到 20 個
-        單位），非平滑不可。
-
-        ⚠ 每輪只能取樣一次。_match_rule 會掃兩遍規則（sustain 預掃 ＋ 主掃），
-          取兩次樣的話滑動視窗只涵蓋一半的時間，所以結果快取在 _measure_frame。
+        ⚠ 每輪只取樣一次（結果快取在 _measure_frame）：_match_rule 會掃兩遍規則。
         """
         cache = getattr(self, "_measure_frame", None)
         if cache is not None and rule.name in cache:
@@ -1029,8 +880,7 @@ class Engine:
             cache[rule.name] = ok
 
         label = rule.measure.get("log")
-        # selftest 只借用判斷邏輯（Engine.__new__，沒跑 __init__），那種引擎
-        # 沒有紀錄用的欄位：量測照算，但不寫紀錄。
+        # selftest 的引擎沒有紀錄欄位：照算，不寫紀錄。
         seen = getattr(self, "_measure_logged", None)
         if label and seen is not None:
             now = time.time()
@@ -1038,15 +888,11 @@ class Engine:
                 first = rule.name not in seen
                 seen[rule.name] = now
                 self._end_waiting_line()
-                # ⚠ 門檻只在第一筆寫。它整輪都不會變，每 30 秒重述一次會讓那幾行
-                #   長得一模一樣，真正在動的數值反而看不出來。
-                # 平滑值滯後於畫面，所以單幀讀數與視窗填了幾格要一起寫：兩者
-                # 差很多而視窗還沒填滿，就是「讀數還在追畫面」而不是量錯了。
+                # ⚠ 門檻只在第一筆寫。單幀讀數與視窗填充度用來分辨「量錯」與「還在追畫面」。
                 spec = rule.measure
                 people = spec.get("at_least_players", spec.get("at_most_players"))
                 if people is not None:
-                    # 門檻用人數設定時，人數寫在最前面（設定檔填的就是人數），
-                    # 單位數與平滑的診斷資料放在後面。
+                    # 門檻以人數設定時，人數放最前面，單位數與平滑資料放後面。
                     detail = f"量測：{value:.1f} 個單位"
                     if window > 1:
                         detail += f"，單幀 {raw:.1f}、樣本 {filled}/{window}"
@@ -1075,8 +921,7 @@ class Engine:
         self._match_frame: dict[tuple, Any] = {}
         now = time.time()
 
-        # ⚠ 有 sustain 的規則要先全部評估一次才能正確計時。只在輪到它時才算的話，
-        #   畫面離開又回來時計時不會歸零，一成立就立刻觸發，等於沒有 sustain。
+        # ⚠ 有 sustain 的規則要先全部評估一次，畫面離開時計時才會歸零。
         for rule in self.script.rules:
             if not rule.sustain or rule._disabled:
                 continue
@@ -1110,16 +955,11 @@ class Engine:
         self, screen: np.ndarray, name: str, threshold: float,
         region: Region | None = None,
     ) -> Match | None:
-        """有快取的 vision.find，同一輪裡同一組參數只真的比對一次。
+        """有快取的 vision.find，同一輪裡同一組參數只比對一次。
 
-        ⚠ 全畫面的彩色比對一次要 85～125ms（720x1280，模板 40x60 上下），
-          而一輪要掃兩遍規則（sustain 預掃 ＋ 主掃），`btn_back_arrow`、
-          `nav_home` 這種到處都在的模板還會跨規則重複（raid 一輪要求
-          64 次比對，其中只有 21 種不重複）。這是主迴圈最大的一筆開銷。
+        全畫面彩色比對一次 85～125ms；raid 一輪 64 次比對只有 21 種不重複。
 
-        ⚠ 快取只在一輪之內有效（`_match_rule` 開頭重置），所以畫面換了不會拿到
-          舊答案。動作裡的 `tap_template` 走的是 vision 而不是這裡，它本來就該
-          對重新抓的畫面比對。
+        ⚠ 快取在 _match_rule 開頭重置。動作裡的 tap_template 不走快取。
         """
         cache = getattr(self, "_match_frame", None)
         key = ("find", name, threshold, tuple(region) if region else None)
@@ -1155,11 +995,7 @@ class Engine:
         if not found:
             return None
 
-        # 數字＝由左數來第幾個（1 起算）。橫排的同類元素（競技場的四個對手）
-        # 用 first / last 只表達得了兩端，而中間那幾個也是有意義的選擇。
-        #
-        # ⚠ 超出範圍時取最靠近的那一端，避免規則不成立。畫面上有幾個是遊戲決定的，
-        #   而規則不成立會讓後面的後備規則搶先動作。
+        # 數字＝由左數來第幾個（1 起算）。⚠ 超出範圍時取最靠近的一端，避免規則不成立。
         nth = _as_index(rule.pick)
         if nth is not None:
             ordered = sorted(found, key=lambda m: m.x)
@@ -1193,10 +1029,7 @@ class Engine:
             return False
         log.info("已到下一個排程時刻，先結束這一輪並讓出執行權")
         self._stop = True
-        # ⚠ 讓出執行權和腳本自己結束要分得出來。讓出執行權代表**該做的還沒做完**
-        #   （次數還有、獎勵還沒領），排程那邊要把它排回去，等這一波
-        #   排定時刻與補跑清完再接著跑。少了這個記號，副本讓出執行權一次就
-        #   等於整天只打到一半——而紀錄上每一行都正常。
+        # ⚠ yielded 用來區分讓出執行權與腳本自己結束：前者還有工作沒做，排程要排回去。
         self.yielded = True
         return True
 
@@ -1240,8 +1073,7 @@ class Engine:
                     d.tap(x, y)
 
         elif verb == "tap_template":
-            # ⚠ 重新抓一張畫面。沿用規則觸發時的截圖會出事：動作清單裡的
-            #   tap_template 前面常有 wait 或其他點擊，畫面早就換了。
+            # ⚠ 重新抓畫面：tap_template 前面常有 wait 或點擊，畫面已經換了。
             screen = d.screencap()
             names = [arg] if isinstance(arg, str) else list(arg)
             for name in names:
@@ -1257,8 +1089,7 @@ class Engine:
                 log.warning("畫面上找不到任何模板：%s", names)
 
         elif verb == "tap_all":
-            # 點擊畫面上所有符合的目標，例如結算頁每位隊友的按讚鈕。
-            # 同樣要重新抓畫面，理由見上面的 tap_template。
+            # 點擊畫面上所有符合的目標，同樣重新抓畫面。
             screen = d.screencap()
             names = [arg] if isinstance(arg, str) else list(arg)
             hits = 0
@@ -1271,18 +1102,17 @@ class Engine:
                 for m in found:
                     d.tap(*m.center)
                     hits += 1
-            log.info("點掉畫面上 %d 個目標", hits)
+            log.info("點擊畫面上 %d 個目標", hits)
 
         elif verb == "swipe":
             x1, y1, x2, y2 = (int(v) for v in arg[:4])
             dur = int(arg[4]) if len(arg) > 4 else 300
             d.swipe(x1, y1, x2, y2, dur)
-            # 鏡頭移動之後畫面上的位置全部錯開，avoid_last_blob 記下的點不再對應同一扇門
+            # 鏡頭移動後座標全部錯開，avoid_last_blob 的記錄失效。
             self._blob_avoid = []
 
         elif verb == "avoid_last_blob":
-            # 上一次 tap_match 點的色塊這段時間內不算（秒數，預設 60）。給「點了跳出
-            # 無法互動」的門用：其他隊伍正在裡面打，改點別扇，沒有別扇就照常移動鏡頭找。
+            # 上一次 tap_match 點的色塊在這段時間（秒，預設 60）內不算。
             if self._last_blob_tap is not None:
                 x, y = self._last_blob_tap
                 self._blob_avoid.append((time.time() + float(arg or 60), x, y))
@@ -1295,46 +1125,27 @@ class Engine:
             self._sleep(float(arg))
 
         elif verb == "restart_app":
-            # 最後手段：關掉遊戲再開起來，讓畫面回到「開機 → 家園」這條認得的路。
-            #
-            # 後備規則按系統返回鍵解決不了兩種畫面：**返回鍵無效的結算頁**（只能點
-            # 空白處），以及**按返回鍵反而會叫出來的確認框**——後者會變成開開關關
-            # 的死循環（例如「要退出觀戰狀態嗎?」）。
-            # 不認得的畫面永遠會有新的，所以要有一條不靠模板的退路。
-            #
-            # ⚠ 只掛在後備規則鏈的**最後一條**，而且前面那條要先用掉 max_fires。
-            #   重新啟動遊戲要 152 秒，不該在「其實再等一下就會好」的時候動用。
+            # 最後手段：關閉遊戲再啟動，回到「開機 → 家園」這條路。
+            # ⚠ 只掛在後備規則鏈的最後一條，前一條要先用完 max_fires：重新啟動要 152 秒。
             pkg = self.script.package
             if not pkg:
                 log.warning("腳本沒有指定 package，無法重新啟動遊戲")
             else:
-                # ⚠ 訊息要中性。這個動作有兩個用途（後備規則脫困、遊戲要求更新後
-                #   重新啟動），寫死其中一個的話另一條路上的紀錄就是假的；為什麼要
-                #   重新啟動，觸發的規則名稱那一行已經說了。
+                # ⚠ 訊息保持中性：重新啟動的原因由觸發規則的名稱說明。
                 log.warning("重新啟動遊戲")
                 d.stop_app(pkg)
                 self._sleep(3)
                 d.launch_app(pkg)
-                # ⚠ 這裡要等到**過得了全黑那段**。遊戲重新啟動後前 35 秒是全黑，
-                #   什麼模板都認不到——而後備規則的條件（那些模板全都不在）在黑畫面
-                #   上一直成立。等太短就會在還沒開起來時又觸發一次重新啟動，形成迴圈。
+                # ⚠ 前 35 秒全黑，後備規則的條件在黑畫面上一直成立，等待要超過這段。
                 self._sleep(float(arg) if arg else 45)
-                # ⚠ 畫面是這個動作自己換掉的，所有 sustain 的計時都要歸零。
-                #   `sustain` 累加的依據是「條件連續成立多久」，而黑畫面讓後備規則
-                #   的條件持續為真——不歸零的話下一輪就又滿了。
+                # ⚠ 畫面是這個動作換掉的，sustain 的計時全部歸零。
                 for rule in self.script.rules:
                     rule._since = 0.0
                 self._last_change = time.time()
 
         elif verb == "wait_for":
-            # 等到畫面上出現其中一個模板才往下走，最多等 WAIT_FOR_TIMEOUT 秒。
-            #
-            # `on_finish` 是無條件清單，沒辦法用規則去等一個畫面，而換頁前後常有
-            # 幾秒的載入——固定 `wait:` 只能猜：猜短了整串動作全部空點，猜長了
-            # 每一次結束程序都白等。這個動作在畫面認得出來的那一刻就返回。
-            #
-            # ⚠ 這不是拿來等一場戰鬥或一次配對的。逾時就直接往下走，不報錯——
-            #   後面的 tap_template 本來就是「找不到就不點」。
+            # 等到畫面上出現其中一個模板才往下，最多 WAIT_FOR_TIMEOUT 秒，逾時直接往下走。
+            # 用於 on_finish 這類無條件清單跨過換頁與載入。
             names = [arg] if isinstance(arg, str) else list(arg or [])
             deadline = time.time() + WAIT_FOR_TIMEOUT
             while time.time() < deadline:
@@ -1349,54 +1160,37 @@ class Engine:
                             WAIT_FOR_TIMEOUT, "、".join(names))
 
         elif verb == "tally":
-            # 「今天做了幾次」——只數，**永遠不擋**。
-            #
-            # ⚠ 和 `max_fires_daily` 的差別就是這一條：後者是上限，數到了規則
-            #   就不再成立；`tally` 從不參與任何判斷，它和 `log:` 同一類，是
-            #   輸出不是狀態。
-            # ⚠ **不要拿它去做「今天做過就跳過」。** 專案「不記狀態、畫面才是
-            #   真相」那條原則管的是決策，而畫面本來就答得出次數用盡、獎勵已領。
-            #   拿計數去決定要不要做，等於讓一個記錄錯誤變成整天不執行。
-            # ⚠ 名稱由腳本給（而不是用規則名），這樣好幾條規則可以數進同一格
-            #   ——討伐的四種入場方式都是「參戰一次」。
+            # 當日計數，只數不擋，名稱由腳本給（多條規則可以數進同一格）。
+            # ⚠ 不要用來決定「今天做過就跳過」，判斷要看畫面。
             dailystate.add(f"{self.script.stem}/{arg}")
 
         elif verb == "count":
             self.completed += 1
             log.info("完成第 %d 次", self.completed)
-            # 打完一場是最安全的讓出執行權時機（見 run 的說明）
+            # 一場結束是安全的讓出執行權時機（見 run）
             self._yield_if_due()
 
         elif verb == "yield_if_due":
-            # 腳本標出來的安全讓出執行權的位置（見 run 的說明）。讓出執行權了就不再執行這條規則
-            # 剩下的動作，由 _execute 看這個旗標中斷。
+            # 腳本標記的安全位置（見 run）。讓出執行權時由 _execute 中斷這條規則剩下的動作。
             self._yielded_now = self._yield_if_due()
 
         elif verb == "screenshot":
-            # ⚠ 檔名要帶日期。只用時分秒的話跨天會互相覆蓋，而且事後翻的時候
-            #   分不出哪一張是哪天的——那正是要拿它去補模板的時候。
+            # ⚠ 檔名要帶日期，否則跨天會互相覆蓋。
             name = arg if isinstance(arg, str) else datetime.now().strftime("%m%d-%H%M%S")
             path = LOG_DIR / "frames" / f"{name}.png"
             vision.imwrite_unicode(path, screen)
             log.info("已存截圖：%s", path)
 
         elif verb == "log_text":
-            # 用系統內建 OCR 讀畫面上的文字寫進紀錄，不必為每個副本裁模板。
+            # 用系統內建 OCR 讀畫面文字寫進紀錄，不影響判斷，讀不到就寫「讀不到」。
             #
             # 寫法（每個欄位可以只給 region，或給 dict 帶參數）：
             #   log_text:
             #     選擇副本: {region: [110, 174, 510, 64], binary: 210, scale: 3}
             #     難度: {region: [30, 798, 170, 34], scale: 4, strip: 副本獎勵}
             #
-            # 欄位名稱自己當標籤，會寫成「選擇副本：月之宮殿　難度：惡夢」。
-            # 只影響紀錄不影響判斷，讀不到就寫「讀不到」帶過。
-            #
-            # `match` 給一個正規表示式時只取第一段符合的文字（去掉空白），對不上就算讀不到。
-            # 給「前綴＋數字」這種欄位用：前綴常被讀掉一兩個字，strip 刪不乾淨。
-            #
-            # ⚠ 讀出來和上一次一樣就不重讀也不重寫。這條規則會在等配對的期間
-            #   反覆觸發，而每次 OCR 要開一個 PowerShell（約 1 秒）——同一場
-            #   副本重覆讀十幾次，紀錄上也是十幾行一模一樣的字。
+            # `match` 是正規表示式，只取第一段符合的文字（去掉空白），對不上算讀不到。
+            # ⚠ 讀出來和上一次相同就不重寫。
             from core import ocr
 
             screen = d.screencap()
@@ -1418,7 +1212,7 @@ class Engine:
                 log.info("%s", line)
 
         elif verb == "top_up":
-            # 讀出「今天已經買了幾組」，把加減鈕調成「設定 − 已買」，不會多買。
+            # 讀出今天已買幾組，把加減鈕調成「設定 − 已買」：先按「−」歸零，再按「+」補差額。
             #
             # 寫法：
             #   top_up:
@@ -1429,9 +1223,8 @@ class Engine:
             #     target: "${material_hammer_sets:2}"
             #     flag: 素材有要買的          真的要買時設這個旗標
             #
-            # 先按「−」歸零（最低 0）再按「+」補差額，所以不必知道遊戲記住的組數。
-            # ⚠ 讀不到就歸零、這一列不買。OCR 只取冒號與斜線之間的數字：放大 4 倍時
-            #   會把右邊的按鈕邊緣讀成多一個「1」（2/201），倍率 3 八列全對。
+            # ⚠ 讀不到就歸零、這一列不買。OCR 只取冒號與斜線之間的數字，倍率 3 八列全對，
+            #   倍率 4 會多讀一個「1」（2/201）。
             from core import ocr
 
             spec = dict(arg or {})
@@ -1453,19 +1246,15 @@ class Engine:
                      f"這次買 {need} 組" if need else "不必再買")
 
         elif verb == "log_match":
-            # 把「畫面上是哪一種」寫進紀錄。給一組「顯示文字 → 模板」，挑分數
-            # 最高且過門檻的那個。
+            # 把畫面上比對到的項目寫進紀錄：給「顯示文字 → 模板」，取分數最高且過門檻者。
+            # 只影響紀錄，認不出就寫「認不出」。
             #
             # 寫法：
             #   log_match:
             #     評級: {region: [270, 140, 200, 220],
             #            of: {S: rank_s, A: rank_a, B: rank_b}}
             #
-            # 和 log_text 一樣只影響紀錄、不影響判斷：認不出來就寫「認不出」，
-            # 規則該做的事照做，少一張模板不會讓流程卡住。
-            #
-            # ⚠ region 幾乎一定要給。單一個字母不框住的話，畫面別處的深色圖形
-            #   也可能比對成功。
+            # ⚠ region 要給，單一字母不框住會誤中畫面別處的深色圖形。
             screen = d.screencap()
             parts = []
             for label, spec in (arg or {}).items():
@@ -1481,34 +1270,18 @@ class Engine:
             log.info("%s", "　".join(parts))
 
         elif verb == "log":
-            # 不加前綴。這是規則自己要補充的話，前面已經有「觸發規則：X」交代
-            # 是誰在講，再標一次「腳本訊息」只是多一段要跳過的字。
-            #
-            # 也因此：只在「規則名稱沒說完」的時候才寫 log（例如等了幾分鐘、
-            # 依據什麼數字決定），純粹重述規則名稱的那種一律不要。
+            # 規則名稱之外的補充訊息，不加前綴。只在規則名稱沒說完時才寫。
             log.info("%s", arg)
 
         elif verb == "reset_fires":
-            # 把指定規則的 max_fires 計數歸零，讓它可以再觸發一次。
-            #
-            # max_fires 本身就是引擎唯一的「這一輪發生過什麼」的記憶（daily 的
-            # 聖獸／雙影交接就是靠它）。少了歸零的手段，那份記憶只能單向消耗，
-            # 表達不了「條件變了，重來一次」——競技場的「贏了就回頭挑最強的」
-            # 正是這種形狀。
-            #
-            # ⚠ 規則名稱有錯會在載入時就報錯（Script.load 檢查過），不是執行到
-            #   這裡才靜靜地什麼都不做。
+            # 把指定規則的 max_fires 計數歸零，讓它可以再觸發。名稱在載入時檢查。
             names = {arg} if isinstance(arg, str) else set(arg or [])
             for r in self.script.rules:
                 if r.name in names:
                     r._fires = 0
 
         elif verb == "set_flag" or verb == "clear_flag":
-            # 旗標讓「上一個畫面看到的事實」影響後面的判斷。副本的領獎就是這種
-            # 形狀：該不該領要看「更高的難度還開不開得了」，而那件事只寫在詳情
-            # 頁上，結算頁完全看不到。
-            #
-            # ⚠ 名稱有錯會在載入時就報錯（Script.load 檢查過）。
+            # 設定或清除旗標，供後面的畫面判斷（when_flag）。名稱在載入時檢查。
             names = {arg} if isinstance(arg, str) else set(arg or [])
             if verb == "set_flag":
                 self._flags |= names
@@ -1516,13 +1289,8 @@ class Engine:
                 self._flags -= names
 
         elif verb == "finish":
-            # 不寫紀錄：觸發的規則名稱（「…→ 結束本輪」）已經說了為什麼要結束，
-            # 緊接著 on_finish 的第一行還會再說一次「本輪結束」。
-            #
-            # `finish: skip_cleanup` 給「連遊戲都進不去」時結束本輪用（伺服器維護中）。
-            # 結束程序是逐層退回家園，而那條路上的每一步都先 `wait_for` 25 秒——
-            # 畫面上根本沒有導覽列與返回鍵時，那是純粹的空等，還會留下三行
-            # 「畫面上找不到任何模板」看起來像出了事。
+            # 不寫紀錄：規則名稱已說明結束原因。
+            # `finish: skip_cleanup` 跳過結束程序，用於遊戲進不去的情況（伺服器維護中）。
             if arg == "skip_cleanup":
                 self._skip_cleanup = True
             self.stop()

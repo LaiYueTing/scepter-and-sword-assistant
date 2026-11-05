@@ -1,9 +1,4 @@
-"""流程錄製：連續抓幀，只留下畫面真正有變化的關鍵幀。
-
-用途是快速摸清一段遊戲流程有哪些畫面。逐張手動截圖太慢，
-但把每一幀都留下來又會被戰鬥動畫淹沒，所以這裡用畫面差異當過濾器，
-只保留「轉場」那幾張，最後再拼成一張總覽圖方便一次看完。
-"""
+"""流程錄製：連續抓幀，用畫面差異過濾，只留下有變化的關鍵幀，最後拼成總覽圖。"""
 
 from __future__ import annotations
 
@@ -46,10 +41,8 @@ def record(
 ) -> list[Frame]:
     """錄製一段流程，回傳有變化的關鍵幀。
 
-    threshold 是判定「畫面換了」的平均像素差門檻。戰鬥特效會讓畫面
-    持續小幅變動，門檻太低會塞滿無意義的幀，建議 5~10。
-
-    給了 save_dir 就會邊錄邊寫檔，中途按 Ctrl + C 或被中斷也不會丟資料。
+    threshold 是判定畫面改變的平均像素差門檻，建議 5~10（戰鬥特效會持續小幅變動）。
+    給了 save_dir 就會邊錄邊寫檔，中斷也不會遺失資料。
     """
     frames: list[Frame] = []
     started = time.time()
@@ -74,16 +67,14 @@ def record(
                 frame = Frame(len(frames), elapsed, img, d)
                 if save_dir:
                     vision.imwrite_unicode(save_dir / _frame_name(frame), img)
-                    # ⚠ 已經落地就要從記憶體釋放。一張 720x1280 解碼後約 2.7MB，
-                    #   錄十分鐘累積到好幾百 MB，會把 OpenCV 撐爆。
+                    # ⚠ 寫檔後從記憶體釋放：一張解碼後約 2.7MB。
                     frame.image = None
                 frames.append(frame)
                 prev = img
-                # 逐幀進度只印終端機，不寫紀錄檔。錄製是開發用的互動指令，一段
-                # 十幾分鐘的錄製會寫上千行，蓋過真正的執行紀錄。紀錄檔只留摘要。
+                # 逐幀進度只印終端機，紀錄檔只留摘要。
                 print(f"  第 {len(frames)} 幀　{elapsed:.1f} 秒　差異 {d:.1f}")
 
-            # 扣掉截圖本身耗掉的時間，讓間隔比較接近設定值
+            # 扣掉截圖耗時，讓間隔接近設定值
             rest = interval - (time.time() - loop_start)
             if rest > 0:
                 time.sleep(rest)
@@ -115,10 +106,9 @@ def load_frames(
     start: int = 0,
     count: int | None = None,
 ) -> list[Frame]:
-    """從已存檔的錄製資料夾讀回關鍵幀（錄製被中斷時用來補做總覽圖）。
+    """從已存檔的錄製資料夾讀回關鍵幀。
 
-    先抽樣再讀檔，避免把幾百張全解碼進記憶體。抽樣會濾掉只出現一瞬間的畫面
-    （提示、對話框），要逐張看完時用 start/count 分批取。
+    先抽樣再讀檔。抽樣會濾掉短暫出現的畫面，要逐張看時用 start/count 分批取。
     """
     files = sorted(folder.glob("*.png"), key=lambda p: int(p.stem.split("_")[0]))
     if not files:
@@ -170,7 +160,7 @@ def contact_sheet(
             sheet, text, (x0 + 5, y0 + th + 16),
             cv2.FONT_HERSHEY_SIMPLEX, 0.42, (230, 230, 230), 1, cv2.LINE_AA,
         )
-        # 格線，避免相鄰縮圖黏在一起分不清
+        # 格線
         cv2.rectangle(sheet, (x0, y0), (x0 + tw - 1, y0 + th - 1), (90, 90, 90), 1)
 
     return sheet

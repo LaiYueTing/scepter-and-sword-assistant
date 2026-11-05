@@ -3,15 +3,6 @@
 
     python tests/test_yield_requeue.py
 
-引擎在 `count:` 那一刻若發現已經到了下一個排定時刻，就會結束並讓出執行權。讓出執行權代表
-**該做的還沒做完**（次數還有、獎勵還沒領），所以排程要把它排回佇列。
-
-⚠ 這條路 selftest 涵蓋不到——那支是一張畫面一張畫面地驗規則，而這裡驗的是
-  一輪跑完之後排程怎麼決定下一個跑誰。
-
-⚠ 讓出執行權代表次數還有，沒有排回去的話剩下的領獎次數會留到隔天，而紀錄上每一行
-  都正常。
-
 測試把 Engine 換成假的，不會碰到模擬器也不會操作遊戲。
 """
 import os
@@ -23,8 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 import core.runner as runner_mod
@@ -62,8 +52,7 @@ class FakeEngine:
         # 副本第一次跑「讓出執行權」收場，之後正常結束本輪
         self.yielded = name == "自動副本" and FakeEngine.runs.count(name) == 1
         # 結束本輪條件：副本跑到第二次（＝被排回來了），或雜務已經跑過一輪。
-        # ⚠ 少了後半，關掉補跑的那一輪會停在「等下一個排定時刻」上——那是 24
-        #   小時後，測試就掛在那裡不動了。
+        # 後半用於關閉補跑的情況，否則會等到 24 小時後。
         if (FakeEngine.runs.count("自動副本") >= 2
                 or name == "自動日常雜務" or len(FakeEngine.runs) >= 3):
             if self._stop_event is not None:
@@ -85,9 +74,8 @@ def build_runner(catch_up: bool = True) -> runner_mod.Runner:
     cfg = Config(path=Path("x"))
     cfg.device.serial = "auto"          # describe_setup() 會去讀，沒填會拋設定錯誤
     cfg.runtime.catch_up = catch_up
-    cfg.runtime.catch_up_guard_minutes = 0        # 不要讓「快到了」的讓路擋住測試
-    # 副本刻意**不排時間**：它只會以「啟動先跑清單第一個」的身分跑一次，
-    # 所以之後再出現就一定是被排回去的那一次，不會和排程混在一起。
+    cfg.runtime.catch_up_guard_minutes = 0        # 關閉讓路
+    # 副本不排時間：只以清單第一個的身分跑一次，之後再出現就是被排回去的。
     cfg.tasks = [
         TaskConfig(name="dungeon", enabled=True, daily_at=[], repeat=0),
         TaskConfig(name="chores", enabled=True, daily_at=[soon], repeat=1),

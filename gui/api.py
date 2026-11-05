@@ -1,12 +1,7 @@
-"""前端叫得到的方法。一個方法一件事，全部在這裡登記。
+"""前端呼叫的方法表，一個方法一件事。
 
-⚠ **會等的事情不要讓前端乾等。** `test` 要做 adb connect（逾時 20 秒）、`discover`
-  要探測一整排連接埠、更新要下載一百多 MB——這幾個都是「先回一句好，做完再推事件
-  回去」，否則介面看起來就像當掉。判斷哪些要這樣做的準則很簡單：**做的事會不會
-  超過一次畫面更新**。
-
-⚠ **執行中不能改設定。** 引擎是在建立時才套用開關的（`_apply_options`），中途改
-  不會生效。讓使用者以為改了有用，比不給改更糟。
+⚠ 耗時的操作（adb connect、探索、更新下載）先回傳，做完再推事件。
+⚠ 執行中不能改設定：引擎在建立時才套用開關。
 """
 
 from __future__ import annotations
@@ -27,43 +22,40 @@ from .bridge import Channel
 
 log = logger.get("gui")
 
-# 關視窗時等結束程序的上限。結束程序要逐層退出頁面，每步之間有等待動畫的時間，
-# dungeon 那份是 2.5×3＋2 秒；留 30 秒有裕度，卡住也不會讓視窗關不掉。
+# 關視窗時等待結束程序的上限（秒）。
 CLOSE_TIMEOUT = 30
 
 
 def _open_in_shell(path: Path) -> None:
-    """用系統預設程式開啟檔案或資料夾。
-
-    ⚠ 不用 `webbrowser.open`：那支對資料夾在某些 Windows 設定下會拿去開瀏覽器。
-    """
+    """用系統預設程式開啟檔案或資料夾。⚠ 不用 `webbrowser.open`：資料夾可能被開到瀏覽器。"""
     try:
         os.startfile(str(path))                     # type: ignore[attr-defined]
-    except AttributeError:                          # 非 Windows，開發時才會走到
+    except AttributeError:                          # 非 Windows
         subprocess.run(["xdg-open", str(path)], check=False)
 
 
 class Api:
-    """方法表。每個公開方法就是一個前端叫得到的 method。"""
+    """方法表。每個公開方法就是一個前端呼叫得到的方法。
+
+    ⚠ 公開成員必須全部是方法：pywebview 會走訪公開成員。
+    """
 
     def __init__(self, channel: Channel):
         self._channel = channel
-        # ⚠ 底線開頭：pywebview 會走訪公開成員，而 Config 底下掛著 Path，
-        #   屬性鏈長得沒有必要讓它去走。
+        # ⚠ 底線開頭，pywebview 不會走訪。
         self._cfg: Config | None = None
         self._runner = None
         self._discovering = False
         self._updating = False
         self._release = None            # 查到的新版，等使用者決定要不要裝
-        self._window = None             # 網頁版才會掛，見 attach_window
-        # 縮到系統匣之後要說一聲：隱藏之後畫面上完全沒有痕跡，不講的話使用者
-        # 會以為程式關掉了，再啟動一次——而那會被防多開擋下來。
+        self._window = None             # 由 attach_window 設定
+        # 視窗縮到系統匣之後的通知掛鉤
         self._on_hidden = None
 
     # ================= 設定 =================
 
     def state(self, _: dict) -> dict:
-        """介面啟動時要的全部資料，一次拿完。"""
+        """介面啟動時需要的全部資料。"""
         cfg = self._cfg = Config.load()
         return {
             "version": VERSION,
@@ -87,15 +79,12 @@ class Api:
         nxt = t.next_run()
         return {
             "name": t.name,
-            # 中文名直接取自腳本的 `name:`，不另外維護對照表。
+            # 中文名取自腳本的 `name:`
             "title": optionmeta.task_label(t.name),
             "enabled": t.enabled,
             "repeat": t.repeat,
             "repeat_hint": optionmeta.REPEAT_HINTS.get(t.name, ""),
-            # 每週與每日是**兩個不同的鍵**，寫錯地方會讓腳本從「每週一」變成
-            # 「每天」（或反過來整個不排程）。所以模式在後端就決定好，前端只編
-            # 它該編的那一個。
-            # ⚠ 兩種都有時算每日：實際每天都會跑，顯示星期會被看成只有那天才跑。
+            # 每週與每日是兩個不同的鍵，模式由後端決定。⚠ 兩種都有時算每日。
             "mode": "weekly" if t.weekly and not t.times else "daily",
             "daily_at": [f"{h:02d}:{m:02d}" for h, m in t.times],
             "weekly_at": [f"{WEEKDAY_NAMES[d]} {h:02d}:{m:02d}"
@@ -107,13 +96,9 @@ class Api:
 
     @staticmethod
     def _template_options() -> dict[str, Any]:
-        """設定範本裡的預設值。
+        """設定範本裡的預設值，補上舊設定檔缺少的鍵。
 
-        ⚠ **使用者的 `config.yaml` 不一定有全部的鍵。** 舊的設定檔不會自己
-          長出新的鍵，只列 `cfg.options` 的話介面上會少掉一批選項，而且沒有任何徵兆。
-
-        ⚠ 拿範本當預設是安全的：`config.example.yaml` 的值和腳本裡 `${鍵:預設}` 的
-          預設是同一組（`tests/test_options_complete.py` 守著），所以顯示出來的就是「不填的話會怎樣」。
+        ⚠ 範本的值和腳本的 `${鍵:預設}` 是同一組（`tests/test_options_complete.py`）。
         """
         try:
             import yaml
@@ -126,24 +111,17 @@ class Api:
 
     @staticmethod
     def _options_json(cfg: Config) -> dict:
-        """開關與數值，附上標籤、說明、範圍與所屬腳本。
-
-        ⚠ 對照表在 `core/optionmeta.py`，**前端不要自己抄一份**。漏掉的鍵會掉進
-          「其他」分頁並顯示原始鍵名。
-        """
-        # 範本補底、使用者的設定覆蓋上去。順序照範本走，新舊設定檔看到的排列才一致。
+        """開關與數值，附上標籤、說明、範圍與所屬腳本。對照表在 `core/optionmeta.py`。"""
+        # 範本補底、使用者的設定覆蓋，順序照範本。
         merged = {**Api._template_options(), **cfg.options}
 
         items: dict[str, dict] = {}
         for key, value in merged.items():
             label, hint = optionmeta.OPTION_LABELS.get(key, (key, ""))
-            # ⚠ 不是全部都是開關。`buy_counts = 1`、`raid_join_players = 10`
-            #   這些是數值，混在一起的話介面會把它們畫成核取方塊——勾一下就把
-            #   10 變成 True，而設定檔那邊還看不出哪裡怪。
+            # ⚠ 數值（`buy_counts`、`raid_join_players`）不可畫成核取方塊。
             entry: dict[str, Any] = {
                 "value": value, "label": label, "hint": hint,
-                # 「這是上一個開關的子項目」是**資料**，縮排怎麼畫交給介面決定。
-                # 標籤字串裡不放排版字元——見 core/optionmeta.SUB_OPTIONS。
+                # 是否為上一個開關的子項目，縮排由介面處理。
                 "sub": key in optionmeta.SUB_OPTIONS,
             }
             if isinstance(value, bool):
@@ -151,8 +129,7 @@ class Api:
             else:
                 lo, hi, suffix, decimals = optionmeta.OPTION_RANGES.get(
                     key, (0, 99, "", 0))
-                # ⚠ 小數位是必要的：raid_plateau_players 預設 6.5，用整數欄位會被
-                #   無聲地寫回 6，使用者只是打開介面看一眼，門檻就被改掉了。
+                # ⚠ 小數位不可省略：raid_plateau_players 預設 6.5。
                 entry.update(kind="number", min=lo, max=hi, suffix=suffix,
                              decimals=decimals, step=0.5 if decimals else 1)
             items[key] = entry
@@ -169,11 +146,7 @@ class Api:
         return {"items": items, "groups": groups}
 
     def save(self, params: dict) -> dict:
-        """就地改寫 config.yaml。
-
-        ⚠ 走 `core/confedit.py` 而不是 yaml.dump——設定檔的註解就是使用者的說明書，
-          dump 一趟會把它們全部洗掉，介面省下的那點力氣完全不划算。
-        """
+        """就地改寫 config.yaml，走 `core/confedit.py` 以保留註解。"""
         if self.is_running():
             raise RuntimeError("執行中不能改設定")
         changes = params.get("changes") or []
@@ -186,20 +159,15 @@ class Api:
         return {"changed": len(edits)}
 
     def reveal(self, params: dict) -> dict:
-        """用系統預設程式開啟設定檔或紀錄資料夾——介面沒做到的欄位仍然改得到。"""
+        """用系統預設程式開啟設定檔或紀錄資料夾。"""
         what = params.get("what")
         _open_in_shell(self._cfg.path if what == "config" else ROOT / "logs")
         return {}
 
-    # ---- 內建的設定檔編輯器 ----
-    #
-    # ⚠ **有了介面上的開關，為什麼還要讓人編原文？** 因為 `config.yaml` 裡有一整批
-    #   介面上沒有、也不該有的東西：`adb` 那一段、`runtime` 的補跑與讓路門檻、
-    #   腳本清單本身。少了這個編輯器，那些只能丟給記事本——而記事本沒有語法檢查，
-    #   存一份壞掉的設定檔下去要等下一次啟動才失敗，而那多半是半夜。
+    # ---- 內建的設定檔編輯器（介面沒有的設定：adb、runtime、腳本清單）----
 
     def config_read(self, _: dict) -> dict:
-        """把 config.yaml 的原文讀出來。"""
+        """讀出 config.yaml 的原文。"""
         path = self._cfg.path
         raw = path.read_bytes()
         return {"path": str(path), "text": raw.decode("utf-8")}
@@ -207,13 +175,8 @@ class Api:
     def config_write(self, params: dict) -> dict:
         """把編輯器裡的原文寫回 config.yaml。
 
-        ⚠ **先寫到旁邊、用真正的載入流程驗過，再換上去。** 只檢查 YAML 語法不夠：
-          `daily_at: 8:00` 是合法的 YAML（會被讀成 480），時間格式錯、腳本名打錯
-          都要等到執行那一刻才炸。拿 `Config.load()` 去驗等於走了一次真實路徑，
-          而且**驗不過的時候 config.yaml 一個位元組都沒被動到**。
-
-        ⚠ 換行沿用原檔，理由和 `confedit` 那邊完全相同：Windows 上直接寫換行字元
-          會被再轉一次，原檔若本來就是 CRLF 就變成每行之間多一個空行。
+        ⚠ 先寫到旁邊、用 `Config.load()` 驗過才換上去；驗不過時原檔不變。
+        ⚠ 換行沿用原檔。
         """
         if self.is_running():
             raise RuntimeError("執行中不能改設定")
@@ -231,9 +194,7 @@ class Api:
                 f.write(body)
             Config.load(tmp)
         except Exception as e:
-            # ⚠ PyYAML 的訊息是英文的（"while parsing a flow sequence"），直接丟
-            #   給使用者只會看到「有東西壞了」。前面補一句說清楚**檔案沒有被動到**
-            #   ——那是他當下最需要知道的事。
+            # 訊息先說明檔案沒有寫入，再附 PyYAML 的英文訊息。
             raise RuntimeError(
                 "設定檔沒有寫入，因為這份內容載不起來：" + chr(10) + str(e)) from None
         else:
@@ -245,17 +206,11 @@ class Api:
         log.info("設定檔已由內建編輯器整份寫回")
         return {}
 
-    # ================= 當日計數 =================
-    #
-    # ⚠ **這裡顯示的不是「今天跑過哪些腳本」。** 專案的原則是「不記錄跑過沒，
-    #   腳本會進遊戲自己確認」，而那條的前提是答案寫在畫面上。這一份記的是
-    #   **少數答案不在畫面上**的項目（打過幾場競技場、捐了幾次晨星、買了幾次
-    #   領獎次數），本來就存在 `state.json` 裡——介面只是把它變成看得見的。
-    #   細節與破例的判準見 `core/dailystate.py`。
+    # ================= 當日計數（state.json，見 core/dailystate.py）=================
 
     def daily_state(self, _: dict) -> dict:
         """今天各項的計數與上限。"""
-        from core.engine import Script, ScriptError   # 延後載入：會拉進 cv2
+        from core.engine import Script, ScriptError   # 延後載入 cv2
 
         cfg = self._cfg or Config.load()
         done = dailystate.counts()
@@ -264,7 +219,7 @@ class Api:
             try:
                 script = Script.load(task.name, cfg.options)
             except (ScriptError, OSError):
-                continue        # 腳本壞掉是「開始執行」要報的事，不是這一格
+                continue        # 腳本錯誤由「開始執行」回報
             title = optionmeta.task_label(task.name)
             for rule in script.rules:
                 if rule.max_fires_daily:
@@ -275,16 +230,13 @@ class Api:
                     rows.append({
                         "key": key,
                         "task": title,
-                        # ⚠ 取「→」**後面**那半。被計數的是動作（打一場、捐一次、
-                        #   買一次），前半只是「在哪個畫面上」。
+                        # 取「→」後面那半：被計數的是動作。
                         "label": rule.name.split("→")[-1].strip(),
                         "done": done.get(key, 0),
                         "limit": rule.max_fires_daily,
                         "stale": False,
                     })
-                # `tally` 只數不擋，所以沒有上限可寫。名稱由腳本給，好幾條規則
-                # 可以數進同一格（討伐的四種入場方式都是「參戰一次」）——所以
-                # 這裡要去重，不能一條規則畫一列。
+                # `tally` 沒有上限，名稱由腳本給，多條規則共用一格時要去重。
                 for action in rule.actions:
                     label = action.get("tally")
                     if not label:
@@ -296,9 +248,7 @@ class Api:
                     rows.append({"key": key, "task": title, "label": label,
                                  "done": done.get(key, 0), "limit": 0,
                                  "stale": False})
-        # 狀態檔裡有、但現在的腳本沒有的鍵（改過規則名、關掉的開關）。
-        # ⚠ 要列出來，不要安靜地藏起來——它仍然佔著位子，而使用者是來這裡
-        #   找「為什麼今天不打了」的。
+        # 狀態檔裡有、但現在的腳本沒有的鍵（改過規則名、關閉的開關），也要列出來。
         for key, value in done.items():
             if key not in seen:
                 task, _, name = key.partition("/")
@@ -314,11 +264,7 @@ class Api:
                 "path": str(dailystate.PATH)}
 
     def daily_reset(self, params: dict) -> dict:
-        """把某一項（或全部）今天的計數歸零。
-
-        ⚠ 執行中不給按。引擎在建立時就把計數讀進規則裡了，中途歸零要下一輪才
-          生效——而那正是「按了看起來沒作用」最難查的形狀。
-        """
+        """把某一項（或全部）今天的計數歸零。⚠ 執行中不可用：引擎在建立時就讀入計數。"""
         if self.is_running():
             raise RuntimeError("執行中不能重設當日計數，請先停止")
         key = params.get("key") or None
@@ -343,7 +289,7 @@ class Api:
         if not tasks:
             raise RuntimeError("沒有啟用任何腳本")
 
-        from .runner import RunnerThread          # 延後載入：會拉進 cv2
+        from .runner import RunnerThread          # 延後載入 cv2
         self._runner = RunnerThread(
             cfg, tasks, self._channel, one_shot=bool(params.get("once")))
         self._runner.start()
@@ -351,17 +297,13 @@ class Api:
         return {}
 
     def run_now(self, params: dict) -> dict:
-        """把一份不排程的腳本（虛空裂縫）現在就跑一輪。
+        """讓一份不排程的腳本（虛空裂縫）現在跑一輪。回傳 `now`：True 表示馬上開始。
 
-        回傳 `now`：True 是馬上開始，False 是排在正在跑的那一輪後面。
+          沒在執行     → 開一個只跑這一輪的排程
+          排程等待中   → 叫醒它先跑這個，跑完回去等下一個時刻
+          正在跑別的   → 接在那一輪後面
 
-        三種狀態各走各的路，介面要據此說不同的話：
-          沒在執行 → 開一個只跑這一輪的排程（跑完就結束，不留在背景）
-          排程等待中 → 叫醒它先跑這個，跑完回去等原本的下一個時刻
-          正在跑別的腳本 → 接在那一輪後面，不打斷正在打的副本或討伐
-
-        ⚠ 結束程序執行中不收。停止要求已經送出去了，塞進去的那一輪沒有人會跑到，
-          而介面上看起來會像「按了沒反應」。
+        ⚠ 結束程序執行中不接受：停止要求已送出，這一輪不會被執行。
         """
         name = str(params.get("task") or "")
         if not name:
@@ -375,10 +317,7 @@ class Api:
         return {"now": True}
 
     def run_cancel(self, params: dict) -> dict:
-        """中斷 run_now 塞進去的那一份（虛空裂縫），排程照常。
-
-        正在跑的立刻結束、不跑結束程序；還在排隊的拿掉。整個排程要停用 `stop`。
-        """
+        """中斷 run_now 加入的那一份，排程照常。執行中的立刻結束、不跑結束程序；排隊中的移除。"""
         name = str(params.get("task") or "")
         if not name or not self.is_running():
             return {"cancelled": False}
@@ -391,14 +330,12 @@ class Api:
         if not self.is_running():
             raise RuntimeError("沒有在執行")
         self._runner.request_stop()
-        # ⚠ 結束程序期間的等待不能被打斷，所以這裡不等它。按下停止到真正結束要
-        #   14～18 秒，介面要出聲，否則看起來像當掉。這一句只是開頭，接下來
-        #   引擎會逐步把「結束程序執行中　第 N 步」推上來蓋掉它。
+        # ⚠ 結束程序的等待不可中斷，這裡不等它。引擎會逐步回報「結束程序執行中　第 N 步」。
         self._channel.send("status", "停止中，正在執行結束程序 ⋯")
         return {}
 
     def join(self, params: dict) -> dict:
-        """等結束程序跑完。關視窗時用，逾時就放棄。"""
+        """等結束程序跑完，關視窗時使用，逾時就放棄。"""
         if self.is_running():
             self._runner.join(timeout=float(params.get("timeout") or 30))
         return {"running": self.is_running()}
@@ -406,7 +343,7 @@ class Api:
     # ================= 裝置 =================
 
     def test(self, _: dict) -> dict:
-        """連一次看看。慢，所以開執行緒做，結果用事件推回去。"""
+        """測試連線，開執行緒做，結果用事件推回去。"""
         def work():
             from core.adb import Device
             try:
@@ -417,21 +354,16 @@ class Api:
                     "text": f"連線正常：{dev.cfg.device.target}",
                 })
             except Exception as e:
-                # AdbError 的訊息本身就是給人看的檢查清單，原樣送過去
+                # AdbError 的訊息本身就是檢查清單
                 self._channel.send("tested", {"ok": False, "text": str(e)})
 
         threading.Thread(target=work, daemon=True).start()
         return {}
 
     def discover(self, params: dict) -> dict:
-        """探索可用的模擬器。`auto` 為真時是開視窗自動觸發的那一次。
+        """探索可用的模擬器，開執行緒做。`auto` 表示開視窗時自動觸發。
 
-        ⚠ 慢的是 `adb connect`：候選埠只要有一個「通得了 TCP 卻不是 adb」，那一發
-          就會卡到逾時。所以絕不能在請求裡直接做完。
-
-        ⚠ **自動觸發的那次不做多埠掃描**（`deep=False`）。對同一台遠端主機連敲十幾
-          個埠會被防毒判定成連接埠掃描而封鎖整台機器，而開視窗是使用者隨手就會做
-          很多次的動作。設定檔已經指名埠號時只敲那一個，本機則不受限制。
+        ⚠ 自動觸發不做多埠掃描（`deep=False`），見 core/discover.py。
         """
         if self._discovering:
             raise RuntimeError("正在探索中")
@@ -441,8 +373,7 @@ class Api:
             from core import discover
             from core.adb import Device
             try:
-                # ⚠ 刻意不呼叫 dev.connect()：探索的用途就是「還不知道要連哪一台」，
-                #   connect() 連不上會丟例外，整個探索就白做了。
+                # ⚠ 不呼叫 dev.connect()：連不上會丟例外，探索就中斷了。
                 found = discover.scan(Device(self._cfg),
                                       deep=not params.get("auto"))
                 d = self._cfg.device
@@ -468,26 +399,19 @@ class Api:
             "serial": f.serial,
             "host": host,
             "port": int(port) if port.isdigit() else 0,
-            # 旗標排在最前面：收起來的下拉只看得到開頭那段，「這台不能用」
-            # 不能落在被切掉的那一截裡。
+            # 旗標排最前面
             "label": f.label(want_size, want_dpi),
-            # 多行版給 tooltip。單行會被 view 從中間省略，而埠號與解析度
-            # 剛好都在省略號裡——那正是使用者要看的兩件事。
+            # 多行版給 tooltip
             "detail": f.detail(want_size, want_dpi),
             "usable": f.is_usable,
-            # 規格不符比「連不上」更難查——每個模板都會比不中，而紀錄只會寫
-            # 「沒有規則成立」。所以清單上直接標出來。
+            # 規格不符時直接標出來
             "ok_size": f.matches_spec(want_size, want_dpi),
         }
 
     # ================= 更新 =================
 
     def update_check(self, params: dict) -> dict:
-        """查有沒有新版。自動查的那條路查不到就安靜，沒網路不是使用者當下關心的事。
-
-        ⚠ **回報要分得出「已經是最新」和「查不到」。** 兩者在 `check()` 都是 None，
-          而介面會據此跳一句話——沒網路時說「已經是最新版本」就是在說謊。
-        """
+        """查有沒有新版。自動查詢失敗時不出聲。⚠ 回報要分得出「已經是最新」與「查不到」。"""
         def work():
             from core import updater
             try:
@@ -504,10 +428,9 @@ class Api:
                 "page": updater.PAGE,
                 "can_apply": can,
                 "why": why,
-                # 空字串＝真的問到了 GitHub。有值就是「查不到」的原因，
-                # 介面要說的是那一句，不是「已經是最新版本」。
+                # 空字串表示查詢成功，有值就是查不到的原因。
                 "error": err,
-                # 自動查到的那條路只把按鈕點亮，不跳框
+                # 自動查詢不跳對話框
                 "quiet": bool(params.get("quiet")),
             })
 
@@ -515,11 +438,7 @@ class Api:
         return {}
 
     def update_apply(self, _: dict) -> dict:
-        """下載並換檔，成功就排一次重新啟動。
-
-        ⚠ **執行中不更新。** 換檔要重新啟動才生效，而重新啟動會中斷正在打的副本
-          或討伐，那一次次數不會回來。
-        """
+        """下載並換檔。⚠ 執行中不可更新：重新啟動會中斷戰鬥。"""
         if self.is_running():
             raise RuntimeError("執行中不能更新，請先停止")
         if self._release is None:
@@ -533,7 +452,7 @@ class Api:
             rel = self._release
             try:
                 def on_progress(done: int, total: int) -> None:
-                    # ⚠ 只推事件，不寫紀錄——一秒好幾筆，寫進去會把紀錄洗掉。
+                    # ⚠ 只推事件，不寫紀錄。
                     self._channel.send("update_progress",
                                       {"done": done, "total": total})
 
@@ -543,9 +462,7 @@ class Api:
                 ok, why = updater.apply(path)
                 if not ok:
                     raise RuntimeError(why)
-                # ⚠ **不要在這裡就 restart()。** 它排的是一個「等這個行程結束
-                #   就啟動新版」的背景 PowerShell，使用者不一定當場重新啟動，
-                #   它會等到下次關閉程式時自己啟動新版。由 update_restart() 觸發。
+                # ⚠ 不在這裡 restart()，由使用者選擇後的 update_restart() 觸發。
                 self._channel.send("update_done",
                                   {"ok": True, "version": rel.version})
             except Exception as e:
@@ -560,37 +477,20 @@ class Api:
     # ================= 介面偏好 =================
 
     def ui_get(self, params: dict) -> dict:
-        """讀介面自己的偏好（主題、視窗大小、關閉時的選擇）。
-
-        ⚠ **和 config.yaml 分開，但兩份介面共用同一份。** 各存各的話，換一張臉
-          主題就跳回預設，而使用者不會知道為什麼。
-        """
+        """讀介面偏好（ui.json）。"""
         return {"value": uistate.get(str(params.get("key") or ""))}
 
     def ui_set(self, params: dict) -> dict:
         uistate.set(str(params.get("key") or ""), params.get("value"))
         return {}
 
-    # ================= 視窗 =================
-    #
-    # ⚠ 這幾個只有網頁版（pywebview）會用到——那邊的視窗握在 Python 手上。
-    #   視窗由外殼在建立 Api 之後用 `attach_window()` 掛上來，沒掛就代表這條路
-    #   不存在，要直接說清楚而不是安靜地沒反應。
+    # ================= 視窗（由外殼用 `attach_window()` 掛上）=================
 
     def attach_window(self, window) -> None:
-        """把 pywebview 的視窗交給後端管。
+        """把 pywebview 的視窗交給後端。
 
-        ⚠ **一定要存進底線開頭的屬性。** pywebview 會走訪 js_api 物件的**每一個
-          公開成員**來決定要暴露什麼給 JS，而 pywebview 的 window 底下掛著 .NET 的
-          Form——它的屬性鏈是無限的：
-
-              window.native.AccessibilityObject.Bounds.Empty.Empty.Empty.Empty…
-
-          掃到那裡就會一路遞迴到 `maximum recursion depth exceeded`，**每秒刷幾十行
-          錯誤，而視窗還是開得起來**，所以很容易誤判成「只是有雜訊」。
-          底線開頭的名字會被跳過，這是唯一的解法。
-
-        ⚠ 同一個理由，`_channel` 也是私有的。
+        ⚠ 一定要存進底線開頭的屬性：pywebview 會走訪 js_api 的公開成員，而 window 底下
+          的 .NET Form 屬性鏈是無限的，會遞迴到 maximum recursion depth。
         """
         self._window = window
 
@@ -604,15 +504,10 @@ class Api:
         return {}
 
     def _maximized(self) -> bool:
-        """視窗是不是最大化。
+        """視窗是否最大化，問底層的 WinForms Form（`window.native.WindowState`）。
 
-        ⚠ **不要問 `window.state`。** 那個名字很像視窗狀態，實際上是 pywebview 給 JS
-          用的**共享資料字典**（`class State(dict)`），和最大化毫無關係。
-          `str(window.state) == "maximized"` **永遠是 False**。
-
-        ⚠ 要問的是底層的 WinForms Form（`window.native.WindowState`）。**不要自己記
-          一個旗標**：使用者可以雙擊標題列、拖到螢幕頂端、用 Win+↑ 最大化，那些都
-          不會經過我們，旗標一定會和現實脫節。
+        ⚠ `window.state` 是 pywebview 給 JS 用的共享字典，與視窗狀態無關。
+        ⚠ 不自己記旗標：雙擊標題列、Win+↑ 不會經過這裡。
         """
         form = getattr(self._win(), "native", None)
         if form is None:
@@ -635,30 +530,20 @@ class Api:
         return {"value": self._maximized()}
 
     def set_hidden_hook(self, fn) -> None:
-        """視窗縮起來之後要做的事（網頁版拿去跳系統匣的氣泡通知）。
-
-        ⚠ **隱藏之後畫面上完全沒有痕跡**，不講一聲的話使用者會以為程式關掉了，
-          然後再啟動一次——而那會被防多開擋下來，看起來就像「按了沒反應」。
-        """
+        """視窗縮到系統匣之後要做的事（跳氣泡通知）。"""
         self._on_hidden = fn
 
     def win_hide(self, _: dict) -> dict:
-        """縮到系統匣。`tray_hint` 關掉之後就安靜地縮，不再跳那則氣泡。
-
-        ⚠ 判斷放在這裡而不是外殼那邊：外殼只知道「怎麼跳通知」，不該同時管
-          「這次要不要跳」。
-        """
+        """縮到系統匣。`tray_hint` 關閉時不跳通知。"""
         self._win().hide()
         if self._on_hidden is not None and uistate.get("tray_hint"):
             self._on_hidden()
         return {}
 
     def win_close(self, _: dict) -> dict:
-        """使用者按了自繪的 ✕。決定要問、要縮、還是要結束。
+        """使用者按了自繪的 ✕，決定詢問、縮小或結束。
 
-        ⚠ **不用系統原生的對話框問。** 那是強制回應的，會把整個視窗凍住——而按下
-          結束之後還要跑十幾秒的結束程序，那段期間狀態列與紀錄面板都要繼續更新。
-          所以把問題丟回前端，由它自繪的對話框處理。
+        ⚠ 不用系統對話框：強制回應會凍結視窗，而結束程序期間介面要繼續更新。
         """
         choice = uistate.get("on_close")
         if choice == "tray":
@@ -669,12 +554,9 @@ class Api:
         return {}
 
     def update_restart(self, _: dict) -> dict:
-        """換好檔之後、使用者選「立即重新啟動」時才走這條。
+        """使用者選「立即重新啟動」：排定啟動新版的背景工作，然後關閉自己。
 
-        排定「等這個行程結束就啟動新版」的背景工作，然後關掉自己。兩件事的
-        順序不能反：`restart()` 等的就是這個 PID。
-
-        ⚠ 選「稍後」的話這條不會跑，什麼都不排——下次使用者自己開就是新版。
+        ⚠ 順序不可反：`restart()` 等的是這個 PID。選「稍後」時不排定任何事。
         """
         from core import updater
         if not updater.restart():
@@ -682,12 +564,9 @@ class Api:
         return self.win_quit({})
 
     def win_quit(self, _: dict) -> dict:
-        """真的要結束：先跑完結束程序，再關視窗。
+        """結束程式：先跑完結束程序，再關視窗。
 
-        ⚠ **結束程序不能在這條呼叫裡等完。** 前端還在等這個 Promise，而結束程序要逐層退回
-          家園、每步之間有等動畫的時間（dungeon 那份是 2.5×3＋2 秒）。擋在這裡的話
-          畫面整段不會更新，看起來就是當掉。
-          所以開執行緒做，前端立刻收到 `closing` 事件去顯示「正在執行結束程序」。
+        ⚠ 開執行緒做，不可擋住這次呼叫：畫面會停止更新。前端收到 `closing` 事件顯示進度。
         """
         self._channel.send("closing", None)
 
@@ -695,23 +574,19 @@ class Api:
             if self.is_running():
                 self._runner.request_stop()
                 self._runner.join(timeout=CLOSE_TIMEOUT)
-            # ⚠ **拆視窗之前一定要先收掉通道。** `destroy()` 不會觸發 `closing`
-            #   事件（那是給「使用者關視窗」用的），所以外殼那邊的 `channel.close()`
-            #   在這條路上不會跑到。少了這一行，結束程序期間還會有紀錄往 `evaluate_js`
-            #   送，而 WebView2 已經被處置——pywebview **自己 log 完才吞掉**那個
-            #   `ObjectDisposedException`，我們的 try/except 接不到，於是二十幾行
-            #   .NET traceback 一路寫進 assistant.log 和使用者的終端機。
+            # ⚠ 拆視窗前先關閉通道：`destroy()` 不會觸發 `closing`，
+            #   之後的 evaluate_js 會產生 ObjectDisposedException 寫進紀錄。
             self._channel.close()
             try:
                 self._win().destroy()
             except Exception:
-                pass        # 視窗已經關閉就略過，接下來程式就要結束
+                pass        # 視窗已關閉
 
         threading.Thread(target=work, daemon=True).start()
         return {}
 
     def open_external(self, params: dict) -> dict:
-        """用系統瀏覽器開連結。⚠ 只放行 http/https——這個參數是前端給的。"""
+        """用系統瀏覽器開連結。⚠ 只接受 http/https。"""
         url = str(params.get("url") or "")
         if url.startswith(("http://", "https://")):
             webbrowser.open(url)

@@ -1,23 +1,20 @@
 """競技場「輸了換對手」的接力：靠 max_fires 前進、靠 reset_fires 歸零。
 
-這條路 selftest 驗不到——它一張畫面一張畫面地判斷，每條規則的計數都從零開始，
-而這裡要驗的正是**跨畫面累積下來的計數**。
+驗跨畫面累積的計數（selftest 每張畫面的計數都從零開始）。
 """
 import os
 import tempfile
 import sys, pathlib, time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-# ⚠ **測試不能寫進真正的 assistant.log。** 那是使用者用來監督執行狀況的檔案，
-#   混進假的排程與假的下載失敗比沒有紀錄更糟。要在 import core 之前設定。
+# ⚠ 測試不寫進真正的 assistant.log，要在 import core 之前設定。
 os.environ.setdefault("SSA_LOG_DIR", tempfile.mkdtemp(prefix="ssa-test-log-"))
 
 from core.config import Config
 from core.engine import Engine, Script, apply_options
 from core import dailystate, vision
 
-# ⚠ 每日場次上限（arena_max_battles）記在 state.json 裡、**跨執行保留**，所以測試
-#   一定要自己隔離——否則機器上今天真的打過的場次會把測試擋掉，看起來像回歸。
+# ⚠ 每日場次上限記在 state.json，測試要自己隔離。
 _STATE = dailystate.PATH.read_bytes() if dailystate.PATH.exists() else None
 dailystate.PATH.unlink(missing_ok=True)
 
@@ -77,8 +74,7 @@ step(e, LOSE_PAGE)
 assert x1 < x2 < x3, f"點擊位置沒有往右移：{x1} {x2} {x3}"
 print(f"  [通過] 三次點在不同對手上：x = {x1} → {x2} → {x3}")
 
-# 第四次：三格都用完了，該結束本輪。結束本輪那條有 sustain，把計時往前撥當作已經等夠久
-# （selftest 對有 sustain 的規則也是這樣驗的）。
+# 第四次：三格都用完，應該結束本輪。那條有 sustain，把計時往前撥。
 name, _ = step(e, LIST_PAGE, sustained="連續三場都落敗 → 結束本輪")
 check(name, "連續三場都落敗 → 結束本輪", "三場都輸就結束本輪")
 
@@ -108,7 +104,7 @@ print(f"  [通過] 兩場都點在同一個對手上：x = {x1}")
 
 print()
 print("=== 4. 打滿設定的場次就結束本輪 ===")
-# 上限設 2：第三次開對話框時應該換成「今日場次已達上限」那條，而且**還沒按下入場鍵**
+# 上限設 2：第三次開對話框時應該換成「今日場次已達上限」那條，而且還沒按下入場鍵
 two = {**OPTIONS, "arena_max_battles": 2}
 script = Script.load("arena", two)
 apply_options(script.rules, two)
@@ -144,7 +140,7 @@ finally:
     _cfgmod.resource_file = _orig
 
 print()
-# 還原機器上原本的每日計數，不要因為跑過測試就把今天的場次吃掉。
+# 還原原本的每日計數。
 if _STATE is None:
     dailystate.PATH.unlink(missing_ok=True)
 else:

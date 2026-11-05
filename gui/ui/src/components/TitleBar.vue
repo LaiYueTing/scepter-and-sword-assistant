@@ -27,8 +27,8 @@ const route = useRoute()
 const message = useMessage()
 const showAppearance = ref(false)
 const showAbout = ref(false)
-const showAsk = ref(false)      // 查到新版：要不要現在裝
-const showUpdated = ref(false)  // 裝好了：要不要現在重新啟動
+const showAsk = ref(false)      // 查到新版的詢問框
+const showUpdated = ref(false)  // 更新完成的詢問框
 const installedVersion = ref('')
 
 const percent = computed(() => {
@@ -51,11 +51,7 @@ const target = computed(() => {
 })
 
 /**
- * 「連得上嗎」。
- *
- * ⚠ **後端沒有持續維護一個連線旗標**，所以這裡只認兩種**確定**的證據：測試連線成功、
- *   或探索到一台位址相符而且規格也對的裝置。**沒有證據時燈是暗的，不是亮的**——
- *   把「還不知道」畫成綠燈，等於在說謊，而使用者正是靠這顆燈決定要不要按開始執行。
+ * 連線燈號。只認測試連線成功，或探索到位址相符且規格正確的裝置；沒有證據時不亮。
  */
 const deviceLive = computed(() => {
   if (host.testResult?.ok) return true
@@ -70,12 +66,7 @@ const deviceSub = computed(() => {
 })
 
 /**
- * 現在正在跑哪一份腳本。沒有的話這顆 chip 整個不出現。
- *
- * ⚠ **只認 `running`。** 用「有 state 就算」的話，前一份腳本跑完留下的 `done`
- *   會先被挑中，標題列就停在已經結束的那一份上。
- *
- * ⚠ **顯示 `note`（中文）而不是 `state`（狀態鍵）**，否則畫面上會出現「running」。
+ * 正在跑的腳本，沒有就不顯示。⚠ 只認 `running`，顯示 `note`。
  */
 const runningTask = computed(() => {
   if (!host.running) return null
@@ -84,32 +75,26 @@ const runningTask = computed(() => {
 })
 
 /**
- * 檢查更新的結果。三種結果分開講：
+ * 檢查更新的結果：
  *
  *   error  → 檢查更新失敗：{原因}
  *   found  → 偵測到新版本 vX.Y.Z
  *   其餘   → 已經是最新版本（vX.Y.Z）
  *
- * ⚠ **「已經是最新」和「查不到」在後端都是「沒有新版可裝」**，但沒網路時
- *   不能說「已經是最新版本」。後端因此多回一個 `error`（空字串＝真的問到了 GitHub）。
- *
- * ⚠ 旗標放在 store 而不是這裡：「關於」那個對話框裡也有一顆檢查更新，
- *   兩個入口要說同一句話。自動查的那次走 quiet，不設旗標，所以不出聲。
+ * 手動查詢的旗標放在 store，「關於」對話框共用；自動查詢不設旗標，不出聲。
  */
 watch(
   () => host.update,
   (u) => {
     if (!u) return
-    // 查到而且裝得下去就當場問。⚠ **自動查到那次也要問**：看不到那顆按鈕的人
-    //   （縮在系統匣、視窗一掛好幾天）否則會一直用著舊版。執行中不問，那時
-    //   本來就不給更新。
+    // 查到而且可以安裝就詢問（自動查詢也一樣），執行中不問。
     const ask = u.found && u.can_apply && !host.running && !host.closing
     if (ask) showAsk.value = true
 
     if (!host.updateAsked) return
     host.updateAsked = false
     if (u.error) message.warning(`檢查更新失敗：${u.error}`)
-    // ⚠ 跳了框就不要再跳 toast——同一件事講兩次。
+    // 跳了詢問框就不跳 toast。
     else if (u.found) {
       if (!ask) message.success(`偵測到新版本 v${u.version}`)
     } else message.success(`已經是最新版本（v${host.version}）`)
@@ -117,11 +102,7 @@ watch(
 )
 
 /**
- * 換好檔之後問使用者要不要現在重新啟動。
- *
- * ⚠ **一定要問，而且問完才排重啟。** 換檔本身只是把新的 EXE 放到位，畫面上
- *   完全沒有反應。而排定重啟的背景工作是「等這個行程結束就啟動新版」，先排後問的話它會
- *   在使用者下次關閉程式時自己啟動新版。
+ * 換檔完成後詢問是否重新啟動。⚠ 問完才排定重新啟動。
  */
 watch(
   () => host.updateReady,
@@ -171,9 +152,7 @@ async function onUpdate() {
 
     <div class="flex-1"></div>
 
-    <!--
-      狀態燈號。**這是打開視窗最先想知道的兩件事**：連得上嗎、現在在跑什麼。
-    -->
+    <!-- 狀態燈號：連線狀態與正在跑的腳本。 -->
     <NTooltip trigger="hover">
       <template #trigger>
         <div class="chip no-drag" :class="{ live: deviceLive }" style="--glow: var(--neon)">
@@ -184,11 +163,7 @@ async function onUpdate() {
           </div>
         </div>
       </template>
-      <!--
-        ⚠ **兩種狀態都要說「現在是什麼」，不是只說「你該做什麼」。** 亮著的時候
-          要講清楚驗過了哪兩件事（連得上、規格對），因為那正是這顆燈的全部含義；
-          暗著的時候要講清楚它是「還沒驗」而不是「驗過了，壞的」——兩者差很多。
-      -->
+      <!-- 亮時寫驗過哪兩件事（連得上、規格對），暗時寫「尚未驗證」。 -->
       {{
         deviceLive
           ? `連線正常：ADB 連線成功，畫面規格 ${host.device.spec || '720x1280 / 320dpi'}`
@@ -210,10 +185,9 @@ async function onUpdate() {
       </div>
     </div>
 
-    <!-- 這個程式自己的按鈕，一組。 -->
+    <!-- 程式的按鈕。 -->
     <div class="no-drag flex items-center gap-1">
-      <!-- 下載一百多 MB 一定要有進度條。只有一行狀態文字在變的話，
-           一兩分鐘裡視窗看起來就像當住了。 -->
+      <!-- 下載進度條。 -->
       <div v-if="host.updateProgress" class="flex items-center gap-2" style="width: 170px">
         <NProgress
           type="line"
@@ -237,7 +211,7 @@ async function onUpdate() {
             <ArrowDownToLine :size="17" />
           </button>
         </template>
-        <!-- ⚠ 停用的按鈕一定要講得出原因。少了這句，那顆按鈕看起來就是壞了。 -->
+        <!-- ⚠ 停用的按鈕要寫出原因。 -->
         {{
           host.running
             ? '執行中不更新：換檔要重新啟動，會中斷正在打的副本或討伐'
@@ -247,10 +221,7 @@ async function onUpdate() {
         }}
       </NTooltip>
 
-      <!--
-        ⚠ **明暗切換放在這裡，不放進介面設定的對話框。** 這是每天會按好幾次的
-          東西，藏進一個要先打開的對話框裡等於降級。
-      -->
+      <!-- 明暗切換。 -->
       <NTooltip trigger="hover">
         <template #trigger>
           <button
@@ -282,10 +253,7 @@ async function onUpdate() {
         介面設定：背景主題、狀態燈號、關閉與縮小時的行為
       </NTooltip>
 
-      <!--
-        ⚠ **「關於」要看得到，不能只藏在選單裡。** 版本、設定檔與日誌的實際路徑
-          是回報問題時第一個要抄的東西。
-      -->
+      <!-- 關於：版本與路徑。 -->
       <NTooltip trigger="hover">
         <template #trigger>
           <button class="iconbtn" @click="showAbout = true">
@@ -297,13 +265,8 @@ async function onUpdate() {
     </div>
 
     <!--
-      這個「視窗」的按鈕，另一組。
-      ⚠ **中間那條分隔線是必要的，不是裝飾。** 左邊那組操作的是程式（查更新、換主題），
-        右邊這組操作的是視窗——兩件完全不同的事，排成一排卻會被讀成同一組。
-
-      ⚠ **視窗鍵刻意維持方角、滿高、貼到最右邊。** 那是 Windows 的慣例，而且有實際
-        理由：最大化時「關閉」落在螢幕角落，游標甩過去一定會停住（Fitts 定律，
-        角落等於無限大的目標）。加了圓角或內距就會把這個性質毀掉。
+      視窗的按鈕，與程式的按鈕用分隔線分開。
+      ⚠ 視窗鍵維持方角、滿高、貼到最右邊：最大化時「關閉」在螢幕角落（Fitts 定律）。
     -->
     <div class="no-drag flex items-stretch self-stretch">
       <span class="sep"></span>
@@ -339,7 +302,7 @@ async function onUpdate() {
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
-/* 版本號給一塊底色，才不會被讀成標題的一部分 */
+/* 版本號的底色 */
 .brand .ver {
   font-size: 11px;
   color: var(--text-2);
@@ -358,9 +321,7 @@ async function onUpdate() {
 }
 
 /*
- * 主題圖示靜止在 45°，hover 再轉到 60°。
- * ⚠ **這顆刻意不走 `iconAnim.js` 的那套 hover 動畫。** 那套是「播一輪就停」，
- *   而這裡要的是「停在另一個角度」——兩種動畫疊在同一顆圖示上會互相衝突。
+ * 主題圖示靜止在 45°，hover 轉到另一個角度。⚠ 掛 data-no-anim，不走 `iconAnim.js`。
  */
 .theme-i {
   color: var(--accent-text);
@@ -370,11 +331,6 @@ async function onUpdate() {
 .theme-i.light {
   color: var(--amber);
 }
-/*
- * ⚠ **幅度要看得出來。** 45° → -15° 是 60 度的差距；只差十幾度的話，旁邊那顆
- *   上下彈 3px 的圖示一比就會顯得「這顆沒有效果」。它仍然是**停在另一個角度**
- *   （不是循環動畫），所以不會和 `iconAnim.js` 那套互相衝突。
- */
 .iconbtn:hover .theme-i {
   transform: rotate(-15deg) scale(1.08);
 }

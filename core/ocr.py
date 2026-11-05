@@ -1,19 +1,9 @@
-"""用 Windows 內建的 OCR 讀畫面上的文字。
+"""用 Windows 內建的 OCR 讀畫面文字（zh-Hant-TW），不需要安裝或打包其他套件。
 
-用在「內容會一直增加」的欄位——副本名稱、難度就是。這種欄位用模板判斷的話，
-每出一個新副本都要手動裁一張圖，而且只認得裁過的那幾張。
+⚠ 只用來寫紀錄與讀純數字：每次要開一個 PowerShell（約 1 秒），美術字讀不穩。
 
-⚠ 只用來寫紀錄，不要拿去做主流程判斷：每次要開一個 PowerShell（約 1 秒），
-  而且美術字讀不穩。判斷該不該動作一律交給模板比對。
-
-兩個實作選擇：
-
-  用 OS 內建而不是 Python 套件——不必安裝、不必打包，也就沒有 PyInstaller
-  相依風險。Windows 11 已內建 zh-Hant-TW 辨識器。
-
-  PowerShell 腳本內嵌成字串、用 -EncodedCommand（base64 的 UTF-16LE）傳，
-  而不是放一個 .ps1：省掉一個要打包的檔案，也繞過檔案編碼——外部 .ps1 必須存成
-  「UTF-8 帶 BOM」，否則 PowerShell 5.1 會當成 cp950 讀而整個語法錯誤。
+PowerShell 腳本內嵌成字串，用 -EncodedCommand（base64 的 UTF-16LE）傳遞，
+不受檔案編碼影響（PowerShell 5.1 會把沒有 BOM 的 UTF-8 檔當成 cp950）。
 """
 from __future__ import annotations
 
@@ -27,16 +17,13 @@ import numpy as np
 
 from core import logger
 
-# 名稱要和 logger._MODULES 的鍵一致，不能用 __name__（那會是 core.ocr，
-# 對照表對不上，紀錄就露出英文模組名，欄位寬度也跟著歪掉）。
+# ⚠ 名稱要和 logger._MODULES 的鍵一致，不可用 __name__。
 log = logger.get("ocr")
 
 Region = tuple[int, int, int, int]
 
 # 供 -EncodedCommand 使用的腳本本體。
-#
-# WinRT 的非同步方法在 PowerShell 5.1 沒有 await 可用，要自己把
-# IAsyncOperation 轉成 .NET Task 再等它完成，所以有那段反射。
+# WinRT 的非同步方法在 PowerShell 5.1 沒有 await，要用反射把 IAsyncOperation 轉成 .NET Task。
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
@@ -71,12 +58,12 @@ $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.S
 $result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
 
 foreach ($line in $result.Lines) {
-    # 中文辨識結果的詞之間會被塞空白，接回去才是原本的字串
+    # 中文辨識結果的詞之間有空白，接回原字串
     ($line.Words | ForEach-Object { $_.Text }) -join ''
 }
 """
 
-_unavailable = False        # 系統沒有辨識器時只抱怨一次，之後靜靜跳過
+_unavailable = False        # 系統沒有辨識器時只警告一次
 
 
 def _prepare(
@@ -86,19 +73,11 @@ def _prepare(
     binary: int | None,
     trim_right: int = 0,
 ) -> np.ndarray:
-    """裁切、（必要時）從右端修掉一段、二值化、放大。
+    """裁切、從右端修掉一段、二值化、放大。
 
-    三個前處理都是必須的，參數是量出來的：
-
-      scale       720x1280 上的字太小，原尺寸幾乎讀不到（x2 讀成「亞本獎勵」、
-                  x4 才讀對「惡夢副本獎勵」）。
-      binary      給亮度門檻時轉成「黑字白底」。白色美術字描黑邊又疊在場景圖上
-                  的標題非這樣不可（直接讀是「月殿·惡歹」，門檻 210 加放大
-                  3 倍才讀出「月之宮殿」）。
-      trim_right  只要標題的前半段。標題是「名稱·難度」，右半那段最難讀（會被
-                  讀成一個雜字）；難度固定兩個字，「·難度」的寬度就是常數，
-                  所以**先找到文字右端、再往左扣掉那個常數**。錨定右端而不是
-                  寫死右邊界——標題置中，名稱長度一變左右兩端都會移動。
+      scale       放大倍率。原尺寸幾乎讀不到（x2「亞本獎勵」、x4「惡夢副本獎勵」）。
+      binary      亮度門檻，轉成黑字白底，用於白字描黑邊的標題（門檻 210）。
+      trim_right  先找到文字右端，再往左扣掉這個寬度（標題置中，不可寫死右邊界）。
     """
     img = screen
     if region:
@@ -131,11 +110,7 @@ def read(
     lang: str = "zh-Hant-TW",
     timeout: float = 25,
 ) -> str:
-    """讀出區域內的文字，多行會用空白接起來。讀不到就回傳空字串。
-
-    讀不到一律回空字串而不是拋錯：這是附帶記錄的功能，
-    不該因為它失敗就中斷整個流程。
-    """
+    """讀出區域內的文字，多行用空白連接；讀不到就回傳空字串，不拋錯。"""
     global _unavailable
     if _unavailable:
         return ""
@@ -150,8 +125,7 @@ def read(
             ["powershell", "-NoProfile", "-NonInteractive",
              "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
             capture_output=True, timeout=timeout,
-            # ⚠ 打包版是 --windowed、沒有主控台，所以每呼叫一次就會**新開一個**
-            #   PowerShell 視窗，畫面上閃一下黑框。
+            # ⚠ --windowed 沒有主控台，不帶 CREATE_NO_WINDOW 每次都會閃一個 PowerShell 視窗。
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if proc.returncode == 2:

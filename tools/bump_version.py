@@ -1,22 +1,13 @@
 """版本號 +1，同時寫進 `assets/version_info.txt` 與 `core/config.py`。
 
-版本號是 **X.Y.Z**（Semantic Versioning）：
-
-    X  破壞相容——設定檔的鍵改名、腳本格式變動，升上去要動使用者的 config.yaml
-    Y  新功能
-    Z  修正
+版本號是 X.Y.Z：X 破壞相容（設定檔鍵名、腳本格式）、Y 新功能、Z 修正。
 
     python tools/bump_version.py            # Z +1
     python tools/bump_version.py --minor    # Y +1，Z 歸零
     python tools/bump_version.py --major    # X +1，其餘歸零
 
-⚠ **Windows 的版本資源 `filevers` 規定是四個數字**，所以那裡固定補一個 0
-  （1.2.3 → `(1, 2, 3, 0)`）。給人看的 `FileVersion` / `ProductVersion` 才是 X.Y.Z。
-
-⚠ **`core/config.py` 的 `VERSION` 是唯一的真相。** `version_info.txt` 只是
-  PyInstaller 的參數，不會被打包進 EXE——程式執行時回報的版本、更新器拿來比大小的
-  版本，都來自 `VERSION`。兩邊對不上的話，發布出去的 EXE 會一直說自己是舊版，
-  於是每個人的「檢查更新」永遠說有新版。所以同步不到就中止，不是印一行警告。
+⚠ Windows 的 `filevers` 規定四個數字，固定補 0（1.2.3 → `(1, 2, 3, 0)`）。
+⚠ 程式回報的版本來自 `core/config.py` 的 `VERSION`，同步失敗就中止。
 """
 
 from __future__ import annotations

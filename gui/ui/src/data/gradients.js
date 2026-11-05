@@ -1,24 +1,16 @@
 /**
- * 背景漸層主題：WebGradients 的 174 組，外加一組「預設」（回內建純色底）。
+ * 背景漸層主題：WebGradients 的 174 組，外加一組「預設」。
  *
- * 套用的是**整個視窗的背景畫布**（`--app-bg`）：內容區直接透出漸層，標題列／
- * 狀態列／面板改成 88% 不透明的毛玻璃讓漸層透成一層底色，而**卡片維持完全不
- * 透明**——卡片上都是小字，那是唯一不能拿去換好看的東西。
+ * 套用在整個視窗的背景畫布（`--app-bg`），標題列、狀態列、面板是 88% 不透明的毛玻璃。
  *
- * ⚠ **遮罩與面板不透明度是量出來的，不要調。** 最糟的情況是漸層本身很亮
- *   （深色主題）或很暗（淺色，`wg40` 真的是純黑到純白），此時 `--text-2`
- *   會被壓到讀不了：
+ * ⚠ 遮罩與面板不透明度是量出來的（WCAG AA 小字門檻 4.5:1）：
  *
  *   | 遮罩 / 面板不透明度 | 深色 text-2 | 淺色 text-2 |
  *   |---|---|---|
- *   | 0.45 / 58%（WebGradients 原設定） | **2.54** | **3.25** |
- *   | 0.55 / 88%（現在） | 4.59 | 4.81 |
+ *   | 0.45 / 58% | 2.54 | 3.25 |
+ *   | 0.55 / 88%（現行） | 4.59 | 4.81 |
  *
- *   WCAG AA 的小字門檻是 4.5:1，而 `--text-2` 用在狀態列的設定檔路徑、標題列的
- *   版本號、卡片的下一輪倒數——全都是小字。
- *
- * ⚠ 名稱是繁體中文（附原始英文），編號同 webgradients.com。這份資料**不要手改**，
- *   它是從官方 Sketch 檔萃取的。
+ * ⚠ 名稱是繁體中文（附原始英文），編號同 webgradients.com，資料取自官方 Sketch 檔，不要手改。
  */
 import {
   contrast,
@@ -206,8 +198,7 @@ export const BG_THEMES = [
   { id: 'wg180', name: '完美藍', en: 'Perfect Blue', css: 'linear-gradient(45deg, #6e7ff3 0%, #5753c9 52%, #3d4e81 100%)' }
 ]
 /*
- * 遮罩：壓在漸層上，讓它退成「壁紙」而不是搶戲。固定值——**壁紙的鮮豔度不該
- * 因為主題而縮水**。
+ * 遮罩，壓在漸層上。固定值。
  */
 const SCRIM_DARK = [12, 14, 20]
 const SCRIM_LIGHT = [248, 250, 253]
@@ -215,44 +206,36 @@ const SCRIM_ALPHA_DARK = 0.5
 const SCRIM_ALPHA_LIGHT = 0.58
 
 /*
- * 卡片的毛玻璃：透過去多少。**固定值，不隨主題變**——外觀一致比多擠出一點透明度
- * 重要，而且「為什麼這張卡比較透」對使用者是無法解釋的。
+ * 卡片的毛玻璃不透明度，固定值。
  *
- * ⚠ **0.84 是量出來的取捨，不要往下調。**
+ * ⚠ 0.84 不要往下調：
  *
  *   | 卡片不透明 | `--text-2` 最多被拉亮 | 拉到 |
  *   |---|---|---|
- *   | 0.78 | 10.2 點 | **69.4%**（`--text-1` 是 71%，階層等於被壓平了） |
+ *   | 0.78 | 10.2 點 | 69.4%（`--text-1` 是 71%） |
  *   | 0.84 | 7.2 點 | 66.4% |
  *   | 0.88 | 5.5 點 | 64.7% |
  *
- *   深色底上透明度特別貴：卡片本身的相對亮度只有 0.023，混進一點被遮罩壓過的亮漸層
- *   （約 0.235）就會把它翻倍，對比掉得非常快。
- *
- * ⚠ **配套是「文字對合成後的實際底色重新鉗一次」**（`paletteFor` 的 `bgOverride`）。
- *   少了那一步，這個數字在鮮豔的主題上會讓小字掉到 3.65:1。
+ * ⚠ 配套是文字對合成後的實際底色重新計算（`paletteFor` 的 `bgOverride`）。
  */
 const CARD_ALPHA = 0.84
 
-/** 小字的門檻，多留一點裕度給四捨五入。 */
+/** 小字的門檻，含四捨五入的裕度。 */
 const TARGET = 4.6
 void TARGET
 
-/** 挑主題時的預覽色塊：顯示原始的鮮豔漸層（「預設」用內建純色底）。 */
+/** 主題預覽色塊：原始的漸層（「預設」用內建純色底）。 */
 export function bgSwatch(theme) {
   return theme.css || 'var(--bg-0)'
 }
 
-/** 依 id 找主題；找不到（舊設定檔留下的 id）就回「預設」。 */
+/** 依 id 找主題，找不到就回傳「預設」。 */
 export function themeById(id) {
   return BG_THEMES.find((t) => t.id === id) || BG_THEMES[0]
 }
 
 /**
- * 把 rgb 陣列寫成 CSS。
- * ⚠ 用 `rgba(r, g, b, a)` 這種逗號形式，不要空白斜線形式——理由和 `palette.js` 的
- *   `hslToCss` 完全相同（seemly 解不了新語法）。這幾個值目前只餵給 CSS，但同一份
- *   規則寫兩種格式，總有一天會有人把其中一個接到 naive-ui 上。
+ * 把 rgb 陣列寫成 CSS。⚠ 用逗號形式（理由見 `palette.js` 的 `hslToCss`）。
  */
 const css = (rgb, a) => {
   const [r, g, b] = rgb.map(Math.round)
@@ -260,11 +243,7 @@ const css = (rgb, a) => {
 }
 
 /**
- * 依主題算出整套外觀。**純函式，不碰 DOM**——`tools/check-contrast.mjs` 驗的就是
- * 這一份，所以「驗過的」和「跑起來的」保證是同一套推導。
- *
- * ⚠ 檢查器自己重算一次是最容易出錯的作法：兩邊的公式只要差一點，量出來的數字就
- *   和使用者看到的畫面對不起來，而那種落差極難察覺。
+ * 依主題算出整套外觀。純函式，不碰 DOM，`tools/check-contrast.mjs` 驗的就是這一份。
  *
  * @param {string} id 背景主題 id
  * @param {boolean} isDark
@@ -277,20 +256,13 @@ export function appearanceFor(id, isDark = true) {
   const base = paletteFor(hue, isDark)
 
   /*
-   * 「預設」沒有桌布，但**不能因此變成一片實心色塊**——毛玻璃沒有東西可以透，
-   * 卡片就會是硬邦邦的一塊，換了主題也只有邊邊在變。
-   *
-   * 所以給它兩團由自己主色推出來的極淡光暈當底。它不是「桌布」（看不出是什麼圖案），
-   * 只是讓表面有深淺可言，卡片才有東西可以透。
-   *
-   * ⚠ 濃度刻意壓到 14% / 10%：再高就變成一個「主題」，而使用者選「預設」的意思正是
-   *   不要主題。
+   * 「預設」用兩團由主色推出來的淡光暈（14% / 10%）當底，毛玻璃才有東西可以透。
    */
   if (!theme.css) {
     const accent = parseCss(base['--accent'])
     const bg0 = parseCss(base['--bg-0'])
     const card = parseCss(base['--bg-2'])
-    // 光暈最濃的那一點，就是卡片底下最糟的情況
+    // 光暈最濃的一點，是卡片底下最差的情況
     const brightest = mixRgb(accent, bg0, 0.14)
     const composite = mixRgb(card, brightest, CARD_ALPHA)
     return {
@@ -311,7 +283,7 @@ export function appearanceFor(id, isDark = true) {
 
   const ex = extremesOf(theme.css)
   const stop = ex ? (isDark ? ex.hi : ex.lo) : scrimRgb
-  // 卡片上的字真正落在什麼底上：卡片色 ＋ 透上來的（被遮罩壓過的）漸層
+  // 卡片文字的實際底色：卡片色 ＋ 透上來的（被遮罩壓過的）漸層
   const composite = mixRgb(cardRgb, mixRgb(scrimRgb, stop, scrim), CARD_ALPHA)
 
   const s = css(scrimRgb, scrim)
@@ -327,11 +299,8 @@ export function appearanceFor(id, isDark = true) {
 /**
  * 把外觀套到 `<html>` 上。
  *
- * ⚠ **一定要 inline 設在根節點。** CSS 變數是繼承下去的，設在 `<html>` 才會一路傳到
- *   還沒建立出來的元件（naive-ui 的對話框是後來才 mount 到 body 的）。
- *
- * ⚠ **深淺模式切換時要整個重套。** 明度階梯與遮罩在兩種模式下是反的，只換
- *   `data-theme` 而不重算會得到「淺色的底配深色的字」。
+ * ⚠ inline 設在根節點，naive-ui 之後才 mount 的對話框也繼承得到。
+ * ⚠ 深淺切換時要整個重套。
  */
 export function applyAppearance(id, isDark = true) {
   const root = document.documentElement
@@ -340,17 +309,15 @@ export function applyAppearance(id, isDark = true) {
   for (const [k, v] of Object.entries(a.vars)) root.style.setProperty(k, v)
 
   /*
-   * ⚠ **「預設」也走這條路。** 它同樣有底（一層很淡的主色光暈）也同樣開毛玻璃——
-   *   沒有底可以透的話，卡片就是一片實心色塊，整個介面看起來很硬。
+   * 「預設」也走這條路（有光暈底與毛玻璃）。
    */
   root.style.setProperty('--app-bg', a.appBg)
-  // ⚠ 直接給算好的顏色，不要讓 CSS 再乘一次 alpha——同一個數字兩個地方寫，
-  //   改了其中一個的那天不會有人發現。
+  // 直接給算好的顏色，CSS 不再乘 alpha。
   root.style.setProperty('--card-bg', a.cardBg)
   root.dataset.bgtheme = 'on'
 }
 
-/** `paletteFor` 吐的是 hex（理由見 palette.js 的 `hslToCss`）；這裡只要它的 rgb。 */
+/** 把 `paletteFor` 輸出的 hex 轉成 rgb。 */
 function parseCss(value) {
   const m = value.match(/^#([0-9a-f]{6})$/i)
   if (!m) return [0, 0, 0]

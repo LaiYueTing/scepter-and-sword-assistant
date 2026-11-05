@@ -1,8 +1,7 @@
 # 載入畫面的進度條與動畫，由杖劍傳說助手.spec 併進 PyInstaller 的啟動畫面腳本。
 #
-# 這段跑在 bootloader 的 Tcl 執行緒上，解壓的時候 Python 還沒開始跑，畫面照樣會動。
-# 進度訊息是「百分比|文字」（core/splash.py）；bootloader 自己寫進 status_text 的
-# 檔名不符合這個格式，會被略過。
+# 跑在 bootloader 的 Tcl 執行緒上，解壓階段也會動。進度訊息格式是「百分比|文字」（core/splash.py），
+# bootloader 寫入的解壓檔名不符合格式，會被略過。
 
 font create splashLabel -family {Microsoft JhengHei UI} -size 10
 font create splashSmall -family {Microsoft JhengHei UI} -size 9
@@ -41,8 +40,7 @@ proc on_status {args} {
 }
 trace add variable status_text write on_status
 
-# 進度只有幾個回報點，中間靠時間往前爬，整段都看得出在動。爬的量有上限，
-# 不會超過下一個回報點太多。
+# 回報點之間依時間往前爬，有上限，不會超過下一個回報點太多。
 proc splash_tick {} {
     global splash_target splash_shown splash_since splash_start bar_x0 bar_x1 bar_y
     set now [clock milliseconds]
@@ -84,5 +82,5 @@ wm attributes . -alpha 0.0
 after 10 [list splash_fade 0.09]
 after 33 splash_tick
 
-# Python 那邊沒有人收掉時的保險，例如視窗一直開不起來。
+# 保險：Python 沒有關閉時自行結束。
 after 45000 exit

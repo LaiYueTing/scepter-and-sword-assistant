@@ -14,10 +14,7 @@ const message = useMessage()
 const REPO = 'https://github.com/LaiYueTing/scepter-and-sword-assistant'
 
 /**
- * 更新狀態寫成一句話。
- *
- * ⚠ **「還沒檢查」和「已經是最新」要分開講。** 兩者都沒有新版可裝，但一個代表
- *   「我們問過了」、另一個代表「我們還沒問」——使用者要據此決定要不要按那顆按鈕。
+ * 更新狀態的文字。⚠「還沒檢查」與「已經是最新」要分開。
  */
 const updateText = computed(() => {
   const u = host.update
@@ -45,21 +42,13 @@ async function check() {
     :bordered="false"
     @update:show="(v) => $emit('update:show', v)"
   >
-    <!--
-      ⚠ **這個對話框只回答「我手上這一份是什麼」。** 版本、跑在哪、設定檔與日誌
-        在哪裡。出問題要回報時，這幾格就是要抄過去的東西。不放操作（除了查更新，
-        因為那一格的值本身就是「要不要按」的依據）。
-    -->
-    <!--
-      ⚠ **標題底下不放介紹。** 這個對話框回答的是「我手上這一份是什麼」，
-        而「這個程式在做什麼」使用者早就知道了——他是為了抄版本與路徑才打開它的。
-    -->
+    <!-- 版本、執行方式、設定檔與日誌的路徑，回報問題時使用。標題底下不放介紹。 -->
     <div class="hero">
       <span class="ic"><Info :size="20" /></span>
       <div class="nm">杖劍傳說助手</div>
     </div>
 
-    <!-- ⚠ 這幾格的用途就是「抄下來貼到回報裡」，所以要選得起來。 -->
+    <!-- 內容要可以選取複製。 -->
     <dl class="kv selectable">
       <dt>版本</dt>
       <dd>v{{ host.version || '—' }}</dd>
@@ -112,7 +101,7 @@ async function check() {
   align-items: center;
   margin-bottom: 16px;
 }
-/* 對話框的圖示：主色淡底的圓角方塊，和標題同一組 */
+/* 對話框的圖示：主色淡底的圓角方塊 */
 .ic {
   width: 40px;
   height: 40px;
@@ -129,8 +118,7 @@ async function check() {
 }
 
 /*
- * ⚠ **欄位名與值用 grid 分兩欄，不要用縮排或補空白對齊。** 這個視窗用的是比例
- *   字型，補空白永遠對不齊——那是終端機那份 `logger.pad()` 的思維。
+ * 欄位名與值用 grid 分兩欄（比例字型，不用補空白對齊）。
  */
 .kv {
   display: grid;
@@ -155,7 +143,7 @@ dd {
   align-items: center;
   gap: 8px;
 }
-/* 路徑很長，讓它自己截斷而不是把對話框撐寬 */
+/* 路徑過長時截斷 */
 .path {
   flex: 1;
   min-width: 0;

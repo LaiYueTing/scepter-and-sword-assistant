@@ -1,25 +1,19 @@
-"""發版前的關卡：原始碼、打包出來的 EXE、GitHub 上的版本，三邊要對得起來。
-
-跑法：
+"""發版前的檢查：原始碼、打包出來的 EXE、GitHub 上的版本三邊一致。
 
     python tools/release_check.py                                 # 只驗原始碼
     python tools/release_check.py --exe "dist/杖劍傳說助手.exe"    # 連打包產物一起驗
 
-⚠ **要在 gh release create 之前跑，而且要全綠才發。** 截斷的下載、繼承下去的
-  PyInstaller 環境變數、只有按下「開始執行」才碰得到的 import 錯誤，都要打包之後
-  實際執行才看得出來。
+⚠ 在 gh release create 之前執行，全部通過才發布。
 
-各項檢查對應的失敗形狀：
-
-  版本號三處一致    對不上的話助手會回報舊版本，別人的更新器於是永遠停不下來
-  工作區乾淨        發出去的 EXE 和版控裡的原始碼不是同一份
-  tests/ 全過       跨執行的狀態、排程、更新換檔，selftest 結構上都驗不到
-  selftest          模板或規則被改壞
-  EXE 的版本資源    .spec 讀的是 assets/version_info.txt，忘了 bump 就會不一致
-  EXE 內建的模組    原始碼有、PyInstaller 沒收進去（延後匯入最容易漏）
-  EXE 內建的資源    少了 gui/web 就是一片空白頁，少了 templates 就什麼都認不得
-  EXE 跑得起來      這是唯一驗得到「這顆檔案本身沒壞」的方法
-  版本比線上的新    發一個不比線上新的版本，等於沒有人會收到更新
+  版本號三處一致    core/config.py、version_info 的版本欄位
+  工作區乾淨        EXE 與版控的原始碼是同一份
+  tests/ 全過       排程、更新、跨執行狀態等 selftest 驗不到的項目
+  selftest          模板與規則
+  EXE 的版本資源    .spec 讀 assets/version_info.txt
+  EXE 內建的模組    延後匯入的模組有被收進去
+  EXE 內建的資源    gui/web、templates 等
+  EXE 跑得起來      `update --check` 能執行並回報版本
+  版本比線上的新    否則不會有人收到更新
 """
 
 from __future__ import annotations
@@ -50,10 +44,9 @@ def check(ok: bool, name: str, detail: str = "") -> bool:
 
 
 def check_versions() -> str:
-    """版本號：core/config.py 的 VERSION 是真相，version_info 的四欄要跟著它。
+    """版本號：以 core/config.py 的 VERSION 為準。
 
-    ⚠ 版本號是 X.Y.Z，而 **Windows 的 `filevers` / `prodvers` 規定四個數字**，
-      末位固定補 0。所以那兩欄比對的是 `X.Y.Z.0`，字串欄位才比 `X.Y.Z`。
+    ⚠ `filevers` / `prodvers` 比對 `X.Y.Z.0`，字串欄位比對 `X.Y.Z`。
     """
     print("版本號")
     m = re.search(r'^VERSION\s*=\s*"(\d+\.\d+\.\d+)"',
@@ -115,7 +108,7 @@ def check_tests(skip_selftest: bool) -> None:
 def check_exe(exe: Path, ver: str) -> None:
     print(f"\n打包產物　{exe.name}　{exe.stat().st_size / 1048576:.0f} MB")
 
-    # ⚠ dist 裡的 EXE 可能比原始碼舊，而這從原始碼上看不出來。
+    # ⚠ dist 裡的 EXE 可能比原始碼舊。
     sources = [ROOT / "main.py", ROOT / "杖劍傳說助手.spec"]
     for d in ("core", "gui", "scripts", "assets"):
         sources += [p for p in (ROOT / d).rglob("*")
@@ -151,8 +144,7 @@ def check_exe(exe: Path, ver: str) -> None:
           "、".join(missing) if missing
           else f"腳本 {has('scripts/')} 份、模板 {has('templates/')} 張")
 
-    # ⚠ gui/runner.py 要按下「開始執行」才會被載入。原始碼層的 import 掃描抓得到寫錯的 import，卻抓不到「PyInstaller 根本沒把
-    #   這個模組收進去」——那要去看 EXE 裡的 PYZ 才知道。
+    # ⚠ 延後載入的模組（gui/runner.py）要查 EXE 裡的 PYZ，原始碼的 import 掃描看不出來。
     blob = reader.extract("PYZ.pyz")
     if isinstance(blob, tuple):
         blob = blob[-1]
@@ -170,8 +162,7 @@ def check_exe(exe: Path, ver: str) -> None:
     check(not absent, "內建的模組齊全",
           f"{len(inside)} 個" + (f"，缺：{absent}" if absent else ""))
 
-    # ⚠ 紀錄要導去暫存目錄。這一步會真的執行 EXE，而使用者平常就在 dist 裡跑它，
-    #   不隔離的話這幾行會混進他用來監督執行狀況的 assistant.log。
+    # ⚠ 紀錄導去暫存目錄，不混進 dist 的 assistant.log。
     env = dict(os.environ)
     env["SSA_LOG_DIR"] = tempfile.mkdtemp(prefix="ssa-relcheck-")
     p = subprocess.run([str(exe), "update", "--check"], cwd=exe.parent,
@@ -195,9 +186,7 @@ def check_newer_than_online(ver: str) -> None:
         print(f"  [略過] 查不到線上版本（{type(e).__name__}）")
         return
 
-    # ⚠ **比大小要用更新器自己那一份**（它會把兩邊補到一樣長，`1.0.0` 和 `1.0.0.0`
-    #   才不會被判成一大一小）。在這裡另外寫一份的話，關卡說「可以發」而使用者的
-    #   更新器說「沒有新版」——兩份實作只要差一點，症狀就是這種對不起來。
+    # ⚠ 比較版本用更新器自己的 is_newer。
     from core import updater
 
     newer = updater.is_newer(ver, tag)

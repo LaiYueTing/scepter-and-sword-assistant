@@ -7,17 +7,13 @@ import { useHostStore } from '../stores/host'
 const host = useHostStore()
 const message = useMessage()
 
-// 執行中不給重設。引擎是在**建立時**把計數讀進規則裡的，中途歸零要下一輪才生效
-// ——按了看起來沒作用是最難查的那種形狀。和「執行中把設定面板鎖住」同一個理由。
+// 執行中不可重設：引擎在建立時就讀入計數。
 const locked = computed(() => host.running || host.closing)
 const rows = computed(() => host.daily.rows)
 const anything = computed(() => rows.value.some((r) => r.done > 0))
 
 /*
- * 依腳本分組。
- *
- * ⚠ 每一列都重複寫一次腳本名的話，列高會變成兩行——十個項目就只看得到三個，
- *   其餘都要捲。分組之後每個腳本只佔一行標題，列本身收成單行。
+ * 依腳本分組，每個腳本只佔一行標題。
  */
 const groups = computed(() => {
   const out = []
@@ -31,9 +27,7 @@ const groups = computed(() => {
 })
 
 /*
- * ⚠ 沒有上限的那些**不要用最弱的那一層**。次數是功能性資訊，讀者每次都要看，
- *   而 `--off` 是留給「已經不算數了」的（腳本裡已經沒有這條規則）。有沒有上限
- *   從 `4` 和 `0 / 3` 的寫法就分得出來，不必再用顏色講一次。
+ * 次數是功能性資訊，不用最弱的文字色；`--off` 只給腳本已經沒有的規則。
  */
 function tone(r) {
   if (r.stale) return 'nc-pill--off'
@@ -51,7 +45,7 @@ async function reset(key) {
 
 onMounted(() => host.loadDaily().catch(() => {}))
 
-// 計數是在腳本跑的時候變的，所以每次有腳本開始或結束就重讀一次。
+// 腳本開始或結束時重讀計數。
 watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: true })
 </script>
 
@@ -74,15 +68,9 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
       </NPopconfirm>
     </div>
 
-    <!-- ⚠ 直向內距比別的面板小一級（`py-2`）：這一塊和上面的模擬器面板共用一欄，
-           而**多出來的高度應該留給模擬器**（它有下拉、三個欄位和三顆按鈕）。
-           用 `p-3` 時兩塊加起來比欄高多 4px，於是兩邊各自冒出一條 2px 的捲軸。 -->
+    <!-- ⚠ 直向內距用 `py-2`：這塊與模擬器面板共用一欄，`p-3` 會多 4px 而出現捲軸。 -->
     <div class="flex flex-col gap-1 px-3 py-2" style="overflow: auto; min-height: 0">
-      <!--
-        ⚠ **這裡不是「今天跑過哪些腳本」。** 列出來的是**答案不在畫面上**的那幾件事
-          （打過幾場競技場、捐了幾次晨星、買了幾次領獎次數）。次數用盡、獎勵已領
-          這些腳本進遊戲看得出來，本來就不需要記。
-      -->
+      <!-- 列出畫面上讀不到的計數（競技場場次、晨星捐獻、買領獎次數）。 -->
       <p v-if="!rows.length" class="empty">今天還沒有任何計數。</p>
 
       <template v-for="g in groups" :key="g.task">
@@ -120,10 +108,7 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
 
 <style scoped>
 /*
- * ⚠ **`flex: none` 不是裝飾。** 這一塊是會溢出的直向 flex 欄，而 flex 項目預設
- *   可以被壓縮——`.who` 有 `overflow: hidden`，於是它被壓成**高度 0**：分組標題
- *   在畫面上完全消失，而 DOM 裡是好好的（文字、顏色、字級都對）。看程式碼看不
- *   出來，要量 `getBoundingClientRect().height` 才知道。
+ * ⚠ `flex: none` 不可省略：`.who` 有 `overflow: hidden`，在溢出的直向 flex 欄裡會被壓成高度 0。
  */
 .dc-row,
 .who {
@@ -135,19 +120,17 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
   grid-template-columns: 1fr auto auto;
   align-items: center;
   gap: 8px;
-  padding-left: 8px;      /* 縮排到腳本名底下，一眼看得出誰屬於誰 */
+  padding-left: 8px;      /* 縮排到腳本名底下 */
 }
 
-/* 重設鍵縮一級：它決定整列的高度，而這一塊要盡量多塞幾列。 */
+/* 重設鍵縮小一級，它決定整列的高度。 */
 .dc-reset {
   width: 22px;
   height: 22px;
 }
 
 /*
- * ⚠ 做的是什麼用 `--text-1`，腳本名才用 `--text-2`。前者是這一列在講的事，
- *   讀者每次都要看；後者只是「它屬於誰」。把功能性的字丟進最弱的那一層，
- *   整片畫面就會看起來發灰。
+ * 項目名稱用 `--text-1`，腳本名用 `--text-2`。
  */
 .what {
   font-size: 12.5px;
@@ -156,7 +139,7 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 分組標題（腳本名）。這一層是「它屬於誰」，才用最弱的那一層。 */
+/* 分組標題（腳本名） */
 .who {
   font-size: 11px;
   color: var(--text-2);
@@ -168,7 +151,7 @@ watch(() => host.taskStates, () => host.loadDaily().catch(() => {}), { deep: tru
 .who:not(:first-child) {
   margin-top: 6px;
 }
-/* 狀態檔裡還留著、但腳本已經沒有這條規則了（改過名、關掉的開關）。 */
+/* 狀態檔裡還有、但腳本已經沒有這條規則。 */
 .gone {
   font-size: 10.5px;
   color: var(--text-2);

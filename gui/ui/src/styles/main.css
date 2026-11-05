@@ -1,8 +1,5 @@
 /*
- * ⚠ **跳過 preflight。** Tailwind 的 reset 會把 naive-ui 的元件樣式打壞（按鈕
- *   的邊框、輸入框的高度都會被歸零）。只載 theme 與 utilities，base 那層留給
- *   naive-ui 自己。這是 Tailwind 4 的作法：`@layer` 先宣告順序，再逐層 import，
- *   不要 import 的那層就不寫。
+ * ⚠ 不載入 preflight：Tailwind 的 reset 會破壞 naive-ui 的元件樣式。只載 theme 與 utilities。
  */
 @layer theme, base, components, utilities;
 
@@ -14,8 +11,7 @@
 @import './icons.css';
 
 /*
- * 把自訂變數映射成 Tailwind utility，這樣 `bg-surface` / `text-muted` /
- * `border-line` 也跟著主題走——不必為了換色去改每一個 class。
+ * 自訂變數映射成 Tailwind utility（`bg-surface` / `text-muted` / `border-line`）。
  */
 @theme inline {
   --color-base: var(--bg-0);
@@ -36,12 +32,7 @@
 }
 
 /*
- * ⚠ **跳過 preflight 就要自己補這一條。** Tailwind 的 reset 裡唯一「版面會依賴」的
- *   規則就是 border-box；不補的話 `height: 100%` 算的是**內容框**，再加上內距就整個
- *   超出父層（儀表板 `h-full` 配 `p-3.5` 會高出 28px，內容壓到狀態列上）。
- *
- *   preflight 其餘的部分（按鈕邊框歸零、標題字級歸一）才是會打壞 naive-ui 的那些，
- *   所以是「只補這一條」，不是「乾脆整包載回來」。
+ * ⚠ 不載入 preflight 就要自己補 border-box，否則 `height: 100%` 加內距會超出父層。
  */
 *,
 *::before,
@@ -57,25 +48,17 @@ body,
 }
 
 /*
- * ⚠ **`NConfigProvider` 會多插一層 div。** 它不是抽象元件——`#app` 底下真正裝著
- *   版面的是 `<div class="n-config-provider">`，而那層沒有高度。少了這條規則，
- *   根版面的 `h-full` 就對著一個 auto 高度的父層去算，整個 flex 欄塌成內容高度：
- *   畫面上半部正常、下半部是一大塊空白，看起來像「版面寫壞了」。
- *   量法：`document.querySelector('#app').firstElementChild` 看是誰。
+ * ⚠ `NConfigProvider` 會多插一層 div（`.n-config-provider`），這一層要有高度，
+ *   否則根版面的 `h-full` 不成立。
  */
 #app > .n-config-provider {
   height: 100%;
 }
 
 /*
- * ⚠ **中文要比拉丁字大一級，而且標題要真的加粗。** 14px 的中文用微軟正黑體，筆畫
- *   只有 1px 寬，被反鋸齒攤開之後灰灰的一片，和顏色沒有關係。
+ * 字級 15px、標題字重 600（量測條件：1920 螢幕、DPI 96）。
  *
- *   量測前提：1920 螢幕、系統 DPI 96（100%，沒有縮放）、視窗 SYSTEM_AWARE。
- *
- * ⚠ `font-weight: 500`（Tailwind 的 `font-medium`）對中文幾乎沒有效果：正黑體
- *   只有 Light / Regular / Bold 三個字重，500 會落回 Regular，看起來和內文一樣。
- *   標題要用 600 以上才會真的換到粗的那一支。
+ * ⚠ `font-weight: 500` 對中文沒有效果：微軟正黑體只有 Light / Regular / Bold，500 會落回 Regular。
  */
 body {
   background: var(--app-bg);
@@ -83,28 +66,20 @@ body {
   font-family: 'Microsoft JhengHei UI', 'Microsoft JhengHei', 'Segoe UI',
     system-ui, sans-serif;
   font-size: 15px;
-  overflow: hidden; /* 捲動由各個面板自己負責，視窗本身不捲 */
+  overflow: hidden; /* 捲動由各面板負責 */
 }
 
-/* 面板標題。用 class 而不是 Tailwind 的 font-medium，理由見上面那條。 */
+/* 面板標題 */
 .panel-title {
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 /*
- * 哪裡選得起來。
+ * 文字選取範圍：預設不可選，日誌、路徑、設定檔原文（`.selectable`）開放。
  *
- * ⚠ **pywebview 預設會往 body 注入一條 `user-select: none`**（`text_select=False`）,
- *   於是整個介面一個字都選不起來——日誌的「複製選取的內容」按了沒反應就是這樣來的。
- *   外殼那邊已經改成 `text_select=True`，哪裡能選改由這裡決定。
- *
- * ⚠ **不要整份打開。** 拖選按鈕與標籤的文字會讓它看起來像網頁而不是應用程式，
- *   而這個視窗是拿來盯狀態的。所以是**預設不給選、內容區明確開放**：日誌、
- *   路徑、設定檔原文——那三個是真的會有人想複製的東西。
- *
- * ⚠ `input` / `textarea` 要單獨列出來。祖先設了 `user-select: none` 時，
- *   文字控制項在某些版本的 Chromium 上會連拖選都做不到。
+ * ⚠ 外殼是 `text_select=True`，範圍由這裡決定。
+ * ⚠ `input` / `textarea` 要單獨列出：祖先設了 `user-select: none` 時部分 Chromium 無法拖選。
  */
 body {
   -webkit-user-select: none;
@@ -120,7 +95,7 @@ textarea,
   cursor: auto;
 }
 
-/* 自繪標題列：整條可以拖，互動元件要自己退出拖曳區 */
+/* 自繪標題列：整條可拖曳，互動元件退出拖曳區 */
 .drag {
   -webkit-app-region: drag;
 }
@@ -147,11 +122,7 @@ textarea,
 }
 
 /*
- * ⚠ **用滑鼠點過的元件不要留焦點光暈。** naive-ui 的按鈕／核取方塊／選項鈕被點過
- *   之後會留下一圈 `box-shadow`——那是給鍵盤操作看的焦點框，滑鼠點過之後不該留著。
- *   `:focus-visible` 正是為了分辨這兩種來源而存在：鍵盤 Tab 過去仍然看得到框。
- *
- * ⚠ 放在全站而不是某一個對話框裡：這是每一顆按鈕都會發生的事，逐個修必定漏掉。
+ * 滑鼠點過的元件不留焦點光暈，鍵盤操作（`:focus-visible`）仍然顯示。
  */
 .n-button:focus:not(:focus-visible),
 .n-checkbox:focus:not(:focus-visible),
@@ -164,24 +135,15 @@ textarea,
   box-shadow: none !important;
 }
 /*
- * ⚠ **按鈕和核取方塊用的是不同的機制**，一條規則蓋不住兩邊：核取方塊是
- *   `box-shadow`，而按鈕是套在 `.n-button__state-border` 上的 **border**。
- *   只寫 box-shadow 的話按鈕的焦點框不會消失，按鈕的值是：
- *
- *       .n-button__state-border  border: 1px solid rgb(124, 92, 255)
- *
- *   驗法（renderer 的主控台或 SSA_EVAL）：
- *       getComputedStyle(btn.querySelector('.n-button__state-border')).border
- *
- * ⚠ 要排除 `:hover` 與 `:active`——那個元素同時也負責這兩個狀態的邊框，
- *   一起關掉的話滑過去會沒有回饋。
+ * ⚠ 按鈕的焦點框是 `.n-button__state-border` 的 border，核取方塊是 box-shadow。
+ * ⚠ 要排除 `:hover` 與 `:active`：同一個元素也負責這兩個狀態的邊框。
  */
 .n-button:focus:not(:focus-visible):not(:hover):not(:active)
   .n-button__state-border {
   border-color: transparent !important;
 }
 
-/* 提示框限寬自動換行。naive-ui 預設不限寬，長的說明會整行跑出視窗外被切掉。 */
+/* 提示框限寬並自動換行 */
 .n-popover.n-tooltip {
   max-width: min(360px, calc(100vw - 32px));
   white-space: normal;

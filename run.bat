@@ -22,8 +22,7 @@ echo.
 rem 已經打包過就直接跑 EXE，否則走 Python
 if exist "%EXE%" (
     echo [資訊] 使用打包版本：%EXE%
-    rem 注意：--windowed 打包的執行檔屬於 GUI 子系統，cmd 直接呼叫不會等它
-    rem       結束就往下跑。start /wait 才能讓這個視窗等到它結束。
+    rem 注意：--windowed 的執行檔屬於 GUI 子系統，用 start /wait 才會等它結束。
     start /wait "" "%EXE%" run %ARGS%
     goto :done
 )

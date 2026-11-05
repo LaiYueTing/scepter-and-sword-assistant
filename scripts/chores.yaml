@@ -178,12 +178,13 @@ rules:
       - wait: 2
 
   - name: 巡禮目標 → 領取
-    # 與任務同一種「領取」按鈕。錨點取左上角的「巡禮之證」標題（各頁籤都是 1.000，
+    # 「領取」按鈕有呼吸動畫（會微微縮放），只裁文字、掛三個相位（&claim_text）：
+    # 有按鈕 ≥0.805、其餘 ≤0.53。錨點取左上角的「巡禮之證」標題（各頁籤都是 1.000，
     # 其餘 ≤0.419）。
     # ⚠ 兩條領取排在切換頁籤前面：切換之後原本的頁籤可能還掛著 ❗。
-    template: btn_claim_dot
+    template: &claim_text [btn_claim_text, btn_claim_text_b, btn_claim_text_c]
     require: [label_pass]
-    threshold: 0.82
+    threshold: 0.8
     cooldown: 1.5
     do:
       - tap_match: []
@@ -200,6 +201,42 @@ rules:
     do:
       - tap_match: [-30, 35]
       - wait: 2
+
+  - name: 巡禮目標 → 每日目標有驚嘆號 → 切換
+    # 巡禮目標底下的三個子頁籤各有自己的 ❗。模板帶淺色底，只認沒選中的頁籤
+    # （沒選中 1.000、已選中 0.598、沒有 ❗ ≤0.262），選中的那一頁由領取規則處理。
+    # 本期目標的位置照前兩個的間距（214px）推算。
+    template: badge_subtab_dot
+    region: [180, 1070, 60, 50]
+    require: [label_pass]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [145, 1115]
+      - wait: 1.5
+
+  - name: 巡禮目標 → 每週目標有驚嘆號 → 切換
+    template: badge_subtab_dot
+    region: [395, 1070, 60, 50]
+    require: [label_pass]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [360, 1115]
+      - wait: 1.5
+
+  - name: 巡禮目標 → 本期目標有驚嘆號 → 切換
+    template: badge_subtab_dot
+    region: [605, 1070, 60, 50]
+    require: [label_pass]
+    threshold: 0.8
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [575, 1115]
+      - wait: 1.5
 
   - name: 巡禮之證 → 巡禮目標有驚嘆號 → 切換頁籤
     # badge_tab_dot_b 是頁籤上的紅色 ❗，region 只框「巡禮目標」頁籤的右上角。
@@ -226,8 +263,8 @@ rules:
 
   - name: 巡禮之證已處理完 → 返回
     require: [label_pass]
-    absent: [btn_claim_dot]
-    threshold: 0.82
+    absent: *claim_text
+    threshold: 0.8
     sustain: 4
     cooldown: 3
     do:
@@ -300,10 +337,19 @@ rules:
 
   - name: 友情幣已領完 → 關閉對話框
     template: label_friend_coin_empty
-    max_fires: 2
+    max_fires: 1
     cooldown: 3
     do:
       - back:
+      - wait: 2
+
+  - name: 友情幣對話框還開著 → 點對話框外面
+    # 返回鍵沒關掉時的備案。(45, 1180) 在對話框外的暗處，模板還在才會點。
+    template: label_friend_coin_empty
+    max_fires: 2
+    cooldown: 3
+    do:
+      - tap: [45, 1180]
       - wait: 2
 
   - name: 好友已處理完 → 返回
@@ -319,11 +365,11 @@ rules:
   # ---- 任務：日常、週常 ----
 
   - name: 任務 → 領取
-    # 可領的任務按鈕右上角有 ❗，領完的任務沉到最下面變成「已完成」。有 ❗ 的「領取」
-    # 0.859～1.000；錨點取底部的「任務／成就」頁籤（1.000，其餘 ≤0.768）。
-    template: btn_claim_dot
+    # 領完的任務沉到最下面變成「已完成」。模板見「巡禮目標 → 領取」。
+    # 錨點取底部的「任務／成就」頁籤（1.000，其餘 ≤0.768）。
+    template: *claim_text
     require: [label_tasks_tabs]
-    threshold: 0.82
+    threshold: 0.8
     cooldown: 1.5
     do:
       - tap_match: []
@@ -342,8 +388,8 @@ rules:
 
   - name: 任務已領完 → 返回
     require: [label_tasks_tabs]
-    absent: [btn_claim_dot]
-    threshold: 0.82
+    absent: *claim_text
+    threshold: 0.8
     sustain: 3
     cooldown: 3
     do:
@@ -428,9 +474,9 @@ rules:
 
   - name: 祕寶大作戰 → 領取能量
     # 錨點取「購買禮包獲得」那一列：祕寶大作戰 1.000、其餘 ≤0.565。
-    template: btn_claim_dot
+    template: *claim_text
     require: [label_treasure_page]
-    threshold: 0.82
+    threshold: 0.8
     cooldown: 1.5
     do:
       - tap_match: []
@@ -438,8 +484,8 @@ rules:
 
   - name: 祕寶大作戰已領完 → 返回
     require: [label_treasure_page]
-    absent: [btn_claim_dot]
-    threshold: 0.82
+    absent: *claim_text
+    threshold: 0.8
     sustain: 3
     cooldown: 3
     do:

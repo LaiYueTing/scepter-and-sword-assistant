@@ -141,7 +141,7 @@ def _try_flags(tmp: Path, name: str, flags: int) -> bool:
 
     subprocess.run([sys.executable, str(probe), str(target), str(marker),
                     str(flags)], check=False, capture_output=True)
-    for _ in range(24):                  # 母行程已結束，最多再等 12 秒
+    for _ in range(80):                  # 母行程已結束，PowerShell 冷啟動可能要 10 秒，最多再等 40 秒
         if marker.exists():
             return True
         time.sleep(0.5)

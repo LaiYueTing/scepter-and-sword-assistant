@@ -61,7 +61,7 @@ def _allow_taskbar_minimize(window) -> None:
 
     無邊框視窗（FormBorderStyle.None）沒有這個樣式位元，WinForms 也不理會 `MinimizeBox`。
 
-    ⚠ 要等 handle 建好（接在 `shown` 上）。
+    ⚠ 要排在最後一次設定 `Opacity` 之後（見 `_show_opaque`）：`Opacity` 會讓 WinForms 重套視窗樣式。
     """
     try:
         handle = window.native.Handle.ToInt64()
@@ -90,6 +90,19 @@ def _set_opacity(window, value: float) -> None:
         form.Invoke(Action(apply))
     except Exception as e:
         log.warning("無法設定視窗的不透明度：%s", e)
+
+
+def _show_transparent(window) -> None:
+    """以全透明顯示視窗，讓前端在看不見的狀態下完成繪製。"""
+    _set_opacity(window, 0)
+    window.show()
+
+
+def _show_opaque(window) -> None:
+    """顯示視窗並切成不透明，補回工作列點圖示縮小需要的樣式。"""
+    window.show()
+    _set_opacity(window, 1)
+    _allow_taskbar_minimize(window)
 
 
 def _restore(window) -> None:
@@ -202,8 +215,7 @@ def main() -> int:
         if not reveal_once.acquire(blocking=False):
             return
         reveal_fallback.cancel()
-        window.show()
-        _set_opacity(window, 1)
+        _show_opaque(window)
         splash.close()
 
     # ⚠ WebView2 載入失敗時不會有回報，少了這個保險，程式會在背景執行而看不到任何畫面。
@@ -222,12 +234,10 @@ def main() -> int:
         channel.send("ready", {"shell": "web"})
         splash.step("完成")
         if not reveal_once.locked():
-            _set_opacity(window, 0)
-            window.show()
+            _show_transparent(window)
 
     def on_shown() -> None:
         splash.step("載入畫面")
-        _allow_taskbar_minimize(window)
 
     window.events.loaded += on_loaded
     window.events.shown += on_shown

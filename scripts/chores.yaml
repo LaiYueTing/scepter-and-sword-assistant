@@ -335,21 +335,13 @@ rules:
       - tap: [360, 965]
       - wait: 2
 
-  - name: 友情幣已領完 → 關閉對話框
+  - name: 友情幣已領完 → 點空白處關閉
+    # (360, 1070) 在對話框下緣（y≈1025）之外。
     template: label_friend_coin_empty
-    max_fires: 1
+    max_fires: 3
     cooldown: 3
     do:
-      - back:
-      - wait: 2
-
-  - name: 友情幣對話框還開著 → 點對話框外面
-    # 返回鍵沒關掉時的備案。(45, 1180) 在對話框外的暗處，模板還在才會點。
-    template: label_friend_coin_empty
-    max_fires: 2
-    cooldown: 3
-    do:
-      - tap: [45, 1180]
+      - tap: [360, 1070]
       - wait: 2
 
   - name: 好友已處理完 → 返回

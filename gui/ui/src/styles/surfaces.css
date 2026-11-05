@@ -237,20 +237,19 @@
  */
 .chip.live {
   border-color: color-mix(in srgb, var(--glow) 70%, var(--border));
-  animation: chip-breathe 2.8s ease-in-out infinite;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--glow) 42%, transparent),
+    inset 0 0 8px color-mix(in srgb, var(--glow) 16%, transparent);
 }
-@keyframes chip-breathe {
-  0%,
-  100% {
-    border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
-    box-shadow: 0 0 7px -1px color-mix(in srgb, var(--glow) 30%, transparent),
-      inset 0 0 5px color-mix(in srgb, var(--glow) 10%, transparent);
-  }
-  50% {
-    border-color: color-mix(in srgb, var(--glow) 100%, transparent);
-    box-shadow: 0 0 18px 2px color-mix(in srgb, var(--glow) 55%, transparent),
-      inset 0 0 11px color-mix(in srgb, var(--glow) 24%, transparent);
-  }
+/* ⚠ 亮度由 `data/pulse.js` 每秒換一次，不要改回 CSS 動畫或 transition，理由見那支檔案。 */
+:root[data-pulse='0'] .chip.live {
+  border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
+  box-shadow: 0 0 7px -1px color-mix(in srgb, var(--glow) 30%, transparent),
+    inset 0 0 5px color-mix(in srgb, var(--glow) 10%, transparent);
+}
+:root[data-pulse='2'] .chip.live {
+  border-color: color-mix(in srgb, var(--glow) 100%, transparent);
+  box-shadow: 0 0 18px 2px color-mix(in srgb, var(--glow) 55%, transparent),
+    inset 0 0 11px color-mix(in srgb, var(--glow) 24%, transparent);
 }
 
 .nc-dot {
@@ -262,17 +261,13 @@
 }
 .nc-dot.live {
   background: var(--glow);
-  box-shadow: 0 0 6px var(--glow), 0 0 12px color-mix(in srgb, var(--glow) 50%, transparent);
-  animation: dot-breathe 2.4s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--glow), 0 0 14px color-mix(in srgb, var(--glow) 50%, transparent);
 }
-@keyframes dot-breathe {
-  0%,
-  100% {
-    box-shadow: 0 0 5px var(--glow), 0 0 9px color-mix(in srgb, var(--glow) 40%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 11px 1px var(--glow), 0 0 20px color-mix(in srgb, var(--glow) 60%, transparent);
-  }
+:root[data-pulse='0'] .nc-dot.live {
+  box-shadow: 0 0 5px var(--glow), 0 0 9px color-mix(in srgb, var(--glow) 40%, transparent);
+}
+:root[data-pulse='2'] .nc-dot.live {
+  box-shadow: 0 0 11px 1px var(--glow), 0 0 20px color-mix(in srgb, var(--glow) 60%, transparent);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -567,13 +562,16 @@
 }
 
 /*
- * 「靜態」燈號：關掉呼吸，但**保留發光**。
- * ⚠ 這是喜好開關（`ui.json` 的 `glow`），和 `prefers-reduced-motion` 是兩件事——
- *   後者是系統的無障礙設定，`icons.css` 那邊無條件遵守，不做成介面上的選項。
+ * 「靜態」燈號：關掉呼吸，但**保留發光**。`glow` 是喜好開關（`ui.json`），
+ * 和 `prefers-reduced-motion` 是兩件事，後者無條件遵守、不做成介面上的選項。
  */
-:root[data-glow='none'] .chip.live,
+:root[data-glow='none'] .chip.live {
+  border-color: color-mix(in srgb, var(--glow) 70%, var(--border));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--glow) 42%, transparent),
+    inset 0 0 8px color-mix(in srgb, var(--glow) 16%, transparent);
+}
 :root[data-glow='none'] .nc-dot.live {
-  animation: none;
+  box-shadow: 0 0 8px var(--glow), 0 0 14px color-mix(in srgb, var(--glow) 50%, transparent);
 }
 
 /*

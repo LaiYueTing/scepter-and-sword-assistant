@@ -502,14 +502,19 @@ class Runner:
                  _pretty_wait((when - datetime.now()).total_seconds()),
                  "，按 Ctrl + C 可結束" if self.interactive else "")
         self.waiting = True
+        shown = ""
         try:
             while True:
                 remain = (when - datetime.now()).total_seconds()
                 if remain <= 0 or self._injected:
                     return True
-                self._status(f"等候下一輪「{self._title(task)}」　"
-                             f"{when.strftime('%m/%d %H:%M')} 開始，"
-                             f"還有 {_pretty_wait(remain)}")
+                # 文字有變才更新：倒數多半只精確到分，每秒推一次只是白白重畫介面。
+                text = (f"等候下一輪「{self._title(task)}」　"
+                        f"{when.strftime('%m/%d %H:%M')} 開始，"
+                        f"還有 {_pretty_wait(remain)}")
+                if text != shown:
+                    self._status(text)
+                    shown = text
                 if self.stop_event.wait(min(remain, 1.0)):
                     return False
         finally:

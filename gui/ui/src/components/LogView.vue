@@ -302,30 +302,9 @@ function onSelect(key) {
   font-size: 12px;
   color: var(--text-2);
 }
-/*
- * 圖示慢慢浮動。⚠ 幅度刻意很小（3px、4.2 秒）：這是一塊**空面板**，動畫的用途是
- * 「這裡是活的、只是還沒東西」，不是要吸引注意力。
- */
 .empty-i {
   color: var(--accent-text);
   opacity: 0.55;
-  animation: empty-float 4.2s ease-in-out infinite;
-}
-@keyframes empty-float {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  50% {
-    transform: translateY(-3px);
-    opacity: 0.7;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .empty-i {
-    animation: none;
-  }
 }
 
 .tags {

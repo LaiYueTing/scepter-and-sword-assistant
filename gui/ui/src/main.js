@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { mountIconAnim } from './iconAnim'
+import { startPulse } from './data/pulse'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import './styles/main.css'
 
@@ -12,3 +13,4 @@ app.use(router)
 app.mount('#app')
 
 mountIconAnim()
+startPulse()

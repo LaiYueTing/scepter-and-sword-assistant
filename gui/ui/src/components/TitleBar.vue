@@ -198,6 +198,7 @@ async function onUpdate() {
 
     <div
       v-if="runningTask"
+      data-task-running
       class="chip no-drag live"
       style="--glow: var(--green)"
       :title="`${runningTask.title}：${runningTask.note}`"

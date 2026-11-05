@@ -179,6 +179,26 @@ rules:
       - tap_match: [-25, 28]
       - wait: 2
 
+  - name: 雙影配對中 → 等待配對
+    # 攔截規則。雙影配對最長約 1 分 41 秒。
+    require: [label_dual_page]
+    template: btn_cancel_match
+    do: []
+
+  - name: 雙影幻境 → 排行榜有驚嘆號 → 切到排行榜
+    # 擊破紀錄的獎勵是全伺服器達成的波次，不一定要自己打過，所以每天都看一次。
+    # 排行榜頁籤的 ❗：有 0.966、無 0.305。要點底部的頁籤文字，不是 ❗ 本身。
+    # ⚠ 排在「已達 12 波」前面，那條會直接結束本輪。
+    require: [label_dual_page]
+    template: badge_tab_dot
+    region: [490, 1170, 60, 50]
+    when_option: daily_dual_records
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [430, 1218]
+      - wait: 2
+
   - name: 雙影幻境已達 12 波 → 結束本輪
     # 比對「今日最多擊破波次：12」的數字（12 波 1.000、0 波 0.423）。
     # ⚠ 必須排在「再打一場」前面。
@@ -187,12 +207,6 @@ rules:
     region: [430, 795, 100, 56]
     do:
       - finish:
-
-  - name: 雙影配對中 → 等待配對
-    # 攔截規則。雙影配對最長約 1 分 41 秒。
-    require: [label_dual_page]
-    template: btn_cancel_match
-    do: []
 
   - name: 雙影幻境未達 12 波 → 再打一場
     # 每開一場計一次，repeat 就是最多打幾場；打滿仍未達 12 波就結束本輪。
@@ -206,6 +220,68 @@ rules:
       - tap_match: []
       - wait: 3
       - count:
+
+  # ---- 雙影幻境：擊破紀錄的獎勵 ----
+  # 排行榜 → 歷戰紀錄 → 有 ❗ 的賽季 → 點獎勵上的 ❗（一次領走那一季所有可領的）。
+  # ❗ 長得都一樣，別頁也有，所以三條都綁頁面錨點（各頁 1.000、其餘 ≤0.69）。
+
+  - name: 排行榜 → 歷戰紀錄有驚嘆號 → 進入
+    # 右上角的徽章。錨點取表頭那一列。
+    require: [label_dual_rank]
+    template: badge_medal_dot
+    region: [660, 20, 60, 60]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: [-30, 25]
+      - wait: 2
+
+  - name: 排行榜已處理完 → 回到幻境頁籤
+    # ⚠ 不能按返回：這一頁按返回會跳過雙影頁，直接回每日活動。
+    template: label_dual_rank
+    sustain: 2
+    cooldown: 3
+    do:
+      - tap: [246, 1218]
+      - wait: 2
+
+  - name: 歷戰紀錄 → 賽季有驚嘆號 → 進入
+    # ❗ 在賽季卡片右上角，偏移到卡片中央。
+    require: [label_dual_history]
+    template: badge_card_dot
+    max_fires: 3
+    cooldown: 3
+    do:
+      - tap_match: [-130, 100]
+      - wait: 2.5
+
+  - name: 歷戰紀錄已處理完 → 返回
+    template: label_dual_history
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
+  - name: 擊破紀錄 → 領取獎勵
+    # ❗ 在獎勵圖示右上角，圖示內容每個波次不同，所以只比對 ❗（有 ≥0.897、領完 ≤0.388）。
+    # region 只框獎勵那一欄。列表淡入約 1 秒，由下一條的 sustain 等它。
+    require: [label_dual_record]
+    template: badge_reward_dot
+    region: [480, 300, 120, 850]
+    max_fires: 3
+    cooldown: 2
+    do:
+      - tap_match: [-28, 22]
+      - wait: 2
+
+  - name: 擊破紀錄已領取 → 返回
+    template: label_dual_record
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
 
   # ==================== 導覽：走到每日活動 ====================
 
@@ -359,11 +435,14 @@ rules:
       - wait: 2.5
 
   - name: 誤入次要頁面 → 點返回退出
-    template: btn_back_arrow
+    # ⚠ 排行榜、歷戰紀錄、擊破紀錄都有返回鍵，不列進 absent 的話計時會跨頁累加，
+    #   在領獎之前就把頁面退掉。
+    require: [btn_back_arrow]
+    absent: [label_dual_rank, label_dual_history, label_dual_record]
     sustain: 6
     cooldown: 3
     do:
-      - tap_match: []
+      - tap_template: btn_back_arrow
       - wait: 2
 
   - name: 停在無法處理的畫面 → 回家園重新開始

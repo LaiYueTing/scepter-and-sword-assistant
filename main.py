@@ -792,6 +792,7 @@ def _claim_single_instance(gui: bool) -> bool:
             + ("，已切換到原本那個視窗。" if woke
                else "（可能是工作排程器在背景跑的那一份）。"))
     if gui:
+        splash.close()      # 載入視窗是 always on top，留著會蓋住提示框
         logger.message_box("杖劍傳說助手", text, logger.MB_INFO)
     else:
         print(f"[失敗] {text}")
@@ -803,13 +804,17 @@ def cmd_gui(args) -> int:
 
     ⚠ 前端資源要先建置：`cd gui/ui && npm run build`。沒建的話這裡會跳一個講清楚
       該打什麼指令的對話框，而不是開一個空白視窗。
+
+    ⚠ 啟動畫面留到視窗內容載好才收掉（`gui/app.py`），這裡只收開不了視窗的那幾條路。
     """
-    splash.close()
     if not _claim_single_instance(gui=True):
+        splash.close()
         return 0
+    splash.step("載入介面")
     try:
         from gui.app import main as gui_main
     except ImportError as e:
+        splash.close()
         logger.message_box(
             "無法開啟圖形介面",
             f"缺少 pywebview：{e}\n\n安裝：python -m pip install -r requirements.txt")

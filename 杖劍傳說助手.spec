@@ -7,8 +7,10 @@
   `text_pos=None`，那會**關掉動態文字**——`pyi_splash.update_text()` 就沒有地方可
   以畫，進度條也就不存在。只有在這裡明寫 `text_pos` 才拿得到那一行。
 
-⚠ `text_pos` / `text_size` / `text_color` 要和 `make_splash.py` 的版面對齊。
-  `tools/make_splash.py` 會在產生圖之後把該填的數字印出來，改版面時照著更新。
+⚠ 載入畫面的進度條與動畫在 `assets/splash.tcl`，這裡把它換進 PyInstaller 產生的
+  Tcl 腳本。bootloader 解壓時 Python 還沒開始跑，只有 Tcl 跑得動；原本那條 `text_pos`
+  的文字行關不掉 bootloader 寫進去的檔名，也畫不出真正的進度條。底圖由
+  `tools/make_splash.py` 產生。
 
 其餘設定和原本的命令列參數一一對應：單檔、視窗模式、腳本／模板／adb 全部內嵌。
 """
@@ -44,17 +46,30 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-# 啟動畫面。text_pos 一定要給，給了才有 update_text 可用（見檔頭）。
+
+def _splash_script(text_options=None, always_on_top=False):
+    """PyInstaller 的啟動畫面腳本，文字行換成 assets/splash.tcl。"""
+    import re
+    from pathlib import Path
+    from PyInstaller.building import splash_templates as tpl
+    version = re.search(r'^VERSION = "(.+)"', Path("core/config.py").read_text(encoding="utf-8"), re.M)
+    tcl = Path("assets/splash.tcl").read_text(encoding="utf-8").replace("@VERSION@", version.group(1))
+    return "\n".join([tpl.ipc_script, tpl.image_script, tpl.splash_canvas_setup, tcl,
+                      tpl.transparent_setup, tpl.pack_widgets,
+                      tpl.position_window_on_top if always_on_top else tpl.position_window,
+                      tpl.raise_window])
+
+
+from PyInstaller.building import splash_templates as _splash_templates
+_splash_templates.build_script = _splash_script
+
 splash = Splash(
     "assets/splash.png",
     binaries=a.binaries,
     datas=a.datas,
-    text_pos=(20, 249),
+    # text_pos 要給，update_text 才用得了。實際的文字由 splash.tcl 畫。
+    text_pos=(0, 0),
     text_size=9,
-    text_color="#B6BECB",
-    # 我們的第一個 step() 之前（bootloader 還沒開始寫檔名）顯示這句，
-    # 免得那條暗帶是空的。
-    text_default="正在啟動 …",
     minify_script=True,
     always_on_top=True,
 )

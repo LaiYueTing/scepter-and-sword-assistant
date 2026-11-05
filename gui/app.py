@@ -20,7 +20,7 @@ from pathlib import Path
 
 import webview
 
-from core import logger, singleton
+from core import logger, singleton, splash
 from core.config import BUNDLE, VERSION, Config
 from core import uistate
 from .api import Api
@@ -159,6 +159,7 @@ def main() -> int:
     # 同一時間只能有一個助手在操作模擬器。
     lock = singleton.acquire(windowed=True)
     if lock is None:
+        splash.close()
         if not singleton.wake_existing():
             logger.message_box("杖劍傳說助手", "已經有一個助手在執行中。",
                                logger.MB_INFO)
@@ -178,6 +179,7 @@ def main() -> int:
 
     index = web_dir() / "index.html"
     if not index.exists():
+        splash.close()
         logger.message_box(
             "找不到介面資源",
             f"缺少 {index}\n\n"
@@ -186,6 +188,7 @@ def main() -> int:
         )
         return 1
 
+    splash.step("建立視窗")
     bounds = uistate.get("bounds") or {}
     width = int(bounds.get("width") or 1180)
     height = int(bounds.get("height") or 840)
@@ -248,9 +251,16 @@ def main() -> int:
         """
         channel.attach(window)
         channel.send("ready", {"shell": "web"})
+        # 留一點時間讓前端套用外觀，收掉啟動畫面時看到的才是完整的介面
+        splash.step("完成")
+        threading.Timer(0.3, splash.close).start()
+
+    def on_shown() -> None:
+        splash.step("載入畫面")
+        _allow_taskbar_minimize(window)
 
     window.events.loaded += on_loaded
-    window.events.shown += lambda: _allow_taskbar_minimize(window)
+    window.events.shown += on_shown
 
     # 開發用的診斷出口：把一段 JS 丟進頁面跑，結果印到 stderr。
     #

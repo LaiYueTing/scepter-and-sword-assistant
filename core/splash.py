@@ -1,40 +1,23 @@
 """啟動畫面的進度回報。
 
-雙擊到視窗出現要六秒，全黑六秒看起來像沒反應。PyInstaller 的 `--splash` 讓
-bootloader 在解壓時就把圖顯示出來，這支模組負責在那張圖上更新進度文字。
+雙擊到視窗出現要六秒。PyInstaller 的 Splash 讓 bootloader 在解壓時就把畫面顯示出來，
+進度條與動畫由 `assets/splash.tcl` 畫，這支模組只負責告訴它走到哪了。
 
-⚠ **這支模組不能 import 任何重的東西。** 它的用途正是「在載入 cv2 與介面之前
-  先讓畫面動起來」，自己拖慢啟動就本末倒置了——只用標準庫。
+⚠ 這支模組不能 import 任何重的東西，它的用途是在載入 cv2 與介面之前就讓畫面有反應。
 
-⚠ 每一段的百分比是量過各階段耗時之後填的（見 STAGES），進度條照真實速度走。改動 import 順序或加了新的重量級相依時，要重新
-  量一次並更新那張表，否則進度條會在某一段卡住不動。
-
-⚠ **有一段報不出來**：bootloader 解壓的那幾秒，Python 還沒開始跑，沒有
-  任何程式可以回報。那段圖上顯示的是 `splash.png` 本身烘進去的文字。
+⚠ STAGES 的百分比依各階段的實際耗時分配。改動 import 順序或加了重量級相依時要重新量。
 """
 
 from __future__ import annotations
 
-# 各階段的名稱與「走到這裡時已經完成多少」。
-#
-# ⚠ 百分比依各階段耗時分配，不是平均分配。112 MB 的 EXE：0～3.5 秒是 bootloader
-#   解壓（這條進度條還沒出現），3.5～3.8 秒是 import 與設定，3.8～6 秒是建視窗。
-#   所以後半要拉開，否則進度條會在 0.3 秒內衝到九成，再停兩秒。
+# 各階段的名稱與「走到這裡時已經完成多少」。解壓階段沒有人回報，由 splash.tcl 照時間往前爬。
 STAGES: dict[str, int] = {
-    "載入程式庫": 20,
-    "讀取設定": 35,
-    "建立介面": 45,
-    "準備視窗": 55,
-    "版面配置": 75,
-    "套用外觀": 90,
+    "載入程式庫": 42,
+    "載入介面": 58,
+    "建立視窗": 72,
+    "載入畫面": 88,
     "完成": 100,
 }
-
-BAR_CELLS = 16                  # 進度條用幾格。太多格在小圖上會擠成一片。
-
-# ⚠ 填滿與空白要選**筆畫粗細差很多**的字元。pyi_splash 只能指定一種文字顏色，
-#   分不出深淺——用 █／░ 的話兩者在小字級下幾乎一樣重，整條看起來像一塊灰。
-_FILLED, _EMPTY = "█", "·"
 
 
 def _pyi():
@@ -49,20 +32,14 @@ def _pyi():
 def step(name: str) -> None:
     """回報「正在做什麼」，並把進度條推到該階段的百分比。
 
-    名稱不在 STAGES 裡也能用（當成不改變進度的補充說明），但正常情況應該用
-    表裡的那幾個——那樣進度才會單調前進。
+    名稱不在 STAGES 裡也能用（只換文字、不改變進度）。
     """
     mod = _pyi()
     if mod is None:
         return
     pct = STAGES.get(name)
     try:
-        if pct is None:
-            mod.update_text(name)
-        else:
-            done = round(BAR_CELLS * pct / 100)
-            bar = _FILLED * done + _EMPTY * (BAR_CELLS - done)
-            mod.update_text(f"{name} …  {bar}  {pct}%")
+        mod.update_text(f"{'' if pct is None else pct}|{name}")
     except Exception:
         # 啟動畫面已經被關掉、或 Tk 那頭出了問題，都不該影響啟動流程
         pass

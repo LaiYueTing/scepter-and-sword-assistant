@@ -398,6 +398,16 @@ rules:
 
   # ==================== 後備規則（共用規則，說明見 dungeon.yaml） ====================
 
+  - name: 限時禮包彈窗 → 按系統返回鍵關閉
+    # 升級或達成條件時跳的付費禮包（好感倍增禮包等）。沒有關閉鈕，系統返回鍵關得掉。
+    # 模板取「購買禮包後立即獲得獎勵」那行字：1.000、其餘 ≤0.564。
+    # ⚠ 不要點下面的黃色按鈕，那是購買。
+    template: label_gift_pack_popup
+    cooldown: 3
+    do:
+      - back:
+      - wait: 2
+
   - name: 觀戰確認框 → 確定退出
     template: label_leave_spectate
     cooldown: 3

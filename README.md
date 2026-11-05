@@ -220,11 +220,10 @@ build.bat                 # 產出 dist\杖劍傳說助手.exe（單一執行檔
 那張圖是 `assets/splash.png`，由 `tools/make_splash.py` 產生。**版本控制裡沒有底圖**——
 原本用的是遊戲自己的載入插畫，不隨原始碼轉發，所以沒有 `loading.png` 時那支工具會
 改畫一張純色漸層底，一樣編譯得出來。想換成自己的圖就放一張 `loading.png` 進 `assets/`
-再跑一次；換圖若連尺寸也改了，它會把 `杖劍傳說助手.spec` 該更新的 `text_pos`
-印出來（進度文字的座標跟著版面走）。
+再跑一次。進度條與動畫在 `assets/splash.tcl`，解壓時 Python 還沒開始跑也會動。
 
 ⚠ 打包走的是 `杖劍傳說助手.spec` 而不是一串命令列參數，因為**進度條只有 .spec
-才做得到**：命令列的 `--splash` 產生的設定是 `text_pos=None`，那會關掉動態文字。
+才做得到**：它把 `splash.tcl` 併進 PyInstaller 產生的啟動畫面腳本。
 
 想改腳本或換掉某個模板而不重新編譯，可以在 EXE 旁邊放 `scripts\` 或 `templates\`，
 **同名檔案會覆蓋內建的那份**。是逐檔覆蓋，所以只放你要改的那一個就好，
@@ -389,6 +388,7 @@ options:
 | `claim_raid_reward` | raid | 討伐獎勵亮著就先領走，再往下一關 |
 | `wait_for_others` | raid | 等場上有人開打才入場。設 false 則一到可挑戰的層就直接進 |
 | `claim_daily_reward` | daily | 打完把獎勵條上亮起來的獎勵領走（兩個活動共用） |
+| `daily_dual_records` | daily | 雙影幻境排行榜有驚嘆號時，到歷戰紀錄領走達成波次的獎勵（不花資源） |
 | `accept_with_partners` | dungeon | 配對湊了 NPC 夥伴也照樣接受。設 false 會等真人隊伍 |
 | `crush_arena` | arena | 把競技場券用掉（打排位）。關掉的話只在週一按「開啟挑戰」 |
 | `arena_opponent` | arena | 挑第幾個對手（1～4，由左到右）。1 最強、爬得最快；4 必定碾壓 |

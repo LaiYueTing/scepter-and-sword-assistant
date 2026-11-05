@@ -25,6 +25,9 @@ from .tray import Tray
 
 log = logger.get("gui")
 
+# 等不到前端回報畫好時，強制顯示主視窗（秒）
+REVEAL_TIMEOUT = 20
+
 
 def web_dir() -> Path:
     """前端資源的位置：打包後在 BUNDLE，開發時在專案裡。"""
@@ -73,6 +76,20 @@ def _allow_taskbar_minimize(window) -> None:
         user32.SetWindowLongPtrW(handle, gwl_style, style | ws_minimizebox)
     except Exception as e:
         log.warning("補不上視窗的縮小樣式，工作列點圖示不會縮小：%s", e)
+
+
+def _set_opacity(window, value: float) -> None:
+    """設定視窗不透明度。⚠ 失敗時不可往上拋：呼叫端接著要關閉啟動畫面。"""
+    try:
+        from System import Action
+        form = window.native
+
+        def apply() -> None:
+            form.Opacity = value
+
+        form.Invoke(Action(apply))
+    except Exception as e:
+        log.warning("無法設定視窗的不透明度：%s", e)
 
 
 def _restore(window) -> None:
@@ -172,21 +189,41 @@ def main() -> int:
         #   可選取的範圍由 `styles/main.css` 決定。
         text_select=True,
         background_color="#16181D",     # 載入前的底色
+        # 前端畫好才顯示（`reveal`）。視窗一建立就顯示的話，會有約 1.4 秒的空白並蓋住啟動畫面。
+        hidden=True,
     )
     # ⚠ 視窗走 `attach_window()`，不可掛成 `api.window`（見 Api.attach_window）。
     api.attach_window(window)
+
+    reveal_once = threading.Lock()
+
+    def reveal() -> None:
+        """前端畫好：主視窗切成不透明，關閉啟動畫面。只執行一次。"""
+        if not reveal_once.acquire(blocking=False):
+            return
+        reveal_fallback.cancel()
+        window.show()
+        _set_opacity(window, 1)
+        splash.close()
+
+    # ⚠ WebView2 載入失敗時不會有回報，少了這個保險，程式會在背景執行而看不到任何畫面。
+    reveal_fallback = threading.Timer(REVEAL_TIMEOUT, reveal)
+    reveal_fallback.daemon = True
+    api.set_painted_hook(reveal)
 
     def on_loaded() -> None:
         """頁面載好才接通道並送 `ready`。
 
         ⚠ 不可在 create_window 之後就接：`window.__recv` 還不存在，evaluate_js 不會報錯也不會執行。
           等待期間的訊息留在 `Channel._pending`。
+        ⚠ 直接從隱藏切成顯示會有約 0.4 秒空白，所以先以全透明顯示，由前端畫好後回報（`Api.ui_painted`）。
         """
         channel.attach(window)
         channel.send("ready", {"shell": "web"})
-        # 等前端套用外觀，再關閉啟動畫面
         splash.step("完成")
-        threading.Timer(0.3, splash.close).start()
+        if not reveal_once.locked():
+            _set_opacity(window, 0)
+            window.show()
 
     def on_shown() -> None:
         splash.step("載入畫面")
@@ -252,6 +289,7 @@ def main() -> int:
 
     # 之後有人再啟動一次，把這個視窗叫回前景
     lock.listen(lambda: _wake(window))
+    reveal_fallback.start()
     webview.start(debug=False)
 
     # ⚠ 要在這裡移除圖示，否則通知區域會留下一顆幽靈圖示。

@@ -738,7 +738,7 @@ def _claim_single_instance(gui: bool) -> bool:
             + ("，已切換到原本那個視窗。" if woke
                else "（可能是工作排程器在背景跑的那一份）。"))
     if gui:
-        splash.close()      # 啟動畫面是 always on top，會蓋住提示框
+        splash.close()      # 啟動畫面可能蓋住提示框
         logger.message_box("杖劍傳說助手", text, logger.MB_INFO)
     else:
         print(f"[失敗] {text}")

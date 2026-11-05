@@ -51,6 +51,7 @@ class Api:
         self._window = None             # 由 attach_window 設定
         # 視窗縮到系統匣之後的通知掛鉤
         self._on_hidden = None
+        self._on_painted = None
 
     # ================= 設定 =================
 
@@ -532,6 +533,16 @@ class Api:
     def set_hidden_hook(self, fn) -> None:
         """視窗縮到系統匣之後要做的事（跳氣泡通知）。"""
         self._on_hidden = fn
+
+    def set_painted_hook(self, fn) -> None:
+        """前端第一次畫好之後要做的事（顯示主視窗）。"""
+        self._on_painted = fn
+
+    def ui_painted(self, _: dict) -> dict:
+        """前端回報第一份狀態已畫好。"""
+        if self._on_painted is not None:
+            self._on_painted()
+        return {}
 
     def win_hide(self, _: dict) -> dict:
         """縮到系統匣。`tray_hint` 關閉時不跳通知。"""

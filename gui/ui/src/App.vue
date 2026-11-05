@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   NConfigProvider,
   NDialogProvider,
@@ -26,6 +26,14 @@ const theme = computed(() => (ui.theme === 'dark' ? darkTheme : null))
 // 把 token 交給 naive-ui，只覆寫會跟主題變的項目，細節見 `naiveTheme.js`。
 // ⚠ key 要包含背景主題，否則換主題時對話框與浮層會留在上一個色相。
 const overrides = useNaiveTokens(computed(() => `${ui.theme}/${ui.bgTheme}`))
+
+// 第一份狀態畫好後通知外殼顯示主視窗。兩次 rAF：第二次執行時，前一幀已經繪製。
+watch(
+  () => host.version || host.fatal,
+  (shown) => {
+    if (shown) requestAnimationFrame(() => requestAnimationFrame(() => api.call('ui_painted')))
+  }
+)
 
 onMounted(async () => {
   await ui.load()

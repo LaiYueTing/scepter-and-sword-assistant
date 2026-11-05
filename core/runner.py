@@ -21,6 +21,9 @@ log = logger.get("main")
 # 最多連續重試這麼多次。
 RETRY_LIMIT = 2
 RETRY_DELAY = 30
+# 到點重新連線失敗時重試幾次、隔幾秒。一次失敗最長約 40 秒，全部試完約 4 分鐘。
+CONNECT_RETRIES = 3
+CONNECT_RETRY_DELAY = 30
 
 
 def next_scheduled(
@@ -412,15 +415,33 @@ class Runner:
                 return None
             if self._injected:
                 task = self._injected.pop(0)       # 被叫醒的：先跑塞進來的那個
+            if self._connect_with_retry(dev, task):
+                return task
+            self._task(task.name, "error", "連線失敗")
+        return None
+
+    def _connect_with_retry(self, dev: Device, task: TaskConfig) -> bool:
+        """到點時重新連線，連不上就隔一段時間再試。
+
+        ⚠ 排定時刻只有這一次，放掉就要等隔天（副本與競技場的 08:05、討伐的 21:00），
+          所以一時的斷線要撐過去。全部失敗才放掉這一格。
+        """
+        for attempt in range(1, CONNECT_RETRIES + 2):
             self._status("重新連線")
             try:
                 dev.connect()
+                return True
             except AdbError as e:
-                log.error("連線失敗，「%s」這一輪跳過：%s", self._title(task), e)
-                self._task(task.name, "error", "連線失敗")
-                continue
-            return task
-        return None
+                if attempt > CONNECT_RETRIES:
+                    log.error("連線失敗，「%s」這一輪跳過：%s", self._title(task), e)
+                    return False
+                log.warning("連線失敗，%d 秒後重試（第 %d 次，最多 %d 次）：%s",
+                            CONNECT_RETRY_DELAY, attempt, CONNECT_RETRIES,
+                            str(e).strip().splitlines()[0])
+                self._status(f"連線失敗，等候重試（第 {attempt} 次）")
+                if self.stop_event.wait(CONNECT_RETRY_DELAY):
+                    return False
+        return False
 
     def _passed_during(
         self, start: datetime, end: datetime, current: TaskConfig | None = None

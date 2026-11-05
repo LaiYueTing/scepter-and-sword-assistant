@@ -220,7 +220,22 @@ class Device:
                 "      所有連接埠都會靜靜逾時，看起來就像模擬器沒開）\n"
                 "  用 `python main.py devices` 可以列出目前看得到的裝置"
             )
-        self._verify_spec()
+        try:
+            self._verify_spec()
+        except AdbError as e:
+            # ⚠ 連線閒置一整晚之後 adb 仍回報在線，第一個指令才收到「error: closed」。
+            #   斷開重連就好，不必等到下一格排程。
+            log.warning("裝置連線已失效，重新連線：%s", str(e).strip().splitlines()[-1])
+            self._disconnect()
+            self._try_connect()
+            self._verify_spec()
+
+    def _disconnect(self) -> None:
+        """斷開這台裝置的連線，失敗也沒關係。"""
+        try:
+            self._run(["disconnect", self.serial], timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            pass
 
     def _try_connect(self) -> None:
         """依設定建立連線。auto 也要先 connect——見 connect() 的說明。"""

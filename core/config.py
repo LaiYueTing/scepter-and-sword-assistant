@@ -44,7 +44,7 @@ def resource_files(kind: str, pattern: str) -> list[Path]:
 
 
 # 目前版本，由 tools/bump_version.py 同步，與 version_info.txt 一致。
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 
 class ConfigError(RuntimeError):

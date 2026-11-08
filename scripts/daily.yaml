@@ -131,6 +131,26 @@ rules:
       - tap_match: [-25, 28]
       - wait: 2
 
+  - name: 聖獸配對中 → 等待配對
+    # 攔截規則。配對中按鈕變成「取消配對」（約 30 秒配到），頁面有返回鍵。
+    # ⚠ 排在排行榜那條前面，否則排隊時會切走。
+    require: [label_beast_page]
+    template: btn_cancel_match
+    do: []
+
+  - name: 聖獸試煉 → 排行榜有驚嘆號 → 切到排行榜
+    # 首次擊破的獎勵是全伺服器達成的，不一定要自己打過，所以每天都看一次。
+    # 模板與位置和雙影那條相同（有 0.86）。⚠ 排在「已完成」前面，那條會直接離開。
+    require: [label_beast_page]
+    template: badge_tab_dot
+    region: [490, 1170, 60, 50]
+    when_option: daily_beast_records
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap: [430, 1218]
+      - wait: 2
+
   - name: 聖獸試煉已完成 → 前往雙影幻境
     # 獎勵已領就代表今天打過了（見檔頭第 2 點），重新執行時不會再打一場。
     # 門檻維持 0.85：這個模板對雙影的已領節點只有 0.645，只負責聖獸。
@@ -141,12 +161,6 @@ rules:
     do:
       - tap_template: btn_back_arrow
       - wait: 2.5
-
-  - name: 聖獸配對中 → 等待配對
-    # 攔截規則。配對中按鈕變成「取消配對」（約 30 秒配到），頁面有返回鍵。
-    require: [label_beast_page]
-    template: btn_cancel_match
-    do: []
 
   - name: 聖獸試煉未打 → 開始配對
     # 前面三條排除了可領、已領、配對中，到這裡就是還沒打。
@@ -220,6 +234,55 @@ rules:
       - wait: 3
       - count:
 
+  # ---- 聖獸試煉：首次擊破的獎勵 ----
+  # 排行榜 → 右上角擊破紀錄 → 有 ❗ 的卡片 → 通關獎勵。
+  # ⚠ 排在雙影那段前面：「排行榜已處理完」與「擊破紀錄已領取 → 返回」在這幾頁也成立
+  #   （卡片頁的標題也是「擊破紀錄」，label_dual_record 0.99），排後面就只能靠它們的
+  #   sustain 還沒滿才輪得到。沒有 ❗ 時由那兩條接手。
+
+  - name: 聖獸排行榜 → 擊破紀錄有驚嘆號 → 進入
+    # 錨點取表頭「排名／隊伍成員」：聖獸 1.000、雙影排行榜 0.600（中間多兩欄）。
+    # ❗ 自己裁：有 1.000、領完 ≤0.394（雙影那張只有 0.86）。
+    require: [label_beast_rank]
+    template: badge_beast_medal_dot
+    region: [660, 20, 60, 60]
+    max_fires: 1
+    cooldown: 3
+    do:
+      - tap_match: [-30, 25]
+      - wait: 2
+
+  - name: 聖獸擊破紀錄 → 卡片有驚嘆號 → 進入
+    # 錨點連左上角的裝飾一起裁：本頁 1.000、雙影的歷戰紀錄與擊破紀錄 0.875，
+    # 所以門檻 0.95（也套用到 require）。❗ 在卡片右上角，偏移到卡片中央。
+    require: [label_beast_history]
+    template: badge_card_dot
+    region: [0, 100, 720, 1060]
+    threshold: 0.95
+    max_fires: 3
+    cooldown: 3
+    do:
+      - tap_match: [-155, 190]
+      - wait: 2.5
+
+  - name: 首次擊破 → 領取通關獎勵
+    # 錨點取「通關時間」：本頁 1.000、其餘樣本 ≤0.655。按鈕領完變「已領取」（0.47）。
+    require: [label_beast_record]
+    template: btn_beast_clear_reward
+    max_fires: 3
+    cooldown: 3
+    do:
+      - tap_match: []
+      - wait: 2
+
+  - name: 首次擊破已領取 → 返回
+    template: label_beast_record
+    sustain: 3
+    cooldown: 3
+    do:
+      - tap_template: btn_back_arrow
+      - wait: 2
+
   # ---- 雙影幻境：擊破紀錄的獎勵 ----
   # 排行榜 → 歷戰紀錄 → 有 ❗ 的賽季 → 點獎勵上的 ❗（一次領走那一季所有可領的）。
   # ❗ 長得都一樣，別頁也有，所以三條都綁頁面錨點（各頁 1.000、其餘 ≤0.69）。
@@ -235,9 +298,10 @@ rules:
       - tap_match: [-30, 25]
       - wait: 2
 
-  - name: 排行榜已處理完 → 回到幻境頁籤
-    # ⚠ 不能按返回：這一頁按返回會跳過雙影頁，直接回每日活動。
-    template: label_dual_rank
+  - name: 排行榜已處理完 → 回到活動頁籤
+    # 雙影與聖獸共用：左邊第一個頁籤（幻境／試煉）位置相同。
+    # ⚠ 不能按返回：這一頁按返回會跳過活動頁，直接回每日活動。
+    template: [label_dual_rank, label_beast_rank]
     sustain: 2
     cooldown: 3
     do:
@@ -435,10 +499,11 @@ rules:
       - wait: 2.5
 
   - name: 誤入次要頁面 → 點返回退出
-    # ⚠ 排行榜、歷戰紀錄、擊破紀錄都有返回鍵，不列進 absent 的話計時會跨頁累加，
+    # ⚠ 排行榜、歷戰紀錄、擊破紀錄、首次擊破都有返回鍵，不列進 absent 的話計時會跨頁累加，
     #   在領獎之前就把頁面退掉。
     require: [btn_back_arrow]
-    absent: [label_dual_rank, label_dual_history, label_dual_record]
+    absent: [label_dual_rank, label_dual_history, label_dual_record,
+             label_beast_rank, label_beast_record]
     sustain: 6
     cooldown: 3
     do:

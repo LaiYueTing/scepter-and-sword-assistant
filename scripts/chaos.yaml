@@ -480,8 +480,11 @@ rules:
 
   - name: 家園 → 打開混沌侵襲
     # 入口的位置會被上方的圖示往下推，不寫死座標。⚠ 虛空裂縫那一週沒有這個入口。
-    template: label_chaos_widget
-    region: [590, 150, 130, 600]
+    # 小工具半透明，換背景分數掉約 0.11：家園圖示在地圖上 0.887～0.892，地圖圖示在家園 0.850，
+    # 文字在地圖上 0.71～0.87。右側這一欄其他畫面最高 0.585，所以三張一起掛、門檻 0.75。
+    template: [label_chaos_widget_home, label_chaos_widget, label_chaos_widget_text]
+    threshold: 0.75
+    region: [590, 120, 130, 900]
     require: [nav_home]
     when_flag: ["!已完成"]
     max_fires: 3
@@ -497,6 +500,7 @@ rules:
     sustain: 20
     do:
       - log: 家園沒有可進入的混沌侵襲活動，結束本輪
+      - screenshot:
       - finish: skip_cleanup
 
   - name: 停在無法處理的畫面 → 回家園重新開始

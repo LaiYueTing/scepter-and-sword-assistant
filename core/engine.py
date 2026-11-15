@@ -593,6 +593,7 @@ class Engine:
         for rule in self.script.rules:
             rule._fires = 0
             rule._last_fired = 0.0
+            rule._since = 0.0
             rule._disabled = False
             # ⚠ 每日上限不歸零，從狀態檔取回今天已觸發的次數。
             if rule.max_fires_daily:
